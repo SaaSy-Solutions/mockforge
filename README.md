@@ -536,13 +536,16 @@ docker pull ghcr.io/saasy-solutions/mockforge:0.3.116
 # Run with the bundled example spec + admin UI
 docker run -p 3000:3000 -p 3001:3001 -p 50051:50051 -p 9080:9080 \
   -e MOCKFORGE_ADMIN_ENABLED=true \
+  -e MOCKFORGE_ADMIN_PASSWORD='choose-a-long-password' \
   ghcr.io/saasy-solutions/mockforge:latest \
   serve --spec examples/openapi-demo.json --admin --admin-port 9080
 ```
 
-The admin UI is then at <http://localhost:9080> — sign in with the default
-local credentials (`admin` / `admin123`, or `editor` / `editor123` /
-`viewer` / `viewer123`).
+The admin UI is then at <http://localhost:9080> — sign in as `admin` with
+the password you set. Inside a container the admin server listens on every
+interface, so it refuses to start without `MOCKFORGE_ADMIN_PASSWORD` (12+
+characters), `MOCKFORGE_MANAGEMENT_TOKEN` (32+ characters, for API clients)
+or `JWT_SECRET`.
 
 #### Build from source
 
@@ -1322,9 +1325,11 @@ The Admin UI provides:
 - **🎯 Fixture management** with drag-and-drop tree view for organizing fixtures
 - **🎨 Professional UI** with tabbed interface and responsive design
 
-> **Authentication**: The Admin UI uses JWT login with three roles: **Admin** (full access), **Editor** (create, edit, and delete mocks and fixtures, but not server settings such as latency/fault/proxy config, or roles), and **Viewer** (read-only). Every mutating admin endpoint is permission-checked against the caller's role. Read-only `GET /__mockforge/*` endpoints stay unauthenticated so the TUI and scripts can poll them; the admin port is opt-in via `--admin`, so keep it off untrusted networks.
+> **Authentication**: The Admin UI uses JWT login with three roles: **Admin** (full access), **Editor** (create, edit, and delete mocks and fixtures, but not server settings such as latency/fault/proxy config, or roles), and **Viewer** (read-only). Every admin endpoint, reads included, is permission-checked against the caller's role; only the login, health/liveness and static UI files are open.
 >
-> When `JWT_SECRET` is not set, MockForge seeds local development users (`admin` / `admin123`, `editor` / `editor123`, `viewer` / `viewer123`). Set `JWT_SECRET` (and `MOCKFORGE_DISABLE_DEV_SEED_USERS=true`) for any shared deployment. OAuth/SSO login is not available in the local Admin UI; MockForge Cloud supports OIDC and SAML SSO.
+> **Local development**: when the admin server is bound to loopback (`127.0.0.1`, the default outside containers) and no credentials are configured, anonymous `GET /__mockforge/*` reads are still allowed from the same machine (a loopback `Host` is required), so the TUI and scripts keep working. There are no built-in users: to log in to the UI (and make changes), set `MOCKFORGE_ADMIN_PASSWORD`.
+>
+> **Any other bind address** (`0.0.0.0`, `::`, a LAN address, every container) needs credentials, or the admin server refuses to start: `MOCKFORGE_ADMIN_PASSWORD` (12+ characters; the only admin UI login; optional `MOCKFORGE_ADMIN_USERNAME`, default `admin`), `MOCKFORGE_MANAGEMENT_TOKEN` (32+ characters, sent as `X-MockForge-Management-Token` or `Authorization: Bearer`; pass it to the TUI with `--token`), or `JWT_SECRET` (32+ characters). Without `JWT_SECRET`, admin JWTs are signed with a random per-process secret, so sessions end when the server restarts. OAuth/SSO login is not available in the local Admin UI; MockForge Cloud supports OIDC and SAML SSO.
 
 ### Embedded Admin Mode
 

@@ -1,5 +1,11 @@
 # GPG/RSA Signature Verification Implementation Summary
 
+> **Update (#1013):** until #1013 the installer only logged a warning when
+> verification failed, and signatures covered only `plugin.toml`. A missing or
+> failed signature now aborts installation, `skip_validation` no longer skips
+> it, and signatures (format v2) cover every file in the plugin directory.
+> Keys can be revoked or given an expiry. See `SIGNATURE_VERIFICATION.md`.
+
 ## What Was Implemented
 
 The TODO comment at `crates/mockforge-plugin-loader/src/installer.rs:222` has been fully addressed with a complete cryptographic signature verification system.
@@ -102,7 +108,7 @@ let config = PluginLoaderConfig {
 // Install with verification
 let installer = PluginInstaller::new(config).unwrap();
 installer.install("./my-plugin", InstallOptions {
-    verify_signature: true,
+    allow_unsigned: false, // signature required (the default)
     ..Default::default()
 }).await.unwrap();
 ```

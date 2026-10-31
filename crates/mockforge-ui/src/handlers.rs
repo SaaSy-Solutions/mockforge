@@ -75,6 +75,7 @@ pub mod migration;
 pub mod pillar_analytics;
 pub mod playground;
 pub mod plugin;
+mod plugin_install_security;
 pub mod protocol_contracts;
 pub mod recorder_api;
 pub mod vbr_api;
@@ -1167,7 +1168,7 @@ pub async fn get_dashboard(State(state): State<AdminState>) -> Json<ApiResponse<
                     response_time_ms: log.response_time_ms,
                     client_ip: log.client_ip,
                     user_agent: log.user_agent,
-                    headers: log.headers,
+                    headers: redact_sensitive_headers(log.headers),
                     response_size_bytes: log.response_size_bytes,
                     error_message: log.error_message,
                 })
@@ -1398,6 +1399,54 @@ pub async fn get_health() -> Json<HealthCheck> {
     )
 }
 
+/// Header names whose values never leave the admin API, even for an
+/// authenticated caller (#1019). The request logger already drops most of
+/// them; this is the last line in case a capture path does not.
+const SENSITIVE_HEADER_NAMES: &[&str] = &[
+    "authorization",
+    "proxy-authorization",
+    "cookie",
+    "set-cookie",
+    "x-api-key",
+    "x-auth-token",
+    "x-mockforge-management-token",
+];
+
+/// Replace the values of credential-bearing headers with `[REDACTED]`
+pub(crate) fn redact_sensitive_headers(
+    headers: HashMap<String, String>,
+) -> HashMap<String, String> {
+    headers
+        .into_iter()
+        .map(|(name, value)| {
+            let lower = name.to_ascii_lowercase();
+            if SENSITIVE_HEADER_NAMES.contains(&lower.as_str())
+                || lower.contains("token")
+                || lower.contains("secret")
+                || lower.contains("password")
+            {
+                (name, "[REDACTED]".to_string())
+            } else {
+                (name, value)
+            }
+        })
+        .collect()
+}
+
+/// Mask the `user:password@` part of a URL
+pub(crate) fn redact_url_userinfo(url: &str) -> String {
+    let Some(scheme_end) = url.find("://") else {
+        return url.to_string();
+    };
+    let authority_start = scheme_end + 3;
+    let rest = &url[authority_start..];
+    let authority_len = rest.find(['/', '?', '#']).unwrap_or(rest.len());
+    match rest[..authority_len].rfind('@') {
+        Some(at) => format!("{}***{}", &url[..authority_start], &rest[at..]),
+        None => url.to_string(),
+    }
+}
+
 /// Get request logs with optional filtering
 pub async fn get_logs(
     State(state): State<AdminState>,
@@ -1453,7 +1502,7 @@ pub async fn get_logs(
                 response_time_ms: log.response_time_ms,
                 client_ip: log.client_ip,
                 user_agent: log.user_agent,
-                headers: log.headers,
+                headers: redact_sensitive_headers(log.headers),
                 response_size_bytes: log.response_size_bytes,
                 error_message: log.error_message,
             })
@@ -1551,7 +1600,7 @@ pub async fn logs_sse(
                     response_time_ms: log.response_time_ms,
                     client_ip: log.client_ip,
                     user_agent: log.user_agent,
-                    headers: log.headers,
+                    headers: redact_sensitive_headers(log.headers),
                     response_size_bytes: log.response_size_bytes,
                     error_message: log.error_message,
                 })
@@ -2200,7 +2249,11 @@ pub async fn get_config(State(state): State<AdminState>) -> Json<ApiResponse<ser
         },
         "proxy": {
             "enabled": config_state.proxy_config.enabled,
-            "upstream_url": config_state.proxy_config.upstream_url,
+            "upstream_url": config_state
+                .proxy_config
+                .upstream_url
+                .as_deref()
+                .map(redact_url_userinfo),
             "timeout_seconds": config_state.proxy_config.timeout_seconds
         },
         "traffic_shaping": {
@@ -3757,6 +3810,8 @@ pub struct PluginInstallRequest {
     pub skip_validation: bool,
     #[serde(default)]
     pub no_verify: bool,
+    #[serde(default)]
+    pub allow_unsigned: bool,
     pub checksum: Option<String>,
 }
 
@@ -3839,6 +3894,7 @@ pub async fn install_plugin(
     }
 
     let force = request.force;
+    let allow_unsigned = request.allow_unsigned;
     let checksum = request.checksum.clone();
     let state_for_install = state.clone();
 
@@ -3870,7 +3926,11 @@ pub async fn install_plugin(
                         ));
                     }
 
-                    let loader = PluginLoader::new(PluginLoaderConfig::default());
+                    let verified_config = plugin_install_security::verified_plugin_config(
+                        &plugin_root,
+                        allow_unsigned,
+                    )?;
+                    let loader = PluginLoader::new(verified_config.clone());
                     let manifest = loader
                         .validate_plugin(&plugin_root)
                         .await
@@ -3880,19 +3940,10 @@ pub async fn install_plugin(
                     let plugin_name = manifest.info.name.clone();
                     let plugin_version = manifest.info.version.to_string();
 
-                    let parent_dir = plugin_root
-                        .parent()
-                        .unwrap_or_else(|| std::path::Path::new("."))
-                        .to_string_lossy()
-                        .to_string();
-
-                    let runtime_loader = PluginLoader::new(PluginLoaderConfig {
-                        plugin_dirs: vec![parent_dir],
-                        ..PluginLoaderConfig::default()
-                    });
+                    let runtime_loader = PluginLoader::new(verified_config);
 
                     runtime_loader
-                        .load_plugin(&plugin_id)
+                        .load_plugin_from_path(&plugin_root)
                         .await
                         .map_err(|e| format!("Failed to load plugin into runtime: {}", e))?;
 
