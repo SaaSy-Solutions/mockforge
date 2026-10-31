@@ -306,7 +306,11 @@ async fn free_local_runtime_serves_configured_routes_and_caps_all_public_paths()
         .unwrap()
         .starts_with("sandbox;"));
     assert_eq!(first.json::<Value>().await.unwrap()["name"], "Ada");
-    let domain = format!("{}.fixture.invalid", created.slug);
+    let domain = format!(
+        "{}.{}",
+        created.slug,
+        std::env::var("MOCKFORGE_MOCKS_DOMAIN").expect("fixture mocks domain required")
+    );
     let second = client
         .post(format!("{}/users/42", server.url))
         .header("Host", &domain)
