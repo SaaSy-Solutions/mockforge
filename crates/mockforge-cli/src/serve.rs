@@ -2166,7 +2166,7 @@ pub async fn handle_serve(
             }
             let (chaos_router, chaos_config_arc, latency_tracker, chaos_api_state) =
                 create_chaos_api_router(chaos_config.clone(), None);
-            http_app = http_app.merge(chaos_router);
+            http_app = http_app.merge(mockforge_http::management_auth::protect(chaos_router));
             println!("✅ Chaos Engineering API available at /api/chaos/*");
 
             // Resilience middleware + dashboard state (#468 Phase 2 + CLI follow-up).
@@ -2412,7 +2412,8 @@ pub async fn handle_serve(
                         }));
 
                         let recorder_router = mockforge_recorder::create_api_router(recorder, None);
-                        http_app = http_app.merge(recorder_router);
+                        http_app = http_app
+                            .merge(mockforge_http::management_auth::protect(recorder_router));
                         println!(
                             "✅ Recorder API available at /api/recorder/* (DB: {})",
                             recorder_config.database_path
@@ -2530,9 +2531,30 @@ pub async fn handle_serve(
         #[cfg(feature = "admin")]
         let resilience_api_state = None;
 
-        // Outermost, after every router is merged: on hosted mocks, control-plane
-        // writes need the deployment's management token (#1085).
-        let http_app = mockforge_http::management_auth::gate_control_plane_writes(http_app);
+        // Outermost, after every router is merged: every control-plane request,
+        // read or write, needs the management credential (#1011, #1085).
+        let http_bind_ip = mockforge_http::resolve_bind_ip(&config.http.host);
+        let control_plane_policy = {
+            use mockforge_http::management_auth::{AdminCredential, ControlPlanePolicy};
+            let admin = match (&config.admin.username, &config.admin.password) {
+                (Some(user), Some(pass)) => AdminCredential::new(user.clone(), pass.clone()),
+                _ => None,
+            };
+            ControlPlanePolicy::from_env(http_bind_ip, admin).map_err(|e| e.to_string())?
+        };
+        if control_plane_policy.is_locked() {
+            println!(
+                "🔒 Control plane (/__mockforge/*, /api/chaos, ...) is locked on the HTTP port: \
+                 set MOCKFORGE_MANAGEMENT_TOKEN (32+ characters) to use it"
+            );
+        } else if control_plane_policy.is_unauthenticated() {
+            tracing::warn!(
+                "MOCKFORGE_INSECURE_MANAGEMENT is set: the control plane on {} needs no \
+                 credential (loopback only)",
+                http_bind_ip
+            );
+        }
+        let http_app = mockforge_http::management_auth::install(http_app, control_plane_policy);
 
         #[cfg(feature = "chaos")]
         let chaos_listener_cfg = if chaos_config.enabled
@@ -2585,6 +2607,8 @@ pub async fn handle_serve(
     ) = http_setup;
     #[cfg(all(feature = "http", not(feature = "admin")))]
     let (http_app, chaos_listener_cfg) = http_setup;
+    // Same resolution the control-plane policy used above.
+    let http_bind_ip = mockforge_http::resolve_bind_ip(&config.http.host);
 
     // Note: OData URI rewrite is applied at the service level in serve_router_with_tls()
 
@@ -2790,7 +2814,8 @@ pub async fn handle_serve(
         let http_app_clone_for_dual = http_app.clone();
         let chaos_listener_cfg_for_dual = chaos_listener_cfg.clone();
         let http_handle = tokio::spawn(async move {
-            mockforge_http::serve_router_with_tls_notify_chaos_shutdown(
+            mockforge_http::serve_router_with_tls_notify_chaos_shutdown_on(
+                http_bind_ip,
                 http_port,
                 http_app,
                 plain_http_tls_config,
@@ -2813,7 +2838,8 @@ pub async fn handle_serve(
             let chaos_listener_cfg_https = chaos_listener_cfg_for_dual.clone();
             Some(tokio::spawn(async move {
                 println!("🔒 HTTPS server listening on https://localhost:{}", https_port);
-                mockforge_http::serve_router_with_tls_notify_chaos_shutdown(
+                mockforge_http::serve_router_with_tls_notify_chaos_shutdown_on(
+                    http_bind_ip,
                     https_port,
                     https_app,
                     https_tls,

@@ -16,6 +16,12 @@ use mockforge_core::security::{
     emit_security_event, EventActor, EventOutcome, EventTarget, SecurityEvent, SecurityEventType,
 };
 
+/// `path` equals `prefix` or continues it with `/`
+fn is_segment_prefix(path: &str, prefix: &str) -> bool {
+    path.strip_prefix(prefix)
+        .is_some_and(|rest| rest.is_empty() || rest.starts_with('/'))
+}
+
 /// Authentication middleware function
 pub async fn auth_middleware(
     State(state): State<AuthState>,
@@ -25,8 +31,11 @@ pub async fn auth_middleware(
     let path = req.uri().path().to_string();
     let _method = req.method().clone();
 
-    // Skip authentication for health checks and admin endpoints
-    if path.starts_with("/health") || path.starts_with("/__mockforge") {
+    // Health checks and MockForge's own namespace skip mock-API auth. The
+    // control plane has its own credential (`management_auth`), so this is
+    // not an authorization bypass for it. Match whole segments so a mock
+    // such as `/healthcare` or `/__mockforgeX` still requires auth.
+    if is_segment_prefix(&path, "/health") || is_segment_prefix(&path, "/__mockforge") {
         return next.run(req).await;
     }
 
