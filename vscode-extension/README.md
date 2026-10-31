@@ -23,6 +23,7 @@ Control and visualize your MockForge API mocks directly from Visual Studio Code.
 ## Configuration
 
 - `mockforge.serverUrl`: MockForge server URL (default: `http://localhost:3000`)
+- `mockforge.managementToken`: the server's `MOCKFORGE_MANAGEMENT_TOKEN`, sent as `X-MockForge-Management-Token` (default: empty). Stored as a plain setting, not SecretStorage
 - `mockforge.autoConnect`: Automatically connect on startup (default: `true`)
 - `mockforge.showNotifications`: Show notifications for mock changes (default: `true`)
 - `mockforge.inlinePreview.enabled`: Enable inline preview of mock responses when hovering (default: `true`)

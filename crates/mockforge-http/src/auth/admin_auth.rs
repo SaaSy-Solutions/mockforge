@@ -39,6 +39,37 @@ fn verify_admin_password(supplied: &str, configured: &str) -> bool {
     }
 }
 
+/// Whether an `Authorization` header value carries HTTP Basic credentials
+/// matching the configured admin user.
+///
+/// Username comparison is constant-time; the password goes through the
+/// hash-aware verifier (bcrypt verify is itself constant-time in the digest).
+pub fn basic_credentials_match(
+    authorization: &str,
+    expected_user: &str,
+    expected_pass: &str,
+) -> bool {
+    let Some(encoded) = authorization.strip_prefix("Basic ") else {
+        return false;
+    };
+    let decoded = match general_purpose::STANDARD.decode(encoded.trim()) {
+        Ok(decoded) => decoded,
+        Err(e) => {
+            warn!("Failed to decode admin credentials: {}", e);
+            return false;
+        }
+    };
+    let Ok(creds) = String::from_utf8(decoded) else {
+        return false;
+    };
+    let Some((username, password)) = creds.split_once(':') else {
+        return false;
+    };
+    let user_ok = constant_time_eq(username.as_bytes(), expected_user.as_bytes());
+    let pass_ok = verify_admin_password(password, expected_pass);
+    user_ok && pass_ok
+}
+
 /// Check if admin authentication is required and valid
 pub fn check_admin_auth(
     req: &Request<Body>,
@@ -52,39 +83,13 @@ pub fn check_admin_auth(
         return Ok(());
     }
 
-    // Get authorization header
     let auth_header = req.headers().get("authorization").and_then(|h| h.to_str().ok());
-
-    if let Some(auth_value) = auth_header {
-        // Check if it's Basic auth
-        if let Some(basic_creds) = auth_value.strip_prefix("Basic ") {
-            // Decode base64 credentials
-            match general_purpose::STANDARD.decode(basic_creds) {
-                Ok(decoded) => {
-                    if let Ok(creds_str) = String::from_utf8(decoded) {
-                        // Split on first colon
-                        if let Some((username, password)) = creds_str.split_once(':') {
-                            // Compare with configured credentials
-                            if let (Some(expected_user), Some(expected_pass)) =
-                                (admin_username, admin_password)
-                            {
-                                // Username compare is constant-time; password
-                                // goes through the hash-aware verifier (bcrypt
-                                // verify is itself constant-time in the digest).
-                                let user_ok =
-                                    constant_time_eq(username.as_bytes(), expected_user.as_bytes());
-                                if user_ok && verify_admin_password(password, expected_pass) {
-                                    debug!("Admin authentication successful");
-                                    return Ok(());
-                                }
-                            }
-                        }
-                    }
-                }
-                Err(e) => {
-                    warn!("Failed to decode admin credentials: {}", e);
-                }
-            }
+    if let (Some(auth_value), Some(expected_user), Some(expected_pass)) =
+        (auth_header, admin_username, admin_password)
+    {
+        if basic_credentials_match(auth_value, expected_user, expected_pass) {
+            debug!("Admin authentication successful");
+            return Ok(());
         }
     }
 

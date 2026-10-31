@@ -5,8 +5,10 @@ import com.google.gson.GsonBuilder;
 import okhttp3.*;
 
 import java.io.IOException;
+import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -38,6 +40,10 @@ public class MockServer {
     private static final Gson GSON = new GsonBuilder().create();
     private static final int STARTUP_TIMEOUT_SECONDS = 10;
     private static final int HEALTH_CHECK_INTERVAL_MS = 100;
+    /** Header carrying the management credential on control-plane requests. */
+    public static final String MANAGEMENT_TOKEN_HEADER = "X-MockForge-Management-Token";
+    private static final String MANAGEMENT_TOKEN_ENV = "MOCKFORGE_MANAGEMENT_TOKEN";
+    private static final SecureRandom RANDOM = new SecureRandom();
 
     private final MockServerConfig config;
     private Process process;
@@ -46,6 +52,7 @@ public class MockServer {
     private int adminPort = 0;
     private final List<ResponseStub> stubs = new ArrayList<>();
     private final OkHttpClient httpClient;
+    private final String managementToken;
 
     /**
      * Create a new MockServer with the given configuration
@@ -54,10 +61,45 @@ public class MockServer {
         this.config = config != null ? config : new MockServerConfig();
         this.port = this.config.getPort();
         this.host = this.config.getHost() != null ? this.config.getHost() : "127.0.0.1";
+        this.managementToken = resolveManagementToken(
+            this.config.getManagementToken(), System.getenv(MANAGEMENT_TOKEN_ENV));
+        final String token = this.managementToken;
+        // Every request this client makes carries the management credential.
         this.httpClient = new OkHttpClient.Builder()
             .connectTimeout(1, TimeUnit.SECONDS)
             .readTimeout(1, TimeUnit.SECONDS)
+            .addInterceptor(chain -> chain.proceed(
+                chain.request().newBuilder()
+                    .header(MANAGEMENT_TOKEN_HEADER, token)
+                    .build()))
             .build();
+    }
+
+    /**
+     * Resolve the management token: explicit value, else the env value, else
+     * a fresh random 64-char hex token.
+     */
+    static String resolveManagementToken(String explicit, String fromEnv) {
+        if (explicit != null && !explicit.isEmpty()) {
+            return explicit;
+        }
+        if (fromEnv != null && !fromEnv.isEmpty()) {
+            return fromEnv;
+        }
+        byte[] buf = new byte[32];
+        RANDOM.nextBytes(buf);
+        StringBuilder hex = new StringBuilder(64);
+        for (byte b : buf) {
+            hex.append(String.format("%02x", b));
+        }
+        return hex.toString();
+    }
+
+    /**
+     * @return the control-plane credential this server uses
+     */
+    public String getManagementToken() {
+        return managementToken;
     }
 
     /**
@@ -105,6 +147,7 @@ public class MockServer {
 
         ProcessBuilder processBuilder = new ProcessBuilder(args);
         processBuilder.redirectErrorStream(true);
+        processBuilder.environment().put(MANAGEMENT_TOKEN_ENV, managementToken);
 
         try {
             process = processBuilder.start();

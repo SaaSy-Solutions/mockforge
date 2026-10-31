@@ -6,7 +6,12 @@
  */
 
 import { ExtensionMessage, CapturedRequest, ConnectionStatus, Environment } from '../shared/types';
-import { MockForgeApiClient } from '../shared/api-client';
+import {
+    MANAGEMENT_TOKEN_STORAGE_KEY,
+    MockForgeApiClient,
+    loadManagementToken,
+    managementHeaders,
+} from '../shared/api-client';
 
 // Connection state
 let mockForgeUrl: string | null = null;
@@ -58,13 +63,20 @@ async function initializeConnection() {
     }
 
     if (mockForgeUrl) {
-        apiClient = new MockForgeApiClient(mockForgeUrl);
+        apiClient = new MockForgeApiClient(mockForgeUrl, await loadManagementToken());
         connected = await apiClient.healthCheck();
     }
 
     // Broadcast connection status
     broadcastConnectionStatus();
 }
+
+// Reconnect with the new credential when the management token changes.
+chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === 'local' && changes[MANAGEMENT_TOKEN_STORAGE_KEY]) {
+        void initializeConnection();
+    }
+});
 
 function broadcastConnectionStatus() {
     const status: ConnectionStatus = {
@@ -144,6 +156,7 @@ chrome.runtime.onMessage.addListener(
                                         method: 'POST',
                                         headers: {
                                             'Content-Type': 'application/json',
+                                            ...managementHeaders(apiClient.getManagementToken()),
                                         },
                                         body: JSON.stringify({
                                             mock_id: createdMock.id,
@@ -347,6 +360,7 @@ chrome.runtime.onMessage.addListener(
                                 method: 'POST',
                                 headers: {
                                     'Content-Type': 'application/json',
+                                    ...managementHeaders(apiClient.getManagementToken()),
                                 },
                                 body: JSON.stringify(message.payload),
                             });

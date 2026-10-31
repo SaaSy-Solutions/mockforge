@@ -3,6 +3,7 @@
 //! Provides a DevTools panel for viewing and controlling MockForge state
 
 import React, { useEffect, useState } from 'react';
+import { MANAGEMENT_TOKEN_STORAGE_KEY, managementHeaders } from '../shared/api-client';
 
 interface XRayState {
     workspace_id?: string;
@@ -32,6 +33,7 @@ const XRayPanel: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [apiUrl, setApiUrl] = useState('http://localhost:3000');
     const [workspace, setWorkspace] = useState('default');
+    const [managementToken, setManagementToken] = useState('');
     const [pollInterval, setPollInterval] = useState(2000);
 
     useEffect(() => {
@@ -44,6 +46,12 @@ const XRayPanel: React.FC = () => {
                 setWorkspace(result.mockforgeWorkspace);
             }
         });
+        chrome.storage.local.get([MANAGEMENT_TOKEN_STORAGE_KEY], (result) => {
+            const token = result[MANAGEMENT_TOKEN_STORAGE_KEY];
+            if (typeof token === 'string') {
+                setManagementToken(token);
+            }
+        });
 
         // Fetch state
         fetchState();
@@ -54,7 +62,7 @@ const XRayPanel: React.FC = () => {
         }, pollInterval);
 
         return () => clearInterval(interval);
-    }, [apiUrl, workspace, pollInterval]);
+    }, [apiUrl, workspace, pollInterval, managementToken]);
 
     const fetchState = async () => {
         try {
@@ -63,7 +71,8 @@ const XRayPanel: React.FC = () => {
 
             // Fetch state summary
             const stateResponse = await fetch(
-                `${apiUrl}/api/v1/xray/state/summary?workspace=${workspace}`
+                `${apiUrl}/api/v1/xray/state/summary?workspace=${workspace}`,
+                { headers: managementHeaders(managementToken) }
             );
             if (!stateResponse.ok) {
                 throw new Error(`Failed to fetch state: ${stateResponse.statusText}`);
@@ -73,7 +82,8 @@ const XRayPanel: React.FC = () => {
 
             // Fetch entities
             const entitiesResponse = await fetch(
-                `${apiUrl}/api/v1/xray/entities?workspace=${workspace}`
+                `${apiUrl}/api/v1/xray/entities?workspace=${workspace}`,
+                { headers: managementHeaders(managementToken) }
             );
             if (entitiesResponse.ok) {
                 const entitiesData = await entitiesResponse.json();
@@ -92,7 +102,10 @@ const XRayPanel: React.FC = () => {
                 `${apiUrl}/api/v1/consistency/state/${workspace}/persona`,
                 {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...managementHeaders(managementToken),
+                    },
                     body: JSON.stringify({ persona_id: personaId }),
                 }
             );
@@ -110,7 +123,10 @@ const XRayPanel: React.FC = () => {
                 `${apiUrl}/api/v1/consistency/state/${workspace}/scenario`,
                 {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...managementHeaders(managementToken),
+                    },
                     body: JSON.stringify({ scenario_id: scenarioId }),
                 }
             );
@@ -153,6 +169,21 @@ const XRayPanel: React.FC = () => {
                         onChange={(e) => {
                             setApiUrl(e.target.value);
                             chrome.storage.sync.set({ mockforgeApiUrl: e.target.value });
+                        }}
+                        style={{ width: '100%', padding: '4px', fontSize: '12px' }}
+                    />
+                </div>
+                <div style={{ marginBottom: '8px' }}>
+                    <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
+                        Management token:
+                    </label>
+                    <input
+                        type="password"
+                        value={managementToken}
+                        placeholder="MOCKFORGE_MANAGEMENT_TOKEN"
+                        onChange={(e) => {
+                            setManagementToken(e.target.value);
+                            chrome.storage.local.set({ [MANAGEMENT_TOKEN_STORAGE_KEY]: e.target.value });
                         }}
                         style={{ width: '100%', padding: '4px', fontSize: '12px' }}
                     />

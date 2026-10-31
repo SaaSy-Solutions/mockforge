@@ -3,6 +3,8 @@
 //! This content script creates an overlay that displays current scenario, persona,
 //! reality level, and active chaos rules from response headers.
 
+import { MANAGEMENT_TOKEN_STORAGE_KEY, managementHeaders } from '../shared/api-client';
+
 interface XRayState {
     workspace?: string;
     scenario?: string;
@@ -17,11 +19,13 @@ class XRayOverlay {
     private overlay: HTMLElement | null = null;
     private state: XRayState = {};
     private apiBaseUrl: string;
+    private managementToken: string;
     private pollInterval: number = 2000; // Poll every 2 seconds
     private pollTimer: number | null = null;
 
-    constructor(apiBaseUrl: string = 'http://localhost:3000') {
+    constructor(apiBaseUrl: string = 'http://localhost:3000', managementToken: string = '') {
         this.apiBaseUrl = apiBaseUrl;
+        this.managementToken = managementToken;
         this.init();
     }
 
@@ -308,7 +312,10 @@ class XRayOverlay {
     private async fetchStateFromAPI() {
         try {
             // Try to get state from API
-            const response = await fetch(`${this.apiBaseUrl}/api/v1/xray/state/summary?workspace=default`);
+            const response = await fetch(
+                `${this.apiBaseUrl}/api/v1/xray/state/summary?workspace=default`,
+                { headers: managementHeaders(this.managementToken) }
+            );
             if (response.ok) {
                 const data = await response.json();
                 this.updateState({
@@ -351,7 +358,10 @@ if (typeof window !== 'undefined') {
     // Get API base URL from storage or use default
     chrome.storage.sync.get(['mockforgeApiUrl'], (result) => {
         const apiUrl = result.mockforgeApiUrl || 'http://localhost:3000';
-        const xray = new XRayOverlay(apiUrl);
-        (window as any).__mockforgeXRay = xray;
+        chrome.storage.local.get([MANAGEMENT_TOKEN_STORAGE_KEY], (local) => {
+            const token = local[MANAGEMENT_TOKEN_STORAGE_KEY];
+            const xray = new XRayOverlay(apiUrl, typeof token === 'string' ? token : '');
+            (window as any).__mockforgeXRay = xray;
+        });
     });
 }

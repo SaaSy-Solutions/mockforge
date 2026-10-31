@@ -581,19 +581,19 @@ The JSON document (`schema_version` 1):
 ```json
 {
   "schema_version": 1,
-  "version": "0.3.237",
+  "version": "0.3.238",
   "dir": "/abs/project",
   "config": { "path": "/abs/project/mockforge.yaml", "error": null },
   "http": { "enabled": true, "host": "0.0.0.0", "port": 3000, "openapi_spec": "./examples/openapi.json" },
   "admin": { "enabled": true, "port": 9080 },
   "server": {
     "url": "http://127.0.0.1:3000/__mockforge/api/health",
-    "reachable": true, "status": "healthy", "version": "0.3.237",
+    "reachable": true, "status": "healthy", "version": "0.3.238",
     "uptime_seconds": 12, "error": null
   },
   "verification": {
     "schema_version": 1, "recorded_at": "2026-10-26T10:30:43Z",
-    "mockforge_version": "0.3.237", "spec": "examples/openapi.json",
+    "mockforge_version": "0.3.238", "spec": "examples/openapi.json",
     "capture_db": "captures.db", "outcome": "faithful",
     "exchanges_checked": 8, "endpoints_with_drift": 0,
     "unmatched_real_paths": 4, "findings": []
