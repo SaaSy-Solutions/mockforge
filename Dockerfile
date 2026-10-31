@@ -144,6 +144,10 @@ ENV DOCKER_CONTAINER=true
 # `::` listener accepts both IPv4-mapped and native IPv6 — making the admin
 # port reachable on Fly 6PN where private traffic is IPv6-only (#468).
 ENV MOCKFORGE_ADMIN_HOST=::
+# A non-loopback admin bind refuses to start without credentials (#1019):
+# run with -e MOCKFORGE_ADMIN_PASSWORD=... (12+ chars) or
+# MOCKFORGE_MANAGEMENT_TOKEN=... (32+ chars). Hosted mocks get the token from
+# the registry.
 
 # Home for the non-root user, so `~/.mockforge` resolves to a writable path
 # (issue #931). Docker would otherwise leave HOME unset for USER mockforge.

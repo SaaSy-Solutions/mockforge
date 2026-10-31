@@ -29,7 +29,18 @@ Access the interface at `http://localhost:9080` (or the port set with `--admin-p
 
 ### Authentication
 
-The Admin UI includes secure authentication with three built-in roles:
+Every admin endpoint, reads included, needs a login. When the admin server is
+bound to loopback (`127.0.0.1`, the default outside containers) and no
+credentials are configured, anonymous reads of `/__mockforge/*` are still
+allowed from the same machine and the demo users below are seeded. Bound to any
+other address (`0.0.0.0`, `::`, every container), the admin server refuses to
+start until you set `MOCKFORGE_ADMIN_PASSWORD` (12+ characters; logs in as
+`admin`, or `MOCKFORGE_ADMIN_USERNAME`, and replaces the demo users),
+`MOCKFORGE_MANAGEMENT_TOKEN` (32+ characters; send it as
+`X-MockForge-Management-Token` or pass it to `mockforge-tui --token`), or
+`JWT_SECRET`.
+
+On a loopback bind the Admin UI seeds three demo roles:
 
 #### Admin Role
 - **Username**: `admin`
