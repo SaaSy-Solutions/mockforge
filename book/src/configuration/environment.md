@@ -39,7 +39,8 @@ for the full surface.
   - Port for the HTTP server to listen on
 
 - `MOCKFORGE_HTTP_HOST=127.0.0.1` (default: `0.0.0.0`)
-  - Host address for the HTTP server to bind to
+  - Host address for the HTTP server to bind to. An IP address or
+    `localhost`; other hostnames bind `0.0.0.0`
 
 The OpenAPI spec path is set via `--spec`, `MOCKFORGE_OPENAPI_SPEC_URL`, or
 the `http.spec` YAML field. CORS, request timeouts, and other middleware
@@ -468,12 +469,21 @@ managed stack. Defaults below are the values the code falls back to.
   - Multiple of the plan limit at which hosted traffic is cut off. `0` disables
     the ceiling. Values must be positive to take effect
 - `MOCKFORGE_MANAGEMENT_TOKEN` (default: unset)
-  - Set by the registry on every hosted mock. When set, `mockforge serve`
-    rejects writes (anything but GET, HEAD, OPTIONS) to MockForge's own control
-    routes (`/__mockforge/*`, `/api/chaos`, `/api/recorder`, `/api/world-state`,
-    and the other management APIs) with 401 unless the request carries the
-    token in `X-MockForge-Management-Token` or `Authorization: Bearer`. Reads
-    and your mocked API are unaffected. Leave it unset for self-hosted servers
+  - The credential for MockForge's own control routes on the HTTP port
+    (`/__mockforge/*`, `/api/chaos`, `/api/recorder`, `/api/verification`,
+    `/api/world-state`, `/api/performance` and the `/api/v1/*` management
+    APIs), reads and writes alike. Send it as `X-MockForge-Management-Token`
+    or `Authorization: Bearer`. It must be at least 32 characters, or
+    `mockforge serve` refuses to start. The registry sets it on every hosted
+    mock. Without it, or the admin user's Basic credentials
+    (`admin.username` / `admin.password`), the control plane answers 401 to
+    everyone. Your mocked API, `/health*` and `/__mockforge/docs` stay public
+- `MOCKFORGE_INSECURE_MANAGEMENT` (default: unset)
+  - `1` opens the control plane without a credential, for local development.
+    Allowed only when the HTTP server binds a loopback address
+    (`MOCKFORGE_HTTP_HOST=127.0.0.1` or `::1`); on any other address,
+    including `0.0.0.0`, `::` and `::ffff:127.0.0.1`, `mockforge serve`
+    refuses to start. Requests must also use a loopback `Host` header
 
 ### Incident dispatch
 
