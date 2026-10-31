@@ -1,12 +1,24 @@
 """MockServer implementation"""
 
+import os
+import secrets
 import subprocess
 import time
 import requests
 from typing import Optional, Dict, Any, List
 from .types import MockServerConfig, ResponseStub, VerificationRequest, VerificationResult
-from .verification import VerificationCount, verify, verify_never, verify_at_least, verify_sequence, count
+from .verification import _auth_headers, VerificationCount, verify, verify_never, verify_at_least, verify_sequence, count
 from .errors import MockServerError
+
+
+def resolve_management_token(explicit: Optional[str] = None) -> str:
+    """Explicit token, else $MOCKFORGE_MANAGEMENT_TOKEN, else a random hex token."""
+    if explicit:
+        return explicit
+    from_env = os.environ.get("MOCKFORGE_MANAGEMENT_TOKEN")
+    if from_env:
+        return from_env
+    return secrets.token_hex(32)
 
 
 class MockServer:
@@ -21,6 +33,9 @@ class MockServer:
             host: Host to bind to (default: 127.0.0.1)
             config_file: Path to MockForge config file
             openapi_spec: Path to OpenAPI specification
+            management_token: Control-plane credential passed to the CLI as
+                MOCKFORGE_MANAGEMENT_TOKEN and sent as
+                X-MockForge-Management-Token (default: env var, else random)
         """
         self.config = MockServerConfig(**kwargs)
         self.process: Optional[subprocess.Popen] = None
@@ -28,6 +43,8 @@ class MockServer:
         self.host = self.config.host
         self.admin_port: Optional[int] = None
         self.stubs: List[ResponseStub] = []
+        self.management_token = resolve_management_token(self.config.management_token)
+        self._headers = _auth_headers(self.management_token)
 
     def start(self) -> "MockServer":
         """Start the mock server"""
@@ -54,6 +71,7 @@ class MockServer:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,  # Enable text mode for string operations
+                env={**os.environ, "MOCKFORGE_MANAGEMENT_TOKEN": self.management_token},
             )
         except FileNotFoundError as e:
             raise MockServerError.cli_not_found(e)
@@ -208,6 +226,7 @@ class MockServer:
                 requests.post(
                     f"http://{self.host}:{self.admin_port}/__mockforge/api/mocks",
                     json=mock_config,
+                    headers=self._headers,
                     timeout=1.0,
                 )
             except requests.exceptions.RequestException:
@@ -222,6 +241,7 @@ class MockServer:
                 # Get all mocks and delete them one by one
                 response = requests.get(
                     f"http://{self.host}:{self.admin_port}/__mockforge/api/mocks",
+                    headers=self._headers,
                     timeout=1.0,
                 )
                 mocks = response.json().get("mocks", [])
@@ -231,7 +251,8 @@ class MockServer:
                     try:
                         requests.delete(
                             f"http://{self.host}:{self.admin_port}/__mockforge/api/mocks/{mock['id']}",
-                            timeout=1.0,
+                            headers=self._headers,
+                    timeout=1.0,
                         )
                     except requests.exceptions.RequestException:
                         pass  # Ignore individual delete errors
@@ -297,7 +318,7 @@ class MockServer:
             >>> result = server.verify(pattern, VerificationCount.exactly(3))
             >>> assert result.matched
         """
-        return verify(self.url(), pattern, expected)
+        return verify(self.url(), pattern, expected, management_token=self.management_token)
 
     def verify_never(self, pattern: VerificationRequest) -> VerificationResult:
         """
@@ -309,7 +330,7 @@ class MockServer:
         Returns:
             VerificationResult with verification outcome
         """
-        return verify_never(self.url(), pattern)
+        return verify_never(self.url(), pattern, management_token=self.management_token)
 
     def verify_at_least(
         self,
@@ -326,7 +347,7 @@ class MockServer:
         Returns:
             VerificationResult with verification outcome
         """
-        return verify_at_least(self.url(), pattern, min_count)
+        return verify_at_least(self.url(), pattern, min_count, management_token=self.management_token)
 
     def verify_sequence(
         self,
@@ -341,7 +362,7 @@ class MockServer:
         Returns:
             VerificationResult with verification outcome
         """
-        return verify_sequence(self.url(), patterns)
+        return verify_sequence(self.url(), patterns, management_token=self.management_token)
 
     def count_requests(self, pattern: VerificationRequest) -> int:
         """
@@ -353,4 +374,4 @@ class MockServer:
         Returns:
             Count of matching requests
         """
-        return count(self.url(), pattern)
+        return count(self.url(), pattern, management_token=self.management_token)

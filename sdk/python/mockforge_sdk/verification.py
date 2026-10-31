@@ -4,6 +4,15 @@ from typing import List, Dict, Any, Optional
 from .types import VerificationRequest, VerificationResult
 import requests
 
+MANAGEMENT_TOKEN_HEADER = "X-MockForge-Management-Token"
+
+
+def _auth_headers(management_token: Optional[str]) -> Dict[str, str]:
+    """Headers carrying the management credential, if one is set."""
+    if management_token:
+        return {MANAGEMENT_TOKEN_HEADER: management_token}
+    return {}
+
 
 class VerificationCount:
     """Count assertion for verification"""
@@ -39,12 +48,14 @@ def _make_verification_request(
     endpoint: str,
     data: Dict[str, Any],
     timeout: float = 5.0,
+    management_token: Optional[str] = None,
 ) -> VerificationResult:
     """Make a verification API request"""
     try:
         response = requests.post(
             f"{base_url}/api/verification/{endpoint}",
             json=data,
+            headers=_auth_headers(management_token),
             timeout=timeout,
         )
         response.raise_for_status()
@@ -65,6 +76,7 @@ def verify(
     pattern: VerificationRequest,
     expected: Dict[str, Any],
     timeout: float = 5.0,
+    management_token: Optional[str] = None,
 ) -> VerificationResult:
     """
     Verify requests against a pattern and count assertion
@@ -74,6 +86,7 @@ def verify(
         pattern: Pattern to match requests
         expected: Expected count assertion (from VerificationCount)
         timeout: Request timeout in seconds
+        management_token: Sent as X-MockForge-Management-Token
 
     Returns:
         VerificationResult with verification outcome
@@ -88,13 +101,16 @@ def verify(
         },
         "expected": expected,
     }
-    return _make_verification_request(base_url, "verify", data, timeout)
+    return _make_verification_request(
+        base_url, "verify", data, timeout, management_token
+    )
 
 
 def verify_never(
     base_url: str,
     pattern: VerificationRequest,
     timeout: float = 5.0,
+    management_token: Optional[str] = None,
 ) -> VerificationResult:
     """
     Verify that a request was never made
@@ -103,6 +119,7 @@ def verify_never(
         base_url: Base URL of the mock server
         pattern: Pattern to match requests
         timeout: Request timeout in seconds
+        management_token: Sent as X-MockForge-Management-Token
 
     Returns:
         VerificationResult with verification outcome
@@ -114,7 +131,9 @@ def verify_never(
         "headers": pattern.headers,
         "body_pattern": pattern.body_pattern,
     }
-    return _make_verification_request(base_url, "never", data, timeout)
+    return _make_verification_request(
+        base_url, "never", data, timeout, management_token
+    )
 
 
 def verify_at_least(
@@ -122,6 +141,7 @@ def verify_at_least(
     pattern: VerificationRequest,
     min_count: int,
     timeout: float = 5.0,
+    management_token: Optional[str] = None,
 ) -> VerificationResult:
     """
     Verify that a request was made at least N times
@@ -131,6 +151,7 @@ def verify_at_least(
         pattern: Pattern to match requests
         min_count: Minimum count
         timeout: Request timeout in seconds
+        management_token: Sent as X-MockForge-Management-Token
 
     Returns:
         VerificationResult with verification outcome
@@ -145,13 +166,16 @@ def verify_at_least(
         },
         "min": min_count,
     }
-    return _make_verification_request(base_url, "at-least", data, timeout)
+    return _make_verification_request(
+        base_url, "at-least", data, timeout, management_token
+    )
 
 
 def verify_sequence(
     base_url: str,
     patterns: List[VerificationRequest],
     timeout: float = 5.0,
+    management_token: Optional[str] = None,
 ) -> VerificationResult:
     """
     Verify that requests occurred in a specific sequence
@@ -160,6 +184,7 @@ def verify_sequence(
         base_url: Base URL of the mock server
         patterns: List of patterns to match in sequence
         timeout: Request timeout in seconds
+        management_token: Sent as X-MockForge-Management-Token
 
     Returns:
         VerificationResult with verification outcome
@@ -176,13 +201,16 @@ def verify_sequence(
             for p in patterns
         ],
     }
-    return _make_verification_request(base_url, "sequence", data, timeout)
+    return _make_verification_request(
+        base_url, "sequence", data, timeout, management_token
+    )
 
 
 def count(
     base_url: str,
     pattern: VerificationRequest,
     timeout: float = 5.0,
+    management_token: Optional[str] = None,
 ) -> int:
     """
     Get count of matching requests
@@ -191,6 +219,7 @@ def count(
         base_url: Base URL of the mock server
         pattern: Pattern to match requests
         timeout: Request timeout in seconds
+        management_token: Sent as X-MockForge-Management-Token
 
     Returns:
         Count of matching requests
@@ -208,6 +237,7 @@ def count(
         response = requests.post(
             f"{base_url}/api/verification/count",
             json=data,
+            headers=_auth_headers(management_token),
             timeout=timeout,
         )
         response.raise_for_status()
