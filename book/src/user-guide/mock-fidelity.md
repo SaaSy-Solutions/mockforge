@@ -226,7 +226,11 @@ per-route status, source filenames and findings. Response-schema findings retain
 field names, messages and expected/actual values. Replay fixtures store a request
 fingerprint and response, so this mode validates routes, statuses and JSON
 response bodies. It cannot validate the original request body or establish that
-a live upstream still returns the fixture's response.
+a live upstream still returns the fixture's response. Unsupported response media
+(such as `text/plain` or `application/problem+json`) and ambiguous media without
+a recorded Content-Type remain `not-verified`, with a `response-unverified`
+finding. They do not count as proven response drift. The top-level
+`endpoints_unverified` count covers HTTP fixture and capture checks.
 
 A fixture file has this shape:
 
@@ -286,8 +290,9 @@ not a cloud registry feature yet.
 
 ## Use the result in CI
 
-With `--fail-on-drift`, detected drift returns exit code 1. Without that flag,
-drift is reported but does not fail the command. Invalid inputs still return a
+With `--fail-on-drift`, detected drift or unverified response media returns
+exit code 1. Without that flag, these findings are reported but do not fail
+the command. Invalid inputs still return a
 nonzero exit code. Preserve the JSON report as a CI artifact so reviewers can
 see which definitions or captured exchanges failed.
 

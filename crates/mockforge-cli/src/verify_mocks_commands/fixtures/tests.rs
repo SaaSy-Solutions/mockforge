@@ -78,3 +78,27 @@ fn fixture_symlinks_fail_without_following_external_data() {
     let (registry, spec) = registry();
     assert!(verify(&link, &registry, &spec).is_err());
 }
+
+#[test]
+fn unsupported_response_media_is_unverified_instead_of_drift_or_success() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("fixture.json");
+    for media in ["text/plain", "application/problem+json"] {
+        let (_, mut spec) = registry();
+        spec["paths"]["/items"]["get"]["responses"]["200"]["content"] =
+            json!({media:{"schema":{"type":"string","enum":["ok"]}}});
+        let registry =
+            OpenApiRouteRegistry::new(super::super::OpenApiSpec::from_json(spec.clone()).unwrap());
+        let mut data = fixture("/items", "not allowed");
+        data["response_headers"] = json!({"Content-Type":media});
+        fs::write(&path, data.to_string()).unwrap();
+        let report = verify(&path, &registry, &spec).unwrap();
+        assert_eq!(report.routes[0].status, "not-verified");
+        assert_eq!(report.routes[0].change, "unchanged");
+        assert_eq!(report.routes[0].findings[0].kind, "response-unverified");
+        assert!(report.routes[0].findings[0].response.is_none());
+        data["status_code"] = json!(418);
+        fs::write(&path, data.to_string()).unwrap();
+        assert_eq!(verify(&path, &registry, &spec).unwrap().routes[0].status, "drift-detected");
+    }
+}

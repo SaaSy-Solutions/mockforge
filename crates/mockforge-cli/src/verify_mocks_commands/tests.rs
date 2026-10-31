@@ -41,7 +41,13 @@ fn check(
     let spec = json!({"openapi":"3.0.3","info":{"title":"fixture","version":"1"},
         "paths":{"/items":{"get":{"responses":responses}}},"components":components});
     let registry = OpenApiRouteRegistry::new(OpenApiSpec::from_json(spec.clone()).unwrap());
-    check_response_drift(&registry, &spec, "GET", "/items", status, Some(body))
+    match check_response(&registry, &spec, "GET", "/items", status, None, Some(body)) {
+        ResponseAssessment::Verified => None,
+        ResponseAssessment::Drift(drift) => Some(drift),
+        ResponseAssessment::Unverified(reason) => {
+            panic!("unexpected unsupported test response: {reason}")
+        }
+    }
 }
 
 #[test]
@@ -180,4 +186,34 @@ async fn empty_capture_succeeds_even_with_fail_on_drift() {
         record: false,
     };
     handle_verify_mocks_command(args).await.unwrap();
+}
+
+#[tokio::test]
+async fn fixture_report_exposes_unverified_media_without_counting_proven_drift() {
+    let dir = tempfile::tempdir().unwrap();
+    let spec = dir.path().join("api.json");
+    let fixture = dir.path().join("fixture.json");
+    let output = dir.path().join("report.json");
+    std::fs::write(&spec, json!({"openapi":"3.0.3","info":{"title":"media","version":"1"},
+        "paths":{"/items":{"get":{"responses":{"200":{"description":"ok","content":{"text/plain":{"schema":{"type":"string"}}}}}}}}}).to_string()).unwrap();
+    std::fs::write(&fixture, json!({"fingerprint":{"method":"GET","path":"/items","query":"","headers":{},"body_hash":null},
+        "timestamp":"2026-10-20T00:00:00Z","status_code":200,"response_headers":{"content-type":"text/plain"},
+        "response_body":"unverified text","metadata":{}}).to_string()).unwrap();
+    handle_verify_mocks_command(VerifyMocksArgs {
+        spec,
+        capture_db: None,
+        mock_spec: None,
+        fixtures: Some(fixture),
+        limit: 500,
+        fail_on_drift: false,
+        output: Some(output.clone()),
+        record: false,
+    })
+    .await
+    .unwrap();
+    let report: Value = serde_json::from_slice(&std::fs::read(output).unwrap()).unwrap();
+    assert_eq!(report["endpoints_with_drift"], 0);
+    assert_eq!(report["endpoints_unverified"], 1);
+    assert_eq!(report["findings"][0]["kind"], "fixture-unverified");
+    assert_eq!(report["fixtures"]["routes"][0]["status"], "not-verified");
 }

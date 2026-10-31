@@ -250,3 +250,38 @@ fn null_constraints_survive_inline_contract_normalization() {
         "an explicit null constraint was erased"
     );
 }
+
+#[test]
+fn server_variables_named_like_metadata_preserve_defaults_and_enums() {
+    for document in [v2(), v3()] {
+        for name in [
+            "description",
+            "title",
+            "summary",
+            "example",
+            "examples",
+            "operationId",
+            "tags",
+        ] {
+            let mut mock = document.clone();
+            mock["servers"]["local"]["variables"] =
+                json!({name: {"default":"before", "enum":["before","after"]}});
+            let mut source = mock.clone();
+            source["servers"]["local"]["variables"][name]["default"] = json!("after");
+            assert!(
+                compare_mock_spec(&mock, &source).unwrap().routes_with_drift > 0,
+                "server variable {name} default was discarded"
+            );
+            source = mock.clone();
+            source["servers"]["local"]["variables"][name]["enum"] = json!(["before"]);
+            assert!(
+                compare_mock_spec(&mock, &source).unwrap().routes_with_drift > 0,
+                "server variable {name} enum was discarded"
+            );
+            source = mock.clone();
+            source["servers"]["local"]["variables"][name]["description"] =
+                json!("documentation only");
+            assert_eq!(compare_mock_spec(&mock, &source).unwrap().routes_with_drift, 0);
+        }
+    }
+}

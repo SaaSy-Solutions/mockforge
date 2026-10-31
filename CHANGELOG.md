@@ -23,6 +23,8 @@
 
 ### Fixed
 
+- **[Reality]** Fidelity checks preserve AsyncAPI server variables whose names match documentation keys. HTTP captures and replay fixtures now report unsupported or ambiguous response media as unverified, and `--fail-on-drift` fails those checks instead of accepting unchecked responses. (#849)
+
 - **[Reality]** JSON-content request parameters are decoded and checked against their schemas instead of silently passing validation. JSON types stay distinct, local component references are resolved, malformed JSON fails even without a schema, and unsupported parameter media types fail explicitly. (#849)
 - **[Reality]** Request parameter `schema` references are checked in normal, style-aware and detailed validation instead of silently passing. Local aliases, nested and recursive components retain their schema context; referenced arrays and deep-object values are coerced by declared type, and integer parameters retain 64-bit precision. Unresolved/cyclic references fail explicitly, and parameter validation does not fetch external resources. (#849)
 - **[Reality]** Request conformance checks match HTTP header names without ASCII case differences in normal and detailed validation. A captured `x-trace` now satisfies a declared `X-Trace`; missing headers and invalid values still fail, while cookie, query and path parameter names remain case-sensitive. (#849)

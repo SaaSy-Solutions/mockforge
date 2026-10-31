@@ -26,7 +26,7 @@ impl Context {
                 "description" | "title" | "summary" | "externalDocs" | "example" | "examples"
                 | "operationId" | "tags" => None,
                 "payload" | "headers" | "schema" => Some(Self::Schema),
-                "messages" | "parameters" => Some(Self::AsyncContracts),
+                "messages" | "parameters" | "variables" => Some(Self::AsyncContracts),
                 "bindings" => Some(Self::Bindings),
                 "security" => Some(Self::Literal),
                 _ => Some(Self::AsyncContract),

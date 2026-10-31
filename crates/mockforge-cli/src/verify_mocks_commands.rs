@@ -21,7 +21,7 @@ mod asynchronous;
 mod fixtures;
 use mockforge_contracts::http_route_match::match_template;
 use mockforge_contracts::response_validation as responses;
-use responses::check_response_drift;
+use responses::{check_response, ResponseAssessment};
 
 /// Verify mocks still match the real API (drift detection, #849).
 ///
@@ -86,6 +86,7 @@ struct DriftReport {
     fixtures: Option<fixtures::FixtureReport>,
     exchanges_checked: usize,
     endpoints_with_drift: usize,
+    endpoints_unverified: usize,
     unmatched_real_paths: usize,
     findings: Vec<DriftFinding>,
 }
@@ -153,6 +154,7 @@ pub(crate) async fn handle_verify_mocks_command(
     // 3. Evaluate each exchange.
     let mut findings: Vec<DriftFinding> = Vec::new();
     let mut drifted_endpoints: BTreeMap<String, ()> = BTreeMap::new();
+    let mut unverified_endpoints: BTreeMap<String, ()> = BTreeMap::new();
     let mut unmatched_paths: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
 
     if let Some(report) = &definition {
@@ -174,7 +176,12 @@ pub(crate) async fn handle_verify_mocks_command(
         for route in report.routes.iter().filter(|r| !r.findings.is_empty()) {
             findings.push(DriftFinding {
                 endpoint: route.endpoint.clone(),
-                kind: "fixture".into(),
+                kind: if route.status == "not-verified" {
+                    "fixture-unverified"
+                } else {
+                    "fixture"
+                }
+                .into(),
                 detail: route
                     .findings
                     .iter()
@@ -182,7 +189,11 @@ pub(crate) async fn handle_verify_mocks_command(
                     .collect::<Vec<_>>()
                     .join("; "),
             });
-            drifted_endpoints.insert(route.endpoint.clone(), ());
+            if route.status == "not-verified" {
+                unverified_endpoints.insert(route.endpoint.clone(), ());
+            } else {
+                drifted_endpoints.insert(route.endpoint.clone(), ());
+            }
         }
     }
 
@@ -234,21 +245,39 @@ pub(crate) async fn handle_verify_mocks_command(
         if let Some(response) = &exchange.response {
             let status = response.status_code as u16;
             let decoded = decode_body(&response.body, &response.body_encoding);
-            if let Some(detail) = check_response_drift(
+            let response_headers = header_value_map(&response.headers);
+            let media = response_headers
+                .iter()
+                .find(|(name, _)| name.eq_ignore_ascii_case("content-type"))
+                .and_then(|(_, value)| value.as_str());
+            let assessment = check_response(
                 &registry,
                 &response_spec,
                 &method,
                 &template,
                 status,
+                media,
                 decoded.as_deref(),
-            ) {
-                let endpoint = format!("{method} {concrete_path}");
-                findings.push(DriftFinding {
-                    endpoint: endpoint.clone(),
-                    kind: "response-shape".into(),
-                    detail: detail.detail,
-                });
-                drifted_endpoints.insert(endpoint, ());
+            );
+            let endpoint = format!("{method} {concrete_path}");
+            match assessment {
+                ResponseAssessment::Verified => {}
+                ResponseAssessment::Drift(detail) => {
+                    findings.push(DriftFinding {
+                        endpoint: endpoint.clone(),
+                        kind: "response-shape".into(),
+                        detail: detail.detail,
+                    });
+                    drifted_endpoints.insert(endpoint, ());
+                }
+                ResponseAssessment::Unverified(detail) => {
+                    findings.push(DriftFinding {
+                        endpoint: endpoint.clone(),
+                        kind: "response-unverified".into(),
+                        detail,
+                    });
+                    unverified_endpoints.insert(endpoint, ());
+                }
             }
         } else {
             let endpoint = format!("{method} {concrete_path}");
@@ -268,6 +297,7 @@ pub(crate) async fn handle_verify_mocks_command(
         fixtures: fixture_report,
         exchanges_checked: exchanges.len(),
         endpoints_with_drift: drifted_endpoints.len(),
+        endpoints_unverified: unverified_endpoints.len(),
         unmatched_real_paths: unmatched_paths.len(),
         findings,
     };
@@ -279,12 +309,13 @@ pub(crate) async fn handle_verify_mocks_command(
         println!("fixture files checked  : {}", fixtures.files_checked);
     }
     println!("endpoints with drift   : {}", report.endpoints_with_drift);
+    println!("endpoints not verified : {}", report.endpoints_unverified);
     println!(
         "unmatched real paths   : {} (traffic to endpoints not in the spec)",
         report.unmatched_real_paths
     );
     for f in &report.findings {
-        println!("DRIFT [{}] {}\n       {}", f.kind, f.endpoint, f.detail);
+        println!("[{}] {}\n       {}", f.kind, f.endpoint, f.detail);
     }
 
     if let Some(out) = &output {
@@ -300,8 +331,8 @@ pub(crate) async fn handle_verify_mocks_command(
 
     if fail_on_drift && !report.findings.is_empty() {
         eprintln!(
-            "verify-mocks: drift detected across {} endpoint(s); failing (--fail-on-drift)",
-            report.endpoints_with_drift
+            "verify-mocks: {} endpoint(s) with drift and {} not verified; failing (--fail-on-drift)",
+            report.endpoints_with_drift, report.endpoints_unverified
         );
         std::process::exit(1);
     }
@@ -316,6 +347,7 @@ fn empty_capture_report(spec: &std::path::Path) -> DriftReport {
         fixtures: None,
         exchanges_checked: 0,
         endpoints_with_drift: 0,
+        endpoints_unverified: 0,
         unmatched_real_paths: 0,
         findings: Vec::new(),
     }
