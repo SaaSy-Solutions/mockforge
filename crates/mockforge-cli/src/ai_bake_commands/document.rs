@@ -36,6 +36,7 @@ pub(super) fn build(args: &BakeArgs, body: Value, identity: &str) -> Result<Valu
     let mut config = json!({
         "http":{"enabled":true,"host":"127.0.0.1","port":3000,"response_template_expand":false,"cors":{"enabled":false}},
         "mockai":{"enabled":false},
+        "reality":{"enabled":false},
         "routes":[{"method":args.method.to_ascii_uppercase(),"path":args.path,"response":{"status":args.status,
             "headers":{"content-type":"application/json"},"body":body}}]
     });
@@ -80,6 +81,11 @@ pub(super) fn verify(mut config: Value, identity: &str) -> Result<Value> {
     if manifest.config_sha256 != hash(&config) {
         return Err("Baked fixture integrity check failed; the file was not replaced".into());
     }
-    let _: mockforge_core::config::ServerConfig = serde_json::from_value(config.clone())?;
+    let parsed: mockforge_core::config::ServerConfig = serde_json::from_value(config.clone())?;
+    if parsed.reality.enabled {
+        return Err(
+            "Existing fixture enables a Reality preset; choose a new output path and rebake".into(),
+        );
+    }
     Ok(config)
 }
