@@ -28,6 +28,50 @@
      "subcommands": {},
      "variadic": false
     },
+    "ai": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--log-level": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {
+      "bake": {
+       "aliases": {},
+       "flags": {
+        "--api-key-env": 1,
+        "--endpoint": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "--max-tokens": 1,
+        "--method": 1,
+        "--model": 1,
+        "--output": 1,
+        "--path": 1,
+        "--prompt-file": 1,
+        "--provider": 1,
+        "--seed": 1,
+        "--status": 1,
+        "--temperature": 1,
+        "--timeout": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 3,
+       "subcommands": {},
+       "variadic": false
+      },
+      "help": {
+       "aliases": {},
+       "flags": {},
+       "free": true,
+       "subcommands": {}
+      }
+     },
+     "variadic": false
+    },
     "amqp": {
      "aliases": {},
      "flags": {
