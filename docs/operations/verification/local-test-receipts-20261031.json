@@ -83,6 +83,44 @@
         "> tsc -b"
       ],
       "note": "AFTER merge; timing gap disclosed"
+    },
+    {
+      "name": "desktop-final",
+      "tested_source": "a4945551",
+      "original_log": "/tmp/mockforge-desktop-final-check-20261031.log",
+      "log_sha256": "9767cbbf261b596de7963b254e5ee0fb91238f9efc4ff586e6edbeb32070a599",
+      "result_lines": [
+        "    Finished `dev` profile [unoptimized] target(s) in 5m 42s",
+        "{\"policy_sha256\": \"5de45082645bb5f7236dc78f2c41fdd6ee4dcabe4c199be8abe34273f18bad7e\", \"workload_class\": \"check\", \"admission_class\": \"STANDARD_CHECK\", \"admission_slot\": 1, \"pressure_wait_seconds\": 0.0, \"classification_reason\": \"Unmeasured Cargo compiler, target or profile override\", \"minimum_available_mib\": 16384, \"max_concurrent\": 4, \"reserved_checks\": 2, \"limits\": {\"memory_mib\": 12288, \"cpu_percent\": 200, \"jobs\": 2}, \"cargo_command\": \"check\", \"worktree\": \"f13168662f095a9d\", \"admission_seconds\": 58.074, \"execution_seconds\": 360.932, \"exit_status\": 0}"
+      ],
+      "note": "Linux check including extracted auth; five existing warnings; not Windows execution"
+    },
+    {
+      "name": "runner-units",
+      "tested_source": "9545cc5a",
+      "original_log": "/tmp/mockforge-runner-unit-pg-tests-20261031.log",
+      "log_sha256": "a70e33e8e7aefbf9e603e817ffd3292613e9a88ca88160b9a26280be4dfb1ffa",
+      "result_lines": [
+        "    Finished `test` profile [unoptimized] target(s) in 8m 53s",
+        "test result: ok. 23 passed; 0 failed; 0 ignored; 0 measured; 598 filtered out; finished in 1.40s",
+        "test result: ok. 107 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 2.06s",
+        "{\"policy_sha256\": \"5de45082645bb5f7236dc78f2c41fdd6ee4dcabe4c199be8abe34273f18bad7e\", \"workload_class\": \"targeted-test\", \"admission_class\": \"HEAVY_BUILD\", \"admission_slot\": 1, \"pressure_wait_seconds\": 0.0, \"classification_reason\": \"Unknown or unmeasured workload\", \"minimum_available_mib\": 16384, \"max_concurrent\": 4, \"reserved_checks\": 2, \"limits\": {\"memory_mib\": 12288, \"cpu_percent\": 200, \"jobs\": 2}, \"cargo_command\": \"test\", \"worktree\": \"a4bb4bcf8c7f7163\", \"admission_seconds\": 72.612, \"execution_seconds\": 537.794, \"exit_status\": 0}"
+      ],
+      "note": "Before merge; includes actual PostgreSQL claim regression"
+    },
+    {
+      "name": "freehosting-fresh-db",
+      "tested_source": "5c225e82",
+      "original_log": "/tmp/mockforge-freehost-native-grouped-v3-20261031.log",
+      "log_sha256": "f16da155ec341a48e71309fffaa7345a21d32611a02539c4210550a1d3f0ef94",
+      "result_lines": [
+        "    Finished `test` profile [unoptimized] target(s) in 7m 53s",
+        "test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 629 filtered out; finished in 12.21s",
+        "test result: ok. 41 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 37.44s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.14s",
+        "{\"policy_sha256\": \"5de45082645bb5f7236dc78f2c41fdd6ee4dcabe4c199be8abe34273f18bad7e\", \"workload_class\": \"targeted-test\", \"admission_class\": \"HEAVY_BUILD\", \"admission_slot\": 2, \"pressure_wait_seconds\": 0.0, \"classification_reason\": \"Unknown or unmeasured workload\", \"minimum_available_mib\": 16384, \"max_concurrent\": 4, \"reserved_checks\": 2, \"limits\": {\"memory_mib\": 12288, \"cpu_percent\": 200, \"jobs\": 2}, \"cargo_command\": \"test\", \"worktree\": \"7b7576d80b7d16aa\", \"admission_seconds\": 0.001, \"execution_seconds\": 530.965, \"exit_status\": 0}"
+      ],
+      "note": "Before merge; fresh owned PostgreSQL databases after failed fixture remnants"
     }
   ]
 }
