@@ -32,10 +32,10 @@ axum = { workspace = true }
 uuid = { workspace = true, features = ["serde", "v4"] }
 chrono = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
-mockforge-core = { version = "0.3.236", path = "../mockforge-core" }
+mockforge-core = { version = "0.3.238", path = "../mockforge-core" }
 mockforge-openapi = { path = "../mockforge-openapi" }
-mockforge-data = { version = "0.3.236", path = "../mockforge-data", optional = true }
-mockforge-scenarios = { version = "0.3.236", path = "../mockforge-scenarios" }
+mockforge-data = { version = "0.3.238", path = "../mockforge-data", optional = true }
+mockforge-scenarios = { version = "0.3.238", path = "../mockforge-scenarios" }
 
 [features]
 default = []

@@ -19,23 +19,34 @@
   <div id="no-spec" class="no-spec" style="display: none;">
     <div>
       <h1>No OpenAPI Spec Loaded</h1>
-      <p>This mock server is running in config-only mode.</p>
-      <p><a href="/__mockforge/routes">View registered routes</a></p>
+      <p>This mock server is running in config-only mode, or the management
+        token is missing.</p>
     </div>
   </div>
   <script id="api-reference" style="display: none;"></script>
   <script>
-    // Check if spec is available, then configure and load Scalar
-    fetch('/__mockforge/api/spec')
+    // The spec is part of MockForge's control plane, so it needs the
+    // management token. Callers pass it in the URL fragment
+    // (#management_token=...), which browsers never send to a server.
+    // Drop the fragment from the address bar once read.
+    var token = new URLSearchParams(window.location.hash.slice(1)).get('management_token');
+    if (token) {
+      history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
+    var headers = token ? { 'X-MockForge-Management-Token': token } : {};
+    fetch('/__mockforge/api/spec', { headers: headers })
       .then(function(r) {
         if (!r.ok) throw new Error('No spec');
         return r.text();
       })
       .then(function(specContent) {
+        // Hand Scalar the spec text so it does not fetch it again without
+        // the token.
         var ref = document.getElementById('api-reference');
         ref.removeAttribute('style');
-        ref.setAttribute('data-url', '/__mockforge/api/spec');
+        ref.setAttribute('type', 'application/json');
         ref.setAttribute('data-proxy-url', '');
+        ref.textContent = specContent;
 
         var script = document.createElement('script');
         script.src = 'https://cdn.jsdelivr.net/npm/@scalar/api-reference';

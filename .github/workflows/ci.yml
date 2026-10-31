@@ -66,6 +66,11 @@ jobs:
           command -v python3 >/dev/null || { echo "::error::Python 3 is required for security tool ownership regressions."; exit 1; }
           command -v bash >/dev/null || { echo "::error::Bash is required for security tool ownership regressions."; exit 1; }
           python3 scripts/tests/test_owned_security_tools.py
+      - name: Verify local Cargo isolation and admission behavior
+        run: |
+          python3 -m unittest discover -s scripts/tests -p test_dev_cargo.py -v
+          python3 -m unittest discover -s scripts/tests -p test_rust_build_policy.py -v
+          python3 -m unittest discover -s scripts/tests -p test_workload_admission.py -v
       - name: Determine whether non-docs files changed
         id: filter
         env:
@@ -601,7 +606,7 @@ jobs:
 
     - name: Install pinned security audit tools
       if: runner.environment == 'github-hosted'
-      uses: taiki-e/install-action@v2.87.27
+      uses: taiki-e/install-action@v2.87.31
       with:
         tool: cargo-audit@0.22.2,cargo-deny@0.20.2
         fallback: none
