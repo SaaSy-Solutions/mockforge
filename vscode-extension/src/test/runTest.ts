@@ -15,13 +15,16 @@ async function main(): Promise<void> {
     // default (.vscode-test/user-data) exceeds the 107-byte Unix socket path
     // limit and VS Code exits before running tests, so use a short temp dir.
     const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mfvsc-'));
-    await runTests({
-        version: '1.85.2',
-        extensionDevelopmentPath,
-        extensionTestsPath,
-        launchArgs: ['--disable-extensions', '--disable-workspace-trust', `--user-data-dir=${userDataDir}`],
-    });
-    fs.rmSync(userDataDir, { recursive: true, force: true });
+    try {
+        await runTests({
+            version: '1.85.2',
+            extensionDevelopmentPath,
+            extensionTestsPath,
+            launchArgs: ['--disable-extensions', '--disable-workspace-trust', `--user-data-dir=${userDataDir}`],
+        });
+    } finally {
+        fs.rmSync(userDataDir, { recursive: true, force: true });
+    }
 }
 
 main().catch((err) => {

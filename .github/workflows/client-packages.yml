@@ -80,6 +80,5 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      # buildPlugin loads the plugin in a headless IDE, which catches plugin.xml
-      # registration errors that unit tests do not.
+      # Run plugin tests and assemble the distributable against the pinned IDE.
       - run: ./gradlew test buildPlugin --no-daemon --console=plain
