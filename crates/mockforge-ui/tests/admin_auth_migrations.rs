@@ -36,6 +36,8 @@ async fn historical_database_upgrades_and_preserves_operator_credentials() {
         .execute(&pool).await.unwrap();
     sqlx::query("INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at) VALUES ('old-viewer-session', '00000000-0000-0000-0000-000000000002', 'old-session-hash', '2099-01-01 00:00:00')")
         .execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at) VALUES ('operator-session', 'operator-id', 'operator-session-hash', '2099-01-01 00:00:00')")
+        .execute(&pool).await.unwrap();
 
     let current = sqlx::migrate!("./migrations");
     current
@@ -56,9 +58,9 @@ async fn historical_database_upgrades_and_preserves_operator_credentials() {
             ("operator".to_owned(), "operator-password-hash".to_owned()),
         ]
     );
-    let sessions: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM refresh_tokens")
-        .fetch_one(&pool)
+    let sessions: Vec<String> = sqlx::query_scalar("SELECT id FROM refresh_tokens ORDER BY id")
+        .fetch_all(&pool)
         .await
         .unwrap();
-    assert_eq!(sessions, 0, "sessions belonging to unchanged built-in users must be revoked");
+    assert_eq!(sessions, vec!["operator-session"], "only sessions of removed users are revoked");
 }
