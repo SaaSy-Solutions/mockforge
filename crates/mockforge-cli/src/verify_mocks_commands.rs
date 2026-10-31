@@ -17,10 +17,11 @@ use std::path::PathBuf;
 use mockforge_openapi::openapi_routes::OpenApiRouteRegistry;
 use mockforge_openapi::spec::OpenApiSpec;
 
+mod asynchronous;
 mod fixtures;
 use mockforge_contracts::http_route_match::match_template;
 use mockforge_contracts::response_validation as responses;
-use responses::check_response_drift;
+use responses::{check_response, ResponseAssessment};
 
 /// Verify mocks still match the real API (drift detection, #849).
 ///
@@ -30,7 +31,7 @@ use responses::check_response_drift;
 /// responses whose status isn't declared.
 #[derive(clap::Args, Debug)]
 pub(crate) struct VerifyMocksArgs {
-    /// Path to the OpenAPI spec the mocks are generated from
+    /// Path to the OpenAPI or AsyncAPI 2/3 source specification
     /// (3.x natively; Swagger 2.0 is up-converted automatically).
     #[arg(short, long)]
     pub spec: PathBuf,
@@ -40,15 +41,15 @@ pub(crate) struct VerifyMocksArgs {
     #[arg(short, long, required_unless_present_any = ["mock_spec", "fixtures"])]
     pub capture_db: Option<PathBuf>,
 
-    /// OpenAPI definition used to generate the mock; compare it with --spec.
+    /// OpenAPI or AsyncAPI definition used to generate the mock; compare with --spec.
     #[arg(long, required_unless_present_any = ["capture_db", "fixtures"])]
     pub mock_spec: Option<PathBuf>,
 
-    /// HTTP replay fixture JSON file or directory; checks every fixture.
+    /// HTTP replay or AsyncAPI recorder JSON fixture file/directory; checks every fixture.
     #[arg(long, required_unless_present_any = ["capture_db", "mock_spec"])]
     pub fixtures: Option<PathBuf>,
 
-    /// Maximum recent HTTP exchanges to evaluate (newest first).
+    /// Maximum recent HTTP exchanges or asynchronous message events (newest first).
     #[arg(long, default_value = "500", value_parser = clap::value_parser!(i32).range(1..))]
     pub limit: i32,
 
@@ -85,6 +86,7 @@ struct DriftReport {
     fixtures: Option<fixtures::FixtureReport>,
     exchanges_checked: usize,
     endpoints_with_drift: usize,
+    endpoints_unverified: usize,
     unmatched_real_paths: usize,
     findings: Vec<DriftFinding>,
 }
@@ -92,6 +94,10 @@ struct DriftReport {
 pub(crate) async fn handle_verify_mocks_command(
     args: VerifyMocksArgs,
 ) -> mockforge_core::Result<()> {
+    let raw = load_fidelity_document(&args.spec)?;
+    if raw.get("asyncapi").is_some() {
+        return asynchronous::handle(args, raw).await;
+    }
     let VerifyMocksArgs {
         spec,
         capture_db,
@@ -103,7 +109,8 @@ pub(crate) async fn handle_verify_mocks_command(
         record,
     } = args;
 
-    let openapi = load_fidelity_spec(&spec)?;
+    let openapi =
+        OpenApiSpec::from_json(raw).map_err(|e| mockforge_core::Error::config(e.to_string()))?;
     let definition = mock_spec
         .as_ref()
         .map(|path| {
@@ -147,6 +154,7 @@ pub(crate) async fn handle_verify_mocks_command(
     // 3. Evaluate each exchange.
     let mut findings: Vec<DriftFinding> = Vec::new();
     let mut drifted_endpoints: BTreeMap<String, ()> = BTreeMap::new();
+    let mut unverified_endpoints: BTreeMap<String, ()> = BTreeMap::new();
     let mut unmatched_paths: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
 
     if let Some(report) = &definition {
@@ -168,7 +176,12 @@ pub(crate) async fn handle_verify_mocks_command(
         for route in report.routes.iter().filter(|r| !r.findings.is_empty()) {
             findings.push(DriftFinding {
                 endpoint: route.endpoint.clone(),
-                kind: "fixture".into(),
+                kind: if route.status == "not-verified" {
+                    "fixture-unverified"
+                } else {
+                    "fixture"
+                }
+                .into(),
                 detail: route
                     .findings
                     .iter()
@@ -176,7 +189,11 @@ pub(crate) async fn handle_verify_mocks_command(
                     .collect::<Vec<_>>()
                     .join("; "),
             });
-            drifted_endpoints.insert(route.endpoint.clone(), ());
+            if route.status == "not-verified" {
+                unverified_endpoints.insert(route.endpoint.clone(), ());
+            } else {
+                drifted_endpoints.insert(route.endpoint.clone(), ());
+            }
         }
     }
 
@@ -201,13 +218,14 @@ pub(crate) async fn handle_verify_mocks_command(
         // CI checks enforce the contract independently of serve-time policy.
         let decoded_request = decode_body(&req.body, &req.body_encoding);
         let body_bytes: Option<&[u8]> = decoded_request.as_deref();
+        let headers = header_value_map(&req.headers);
         if let Err((status, payload)) = registry.run_validation_with_recording_ex(
             &template,
             &method,
             &to_value_map(&extract_path_params(&concrete_path, &template)),
             &query_map(req.query_params.as_deref()),
-            &header_value_map(&req.headers),
-            &Default::default(),
+            &headers,
+            &cookie_value_map(&headers),
             body_json(body_bytes).as_ref(),
             body_present(body_bytes),
         ) {
@@ -227,21 +245,39 @@ pub(crate) async fn handle_verify_mocks_command(
         if let Some(response) = &exchange.response {
             let status = response.status_code as u16;
             let decoded = decode_body(&response.body, &response.body_encoding);
-            if let Some(detail) = check_response_drift(
+            let response_headers = header_value_map(&response.headers);
+            let media = response_headers
+                .iter()
+                .find(|(name, _)| name.eq_ignore_ascii_case("content-type"))
+                .and_then(|(_, value)| value.as_str());
+            let assessment = check_response(
                 &registry,
                 &response_spec,
                 &method,
                 &template,
                 status,
+                media,
                 decoded.as_deref(),
-            ) {
-                let endpoint = format!("{method} {concrete_path}");
-                findings.push(DriftFinding {
-                    endpoint: endpoint.clone(),
-                    kind: "response-shape".into(),
-                    detail: detail.detail,
-                });
-                drifted_endpoints.insert(endpoint, ());
+            );
+            let endpoint = format!("{method} {concrete_path}");
+            match assessment {
+                ResponseAssessment::Verified => {}
+                ResponseAssessment::Drift(detail) => {
+                    findings.push(DriftFinding {
+                        endpoint: endpoint.clone(),
+                        kind: "response-shape".into(),
+                        detail: detail.detail,
+                    });
+                    drifted_endpoints.insert(endpoint, ());
+                }
+                ResponseAssessment::Unverified(detail) => {
+                    findings.push(DriftFinding {
+                        endpoint: endpoint.clone(),
+                        kind: "response-unverified".into(),
+                        detail,
+                    });
+                    unverified_endpoints.insert(endpoint, ());
+                }
             }
         } else {
             let endpoint = format!("{method} {concrete_path}");
@@ -261,6 +297,7 @@ pub(crate) async fn handle_verify_mocks_command(
         fixtures: fixture_report,
         exchanges_checked: exchanges.len(),
         endpoints_with_drift: drifted_endpoints.len(),
+        endpoints_unverified: unverified_endpoints.len(),
         unmatched_real_paths: unmatched_paths.len(),
         findings,
     };
@@ -272,12 +309,13 @@ pub(crate) async fn handle_verify_mocks_command(
         println!("fixture files checked  : {}", fixtures.files_checked);
     }
     println!("endpoints with drift   : {}", report.endpoints_with_drift);
+    println!("endpoints not verified : {}", report.endpoints_unverified);
     println!(
         "unmatched real paths   : {} (traffic to endpoints not in the spec)",
         report.unmatched_real_paths
     );
     for f in &report.findings {
-        println!("DRIFT [{}] {}\n       {}", f.kind, f.endpoint, f.detail);
+        println!("[{}] {}\n       {}", f.kind, f.endpoint, f.detail);
     }
 
     if let Some(out) = &output {
@@ -293,8 +331,8 @@ pub(crate) async fn handle_verify_mocks_command(
 
     if fail_on_drift && !report.findings.is_empty() {
         eprintln!(
-            "verify-mocks: drift detected across {} endpoint(s); failing (--fail-on-drift)",
-            report.endpoints_with_drift
+            "verify-mocks: {} endpoint(s) with drift and {} not verified; failing (--fail-on-drift)",
+            report.endpoints_with_drift, report.endpoints_unverified
         );
         std::process::exit(1);
     }
@@ -309,6 +347,7 @@ fn empty_capture_report(spec: &std::path::Path) -> DriftReport {
         fixtures: None,
         exchanges_checked: 0,
         endpoints_with_drift: 0,
+        endpoints_unverified: 0,
         unmatched_real_paths: 0,
         findings: Vec::new(),
     }
@@ -322,8 +361,10 @@ fn verification_record(
         VerificationFinding, VerificationOutcome, VerificationRecord, VERIFICATION_SCHEMA_VERSION,
     };
     // Definition drift found without traffic is still drift.
-    let outcome = if !report.findings.is_empty() {
+    let outcome = if report.endpoints_with_drift > 0 {
         VerificationOutcome::Drift
+    } else if report.endpoints_unverified > 0 {
+        VerificationOutcome::Unverified
     } else if report.exchanges_checked == 0 {
         VerificationOutcome::NoTraffic
     } else {
@@ -338,6 +379,7 @@ fn verification_record(
         outcome,
         exchanges_checked: report.exchanges_checked,
         endpoints_with_drift: report.endpoints_with_drift,
+        endpoints_unverified: report.endpoints_unverified,
         unmatched_real_paths: report.unmatched_real_paths,
         findings: report
             .findings
@@ -381,6 +423,11 @@ async fn record_result(
 // --- helpers -------------------------------------------------------------
 
 fn load_fidelity_spec(spec: &PathBuf) -> mockforge_core::Result<OpenApiSpec> {
+    OpenApiSpec::from_json(load_fidelity_document(spec)?)
+        .map_err(|e| mockforge_core::Error::config(e.to_string()))
+}
+
+fn load_fidelity_document(spec: &PathBuf) -> mockforge_core::Result<Value> {
     let raw = std::fs::read_to_string(spec).map_err(|e| {
         mockforge_core::Error::config(format!("cannot read {}: {e}", spec.display()))
     })?;
@@ -394,7 +441,7 @@ fn load_fidelity_spec(spec: &PathBuf) -> mockforge_core::Result<OpenApiSpec> {
             mockforge_import::import::swagger2_convert::convert_swagger2_to_openapi3(&spec_value)
                 .map_err(mockforge_core::Error::config)?;
     }
-    OpenApiSpec::from_json(spec_value).map_err(|e| mockforge_core::Error::config(e.to_string()))
+    Ok(spec_value)
 }
 
 async fn load_fidelity_capture(
@@ -458,6 +505,18 @@ fn query_map(query: Option<&str>) -> serde_json::Map<String, Value> {
 
 fn header_value_map(headers_json: &str) -> serde_json::Map<String, Value> {
     serde_json::from_str::<serde_json::Map<String, Value>>(headers_json).unwrap_or_default()
+}
+
+fn cookie_value_map(headers: &serde_json::Map<String, Value>) -> serde_json::Map<String, Value> {
+    headers
+        .iter()
+        .find(|(name, _)| name.eq_ignore_ascii_case("cookie"))
+        .and_then(|(_, value)| value.as_str())
+        .unwrap_or_default()
+        .split(';')
+        .filter_map(|part| part.trim().split_once('='))
+        .map(|(name, value)| (name.to_string(), Value::String(value.to_string())))
+        .collect()
 }
 
 fn extract_path_params(concrete: &str, template: &str) -> HashMap<String, String> {
