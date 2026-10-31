@@ -51,6 +51,22 @@ fn replacing_resolved_parent_with_an_escaping_symlink_is_rejected() {
 
 #[cfg(unix)]
 #[test]
+fn replacing_resolved_root_with_an_escaping_symlink_is_rejected() {
+    let (temp, root) = fixture();
+    let root = root.canonicalize().unwrap();
+    let allowed = root.join("allowed.txt");
+    fs::write(&allowed, "allowed fixture").unwrap();
+    let resolved = allowed.canonicalize().unwrap();
+    let outside = temp.path().join("outside");
+    fs::create_dir(&outside).unwrap();
+    fs::write(outside.join("allowed.txt"), "outside fixture").unwrap();
+    fs::rename(&root, temp.path().join("previous-root")).unwrap();
+    std::os::unix::fs::symlink(outside, &root).unwrap();
+    assert!(open_confined_file(&root, &resolved).is_err());
+}
+
+#[cfg(unix)]
+#[test]
 fn fifo_is_rejected_without_waiting_for_a_writer() {
     let (_temp, root) = fixture();
     let fifo = root.join("fixture.pipe");

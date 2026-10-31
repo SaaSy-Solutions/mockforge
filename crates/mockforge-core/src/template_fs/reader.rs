@@ -18,8 +18,21 @@ use std::{
 pub(super) fn open_confined_file(root: &Path, resolved: &Path) -> Result<File, TemplateFsError> {
     let relative = resolved.strip_prefix(root).map_err(|_| TemplateFsError::OutsideRoot)?;
     let name = relative.file_name().ok_or(TemplateFsError::NotFound)?;
-    let mut directory = Dir::open_ambient_dir(root, cap_std::ambient_authority())
+    let anchor = root.ancestors().last().ok_or(TemplateFsError::InvalidRoot)?;
+    let mut directory = Dir::open_ambient_dir(anchor, cap_std::ambient_authority())
         .map_err(|_| TemplateFsError::InvalidRoot)?;
+    // Pin the canonical root's ancestors too: reopening the full root path
+    // would follow a root or ancestor symlink installed after validation.
+    for component in root
+        .strip_prefix(anchor)
+        .map_err(|_| TemplateFsError::InvalidRoot)?
+        .components()
+    {
+        let Component::Normal(name) = component else {
+            return Err(TemplateFsError::InvalidRoot);
+        };
+        directory = directory.open_dir_nofollow(name).map_err(|_| TemplateFsError::InvalidRoot)?;
+    }
     if let Some(parent) = relative.parent() {
         for component in parent.components() {
             let Component::Normal(name) = component else {
