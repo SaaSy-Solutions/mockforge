@@ -358,6 +358,7 @@ POST /api/v1/workspaces/{workspace_id}/environments/{env}/promote-scenario deplo
 GET /api/v1/workspaces/{workspace_id}/promotions deploy:mocks
 POST /api/v1/workspaces/{workspace_id}/promotions/{promotion_id}/approve session-only
 POST /api/v1/workspaces/{workspace_id}/promotions/{promotion_id}/reject session-only
+POST /api/v1/admin/organizations/{org_id}/ai-reservations/{reservation_id}/reconcile session-only
 POST /api/v1/admin/plugins/{name}/verify session-only
 POST /api/v1/admin/plugins/{name}/takedown session-only
 POST /api/v1/admin/plugins/{name}/restore session-only
