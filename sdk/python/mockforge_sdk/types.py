@@ -20,6 +20,9 @@ class MockServerConfig:
     openapi_spec: Optional[str] = None
     """Path to OpenAPI specification"""
 
+    management_token: Optional[str] = None
+    """Control-plane credential (default: $MOCKFORGE_MANAGEMENT_TOKEN, else random)"""
+
 
 @dataclass
 class ResponseStub:

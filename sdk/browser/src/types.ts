@@ -12,6 +12,13 @@ export interface ForgeConnectConfig {
     serverUrl?: string;
 
     /**
+     * Management token for the MockForge control plane. Sent as the
+     * `X-MockForge-Management-Token` header on management API requests and
+     * as a `mockforge-token.<token>` WebSocket subprotocol. Default: none.
+     */
+    managementToken?: string;
+
+    /**
      * Auto-discovery ports to try (default: [3000, 3001, 8080, 9080])
      */
     discoveryPorts?: number[];

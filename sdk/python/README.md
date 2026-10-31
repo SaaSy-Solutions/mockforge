@@ -97,6 +97,7 @@ Creates a mock server instance.
 | `host` | `str` | `127.0.0.1` | Host to bind to |
 | `config_file` | `str` | `None` | Path to MockForge config file |
 | `openapi_spec` | `str` | `None` | Path to OpenAPI specification |
+| `management_token` | `str` | `$MOCKFORGE_MANAGEMENT_TOKEN`, else random | Control-plane credential; passed to the CLI and sent as `X-MockForge-Management-Token` on every SDK request |
 
 ### Instance Methods
 
