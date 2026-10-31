@@ -58,6 +58,9 @@ mockforge plugin install ./my-plugin.wasm
 
 # Install from a local plugin directory (reads plugin.yaml from the directory)
 mockforge plugin install ./my-plugin/
+
+# Unsigned plugin you built yourself (see "Verification & Trust")
+mockforge plugin install ./my-plugin/ --allow-unsigned
 ```
 
 ### From Git Repository
@@ -734,17 +737,74 @@ GDPR / legal reasons, contact registry operators.
 
 ## Verification & Trust
 
-When you `mockforge plugin install <name>@<version>`, MockForge:
+Every `mockforge plugin install` and `mockforge plugin update` verifies the
+plugin's signature before it validates or loads anything, whatever the
+source (registry, URL, Git or local path):
 
-1. Resolves the version constraint against the registry
-2. Downloads the signed bundle
-3. Verifies the SHA-256 checksum matches the registry's stored value
-4. Verifies the package signature against the publisher's registered
-   public key
-5. Caches the bundle locally for reproducibility
+1. For registry and URL sources, the SHA-256 checksum must match the
+   registry's value or `--checksum`.
+2. The plugin directory must contain a `plugin.sig` in signature format v2.
+   It covers every file in the plugin (manifest, WASM module and any other
+   files), so a modified, added or swapped file fails verification. So does a
+   signature copied from a different plugin.
+3. The signing key must be in your trust store and must not be revoked or
+   past its `expires_at`.
+4. The signature must verify against that key's public key.
 
-If any verification step fails, install aborts with a clear error and
-nothing gets unpacked.
+If any step fails, the install aborts and nothing is loaded.
+`--skip-validation` does not skip signature verification.
+
+### Trust store
+
+The CLI reads trusted publisher keys from the file given with
+`--trusted-keys FILE`, else from `$MOCKFORGE_PLUGIN_TRUSTED_KEYS_FILE`, else
+from `~/.mockforge/trusted-keys.json` if it exists:
+
+```json
+{
+  "keys": [
+    { "key_id": "acme-2026", "public_key": "<hex Ed25519 public key>",
+      "expires_at": "2027-01-01T00:00:00Z" },
+    { "key_id": "acme-2025", "public_key": "<hex>", "revoked": true }
+  ]
+}
+```
+
+A revoked entry blocks that key even if another file trusts it. Signatures
+from an older format (v1, which covered only `plugin.toml`) are rejected;
+re-sign the plugin.
+
+### Unsigned development plugins
+
+A plugin without `plugin.sig` is refused by default. For a local plugin you
+built yourself, opt out explicitly:
+
+```bash
+mockforge plugin install ./my-plugin/ --allow-unsigned
+```
+
+The CLI prints a warning every time. `--allow-unsigned` only covers a
+*missing* signature: a plugin whose `plugin.sig` is present but invalid,
+untrusted, expired or revoked is still rejected. (`--no-verify` is accepted
+as an alias of `--allow-unsigned`. It no longer skips verification of a
+signature that is present.)
+
+
+### Admin UI installation
+
+The admin installer verifies the plugin before validation or loading, using
+`MOCKFORGE_PLUGIN_TRUSTED_KEYS_FILE` or `~/.mockforge/trusted-keys.json` on the
+server. Configure publisher trust on the server; the install request cannot
+supply trusted keys.
+
+Unsigned plugins are rejected by default. For a plugin you built yourself,
+select **Allow unsigned plugin for local development** in the install dialog.
+The admin API exposes the same explicit `allow_unsigned: true` option.
+A malformed, modified, untrusted, revoked or expired signature is rejected even
+when unsigned plugins are allowed. `skip_validation` and `no_verify` are still
+rejected by the admin endpoint. Failed verification leaves an existing plugin
+registered, including when `force` was requested.
+
 
 ### Verifying a third-party plugin manually
 

@@ -4,6 +4,9 @@
 //!
 //! Web-based admin interface for managing mock servers.
 
+pub mod admin_access;
+#[cfg(test)]
+mod admin_auth_tests;
 pub mod audit;
 pub mod auth;
 pub mod handlers;
@@ -85,6 +88,19 @@ pub async fn start_admin_server(
         None,
     )
     .await
+}
+
+/// Merge the overrides API into the admin router. It is added after
+/// [`create_admin_router`] applied its RBAC layer, so it gets its own: a
+/// layer only covers the routes present when it is added.
+pub(crate) fn merge_overrides_router(
+    app: axum::Router,
+    overrides: mockforge_core::SharedOverrides,
+) -> axum::Router {
+    app.merge(
+        overrides_api::overrides_router(overrides)
+            .layer(axum::middleware::from_fn(rbac::rbac_middleware)),
+    )
 }
 
 /// Like [`start_admin_server`], but sends the actual OS-assigned port through
@@ -171,6 +187,23 @@ pub async fn start_admin_server_notify_with_authoring(
         runtime_mockai = mockai.is_some(),
         "Starting admin authoring configuration"
     );
+    // Decide who may reach this server before anything is bound (#1019).
+    // A non-loopback bind without credentials refuses to start.
+    let auth_env = admin_access::AdminAuthEnv::from_process_env();
+    for reason in &auth_env.rejected {
+        tracing::warn!("Ignoring admin credential: {}", reason);
+    }
+    let access_policy = admin_access::policy_for_bind(addr, &auth_env)?;
+    if access_policy.allows_anonymous_loopback_reads() {
+        tracing::warn!(
+            "Admin UI on loopback {} without credentials: anonymous reads are allowed from \
+             this machine only. Set {} or {} to require login.",
+            addr,
+            admin_access::ADMIN_PASSWORD_ENV,
+            admin_access::MANAGEMENT_TOKEN_ENV
+        );
+    }
+
     let mut app = create_admin_router(
         http_server_addr,
         ws_server_addr,
@@ -193,7 +226,7 @@ pub async fn start_admin_server_notify_with_authoring(
         app = app.layer(axum::Extension(authoring));
     }
     if let Some(overrides) = overrides {
-        app = app.merge(overrides_api::overrides_router(overrides));
+        app = merge_overrides_router(app, overrides);
     }
 
     // Optionally bring up the registry-admin (SQLite) sub-router if the
@@ -247,6 +280,9 @@ pub async fn start_admin_server_notify_with_authoring(
             }
         }
     }
+
+    // Outermost, so the RBAC layers see the policy on every request.
+    let app = app.layer(axum::Extension(access_policy));
 
     tracing::info!("Starting MockForge Admin UI on {}", addr);
 
