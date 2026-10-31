@@ -9,6 +9,13 @@
 
 ### Fixed
 
+- **[AI]** Use the selected provider/model for direct and chat debugging instead of a default cloud client. Apply workspace validation and seed overrides to the debug endpoints, including when runtime MockAI is disabled.
+- **[AI]** Keep the chosen provider/model and seed when applying Reality presets. Baked fixtures disable presets and reject cached configurations that would re-enable them. (#852)
+- **[AI]** Retain the configured authoring provider/model when runtime MockAI is disabled. Pass trusted startup defaults separately so authenticated authoring and snapshot replay work without enabling AI for mock traffic. (#852)
+- **[AI]** Forward persisted workspace seed and snapshot policies through local admin chat, mock and persona generation. Inherit the server provider/model, preserve policy on export/import, and reject missing or invalid workspaces before generation. (#852)
+- **[AI]** Keep configured provider/model and seed settings when chat generates mocks or personas. Allow library callers to supply snapshot policies and report zero new usage for verified snapshot replays. (#852)
+- **[AI]** Preserve frozen array and scalar payloads with durable identity and integrity metadata. Publish immutable snapshots as complete bundles, retain legacy object snapshots, and reject missing hashes during verification. (#852)
+- **[AI]** Add the unreleased `mockforge ai bake` authoring workflow: generate a JSON response once and save a static JSON/YAML serve configuration for offline CI. Existing verified outputs are reused without provider calls; mismatched inputs and modified files fail instead of overwriting them. Sampling seeds are forwarded where supported. Explicit JSON `null` route bodies now remain `null` instead of becoming `{}` when configuration loads. (#852)
 - **[Cloud]** Path-based hosted-mock URLs work below the mock's root. `/mocks/{org}/{slug}/<path>` returned HTTP 500 "Wrong number of path arguments" for every sub-path, so only `/mocks/{org}/{slug}` itself was reachable. Sub-paths and query strings now proxy to the deployment, and a trailing slash (`/mocks/{org}/{slug}/`) serves the mock's root instead of 404. (#1280)
 - **[Security]** Require verified email-domain ownership for every SAML and OIDC login, including existing organization members, before resolving a global user identity.
 - **[Reality]** Fidelity checks preserve AsyncAPI server variables whose names match documentation keys. HTTP captures and replay fixtures now report unsupported or ambiguous response media as unverified, and `--fail-on-drift` fails those checks instead of accepting unchecked responses. Recorded verification and project status use schema 2 with an `unverified` outcome and continue reading schema-1 records. (#849)
