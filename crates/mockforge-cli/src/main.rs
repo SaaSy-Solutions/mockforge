@@ -39,6 +39,7 @@ mod insomnia_import;
 mod kafka_commands;
 #[allow(dead_code)]
 mod logs_commands;
+mod management_auth;
 mod mcp_server;
 mod mockai_commands;
 mod mod_commands;

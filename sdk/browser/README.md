@@ -125,6 +125,7 @@ new ForgeConnect(config?: ForgeConnectConfig)
 **Config Options:**
 
 - `serverUrl?: string` - MockForge server URL (auto-discovered if not provided)
+- `managementToken?: string` - The server's `MOCKFORGE_MANAGEMENT_TOKEN`; sent as `X-MockForge-Management-Token` (WebSocket: `mockforge-token.<token>` subprotocol). Required unless the server runs with `MOCKFORGE_INSECURE_MANAGEMENT=1` on loopback
 - `discoveryPorts?: number[]` - Ports to try for auto-discovery (default: [3000, 3001, 8080, 9080])
 - `mockMode?: 'auto' | 'prompt' | 'hybrid'` - Mock creation behavior (default: 'hybrid')
 - `autoMockStatusCodes?: number[]` - HTTP status codes that trigger auto-mock (default: [404, 500, 502, 503, 504])
