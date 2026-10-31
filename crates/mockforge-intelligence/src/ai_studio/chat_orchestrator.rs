@@ -267,7 +267,7 @@ impl ChatOrchestrator {
             ChatIntent::DebugTest => {
                 // Use DebugAnalyzer to analyze test failure
                 use crate::ai_studio::debug_analyzer::DebugAnalyzer;
-                let analyzer = DebugAnalyzer::new();
+                let analyzer = DebugAnalyzer::with_config(self.config.clone());
                 let debug_request = DebugRequest {
                     test_logs: request.message.clone(),
                     test_name: None,
