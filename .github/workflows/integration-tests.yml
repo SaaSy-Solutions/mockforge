@@ -5,6 +5,9 @@ on:
     branches: [main, develop]
     paths:
       - 'crates/**'
+      - 'tests/**'
+      - 'sdk/**'
+      - 'scripts/ci/test_sdk_runtime.py'
       - 'Cargo.toml'
       - 'Cargo.lock'
       - '.github/workflows/integration-tests.yml'
@@ -15,6 +18,9 @@ on:
     branches: [main, develop]
     paths:
       - 'crates/**'
+      - 'tests/**'
+      - 'sdk/**'
+      - 'scripts/ci/test_sdk_runtime.py'
       - 'Cargo.toml'
       - 'Cargo.lock'
       - '.github/workflows/integration-tests.yml'
@@ -147,6 +153,34 @@ jobs:
       # their own infra gaps. Run these locally when testing a specific
       # integration. The non-ignored suite is the real CI coverage.
       #
+      - name: Set up SDK runtime toolchains
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Set up SDK Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Set up SDK Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up SDK Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: 'stable'
+
+      - name: Verify SDK create, serve, and cleanup against this build
+        run: >-
+          python3 scripts/ci/test_sdk_runtime.py
+          --binary "$CARGO_TARGET_DIR/release/mockforge"
+          --temp-root "$RUNNER_TEMP"
+          --report "$GITHUB_WORKSPACE/target/sdk-runtime-report.json"
+
       # `--skip protocols::` excludes the e2e protocol tests from THIS
       # step — they spawn real mockforge processes that race on ports
       # under parallel test execution (find_available_port TOCTOU).
@@ -162,6 +196,8 @@ jobs:
           name: integration-test-results
           path: |
             target/test-results/
+            target/sdk-runtime-report.json
+            target/sdk-runtime-logs/
           if-no-files-found: ignore
           retention-days: 7
 

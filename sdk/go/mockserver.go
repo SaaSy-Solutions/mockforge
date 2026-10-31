@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"regexp"
@@ -94,6 +95,11 @@ func (m *MockServer) ManagementToken() string {
 	return m.managementToken
 }
 
+// refuseManagementRedirect prevents control-plane credentials from reaching another endpoint.
+func refuseManagementRedirect(_ *http.Request, _ []*http.Request) error {
+	return http.ErrUseLastResponse
+}
+
 // controlRequest performs a control-plane request carrying the management token.
 func (m *MockServer) controlRequest(method, url string, body []byte) (*http.Response, error) {
 	var reader io.Reader
@@ -108,7 +114,9 @@ func (m *MockServer) controlRequest(method, url string, body []byte) (*http.Resp
 		req.Header.Set("Content-Type", "application/json")
 	}
 	req.Header.Set(ManagementTokenHeader, m.managementToken)
-	return http.DefaultClient.Do(req)
+	client := *http.DefaultClient
+	client.CheckRedirect = refuseManagementRedirect
+	return client.Do(req)
 }
 
 // Start starts the mock server
@@ -288,88 +296,79 @@ func (m *MockServer) StubResponseWithOptions(
 		LatencyMs: latencyMs,
 	}
 
-	m.stubs = append(m.stubs, stub)
-
-	// If admin API is available, use it to add the stub dynamically
-	if m.adminPort != 0 {
-		// Convert ResponseStub to MockConfig format expected by Admin API
-		mockConfig := map[string]interface{}{
-			"id":     "",                                           // Empty ID - server will generate one
-			"name":   fmt.Sprintf("%s %s", stub.Method, stub.Path), // Generate a name from method and path
-			"method": stub.Method,
-			"path":   stub.Path,
-			"response": map[string]interface{}{
-				"body": stub.Body,
-			},
-			"enabled": true,
-		}
-
-		// Add optional fields only if they have values
-		if len(stub.Headers) > 0 {
-			response := mockConfig["response"].(map[string]interface{})
-			response["headers"] = stub.Headers
-		}
-		if stub.LatencyMs != nil {
-			mockConfig["latency_ms"] = *stub.LatencyMs
-		}
-		if stub.Status != 200 {
-			mockConfig["status_code"] = stub.Status
-		}
-
-		mockConfigJSON, err := json.Marshal(mockConfig)
-		if err != nil {
-			return err
-		}
-
-		resp, err := m.controlRequest(
-			http.MethodPost,
-			fmt.Sprintf("http://%s:%d/__mockforge/api/mocks", m.host, m.adminPort),
-			mockConfigJSON,
-		)
-		if err == nil {
-			resp.Body.Close()
-		}
+	mockConfig := map[string]interface{}{
+		"method": stub.Method, "path": stub.Path,
+		"response": map[string]interface{}{"body": stub.Body, "headers": stub.Headers},
+		"enabled":  true, "status_code": stub.Status,
 	}
-
+	if stub.LatencyMs != nil {
+		mockConfig["latency_ms"] = *stub.LatencyMs
+	}
+	payload, err := json.Marshal(mockConfig)
+	if err != nil {
+		return err
+	}
+	response, err := m.managementRequest(http.MethodPost, "/mocks", bytes.NewReader(payload))
+	if err != nil {
+		return err
+	}
+	response.Body.Close()
+	m.stubs = append(m.stubs, stub)
 	return nil
 }
 
-// ClearStubs removes all stubs
-func (m *MockServer) ClearStubs() error {
-	m.stubs = make([]ResponseStub, 0)
-
-	if m.adminPort != 0 {
-		// Get all mocks and delete them one by one
-		resp, err := m.controlRequest(
-			http.MethodGet,
-			fmt.Sprintf("http://%s:%d/__mockforge/api/mocks", m.host, m.adminPort),
-			nil,
-		)
-		if err == nil {
-			var result struct {
-				Mocks []struct {
-					ID string `json:"id"`
-				} `json:"mocks"`
-			}
-			if json.NewDecoder(resp.Body).Decode(&result) == nil {
-				resp.Body.Close()
-				// Delete each mock
-				for _, mock := range result.Mocks {
-					deleteResp, err := m.controlRequest(
-						http.MethodDelete,
-						fmt.Sprintf("http://%s:%d/__mockforge/api/mocks/%s", m.host, m.adminPort, mock.ID),
-						nil,
-					)
-					if err == nil {
-						deleteResp.Body.Close()
-					}
-				}
-			} else {
-				resp.Body.Close()
-			}
-		}
+// managementRequest sends dynamic mock operations to the HTTP serving port.
+func (m *MockServer) managementRequest(method, path string, body io.Reader) (*http.Response, error) {
+	if m.Port() == 0 {
+		return nil, fmt.Errorf("HTTP management port is not available")
 	}
+	request, err := http.NewRequest(method, m.URL()+"/__mockforge/api"+path, body)
+	if err != nil {
+		return nil, err
+	}
+	if body != nil {
+		request.Header.Set("Content-Type", "application/json")
+	}
+	request.Header.Set(ManagementTokenHeader, m.managementToken)
+	client := &http.Client{Timeout: 5 * time.Second, CheckRedirect: refuseManagementRedirect}
+	response, err := client.Do(request)
+	if err != nil {
+		return nil, err
+	}
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		response.Body.Close()
+		return nil, fmt.Errorf("management API %s %s returned HTTP %d", method, path, response.StatusCode)
+	}
+	return response, nil
+}
 
+// ClearStubs removes all stubs, reporting management API failures.
+func (m *MockServer) ClearStubs() error {
+	response, err := m.managementRequest(http.MethodGet, "/mocks", nil)
+	if err != nil {
+		return err
+	}
+	var result struct {
+		Mocks []struct {
+			ID string `json:"id"`
+		} `json:"mocks"`
+	}
+	err = json.NewDecoder(response.Body).Decode(&result)
+	response.Body.Close()
+	if err != nil {
+		return err
+	}
+	if result.Mocks == nil {
+		return fmt.Errorf("management API mock list has no mocks array")
+	}
+	for _, mock := range result.Mocks {
+		response, err := m.managementRequest(http.MethodDelete, "/mocks/"+url.PathEscape(mock.ID), nil)
+		if err != nil {
+			return err
+		}
+		response.Body.Close()
+	}
+	m.stubs = make([]ResponseStub, 0)
 	return nil
 }
 

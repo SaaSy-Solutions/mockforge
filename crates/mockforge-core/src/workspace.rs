@@ -299,6 +299,9 @@ pub struct WorkspaceConfig {
     /// Controls how AI-generated artifacts are used at runtime
     #[serde(default)]
     pub ai_mode: Option<crate::ai_studio::config::AiMode>,
+    /// Seed and snapshot settings for AI authoring in this workspace.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ai_generation: Option<crate::ai_studio::config::AiGenerationConfig>,
     /// Current fidelity score for this workspace
     /// Measures how close the mock is to the real upstream
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1263,6 +1266,7 @@ impl Default for WorkspaceConfig {
             reality_level: None,
             fidelity_score: None,
             ai_mode: None,
+            ai_generation: None,
         }
     }
 }
