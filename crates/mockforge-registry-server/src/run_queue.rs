@@ -12,7 +12,42 @@ use redis::AsyncCommands;
 use serde::Serialize;
 use uuid::Uuid;
 
+use crate::error::{ApiError, ApiResult};
 use crate::redis::RedisPool;
+
+/// Kinds backed by concrete executors in `mockforge-test-runner`.
+pub const RUNNABLE_TEST_RUN_KINDS: &[&str] = &[
+    "integration",
+    "conformance",
+    "bench",
+    "owasp",
+    "security",
+    "wafbench",
+    "crud_flow",
+    "chaos_campaign",
+    "contract_diff",
+    "fitness_evaluation",
+    "chain",
+    "replay",
+    "smoke",
+];
+
+/// Return whether a kind has a concrete worker executor.
+pub fn is_runnable_test_run_kind(kind: &str) -> bool {
+    RUNNABLE_TEST_RUN_KINDS.contains(&kind)
+}
+
+/// Reject a kind that cannot be executed by the worker pool.
+pub fn validate_runnable_test_run_kind(kind: &str) -> ApiResult<()> {
+    if is_runnable_test_run_kind(kind) {
+        Ok(())
+    } else {
+        Err(ApiError::InvalidRequest(format!(
+            "unsupported test run kind `{kind}`; runnable kinds are: {}",
+            RUNNABLE_TEST_RUN_KINDS.join(", ")
+        )))
+    }
+}
 
 /// Default queue key. Mirrors the runner's `MOCKFORGE_RUNNER_QUEUE_KEY`
 /// default. Override at boot via env var if multiple runner pools share
@@ -81,15 +116,43 @@ mod tests {
             run_id,
             org_id,
             source_id,
-            kind: "unit",
-            payload: json!({ "synthetic_steps": 5 }),
+            kind: "integration",
+            payload: json!({ "steps": [{"request": {"method": "GET", "path": "/"}}] }),
         };
         let raw = serde_json::to_string(&job).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&raw).unwrap();
         assert_eq!(parsed["run_id"], run_id.to_string());
         assert_eq!(parsed["org_id"], org_id.to_string());
         assert_eq!(parsed["source_id"], source_id.to_string());
-        assert_eq!(parsed["kind"], "unit");
-        assert_eq!(parsed["payload"]["synthetic_steps"], 5);
+        assert_eq!(parsed["kind"], "integration");
+        assert_eq!(parsed["payload"]["steps"].as_array().map(Vec::len), Some(1));
+    }
+
+    #[test]
+    fn runnable_kind_validation_accepts_every_supported_kind() {
+        for kind in RUNNABLE_TEST_RUN_KINDS {
+            assert!(validate_runnable_test_run_kind(kind).is_ok(), "kind={kind}");
+        }
+    }
+
+    #[test]
+    fn runnable_kind_validation_rejects_removed_and_unknown_kinds() {
+        for kind in [
+            "unit",
+            "behavioral_clone",
+            "snapshot_capture",
+            "snapshot_restore",
+            "verification_suite",
+            "scenario",
+            "orchestration",
+            "state_machine",
+            "",
+            "unknown",
+        ] {
+            assert!(
+                matches!(validate_runnable_test_run_kind(kind), Err(ApiError::InvalidRequest(message)) if message.contains(kind) && message.contains("runnable kinds")),
+                "kind={kind}"
+            );
+        }
     }
 }

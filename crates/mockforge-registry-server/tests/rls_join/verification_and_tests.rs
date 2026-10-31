@@ -35,6 +35,13 @@ async fn monitored_services_round_trip_and_cross_tenant() {
                     "name": "orders-api",
                     "base_url": "https://example.com",
                     "traffic_source": "probe",
+                    "openapi_spec_inline": {
+                        "openapi": "3.0.3",
+                        "info": { "title": "orders fixture", "version": "1" },
+                        "paths": {
+                            "/orders": { "get": { "responses": { "200": { "description": "ok" } } } }
+                        }
+                    },
                 }),
             )
             .await,
@@ -62,6 +69,24 @@ async fn monitored_services_round_trip_and_cross_tenant() {
             .await,
     );
     str_field("trigger diff run", &run, "id");
+
+    let missing_spec = ok(
+        "create service without a specification",
+        owner
+            .post(&list_path, json!({ "name": "missing-spec", "base_url": "https://example.com", "traffic_source": "probe" }))
+            .await,
+    );
+    let missing_spec_id = str_field("service without spec", &missing_spec, "id");
+    client_err(
+        "cannot queue a contract diff without a specification",
+        owner
+            .post(&format!("/api/v1/monitored-services/{missing_spec_id}/diff"), json!({}))
+            .await,
+    );
+    ok(
+        "delete service without spec",
+        owner.delete(&format!("/api/v1/monitored-services/{missing_spec_id}")).await,
+    );
 
     // Unknown diff run ids read as 4xx (no 5xx from an unbound join).
     let missing = uuid::Uuid::new_v4();
@@ -219,10 +244,17 @@ async fn test_suites_schedules_runs_round_trip_and_cross_tenant() {
     let ws = create_workspace(&owner, &format!("ts-{}", unique())).await;
     let suites_path = format!("/api/v1/workspaces/{ws}/test-suites");
 
+    client_err(
+        "cannot create a suite for an unavailable executor",
+        owner
+            .post(&suites_path, json!({ "name": "unsupported", "kind": "unit", "config": {} }))
+            .await,
+    );
+
     let suite = ok(
         "create suite",
         owner
-            .post(&suites_path, json!({ "name": "smoke", "kind": "unit", "config": {} }))
+            .post(&suites_path, json!({ "name": "smoke", "kind": "integration", "config": {} }))
             .await,
     );
     let suite_id = str_field("create suite", &suite, "id");
@@ -230,7 +262,7 @@ async fn test_suites_schedules_runs_round_trip_and_cross_tenant() {
     assert_contains("list suites", &list_ids(&owner, "list suites", &suites_path).await, &suite_id);
     assert_contains(
         "list suites ?kind",
-        &list_ids(&owner, "list suites kind", &format!("{suites_path}?kind=unit")).await,
+        &list_ids(&owner, "list suites kind", &format!("{suites_path}?kind=integration")).await,
         &suite_id,
     );
     ok("get suite", owner.get(&suite_path).await);
@@ -351,7 +383,7 @@ async fn test_run_deletion_statuses_and_cascade() {
         owner
             .post(
                 &format!("/api/v1/workspaces/{ws}/test-suites"),
-                json!({"name": "delete fixture", "kind": "unit", "config": {}}),
+                json!({"name": "delete fixture", "kind": "integration", "config": {}}),
             )
             .await,
     );
@@ -671,4 +703,88 @@ async fn password_reset_request_sets_one_hour_postgres_expiry() {
         "Expected one-hour expiry, got {seconds} seconds"
     );
     pool.close().await;
+}
+
+/// Legacy workers must not charge errored runs, including finish retries.
+#[tokio::test]
+#[ignore]
+async fn errored_runner_callbacks_do_not_charge_usage() {
+    let pool =
+        sqlx::PgPool::connect(&std::env::var("DATABASE_URL").expect("test database required"))
+            .await
+            .unwrap();
+    let owner = setup_team_org("rlsbill").await;
+    let org_id = uuid::Uuid::parse_str(&owner.org_id).unwrap();
+    let ws = create_workspace(&owner, &format!("billing-{}", unique())).await;
+    let suite = ok(
+        "create billing fixture suite",
+        owner
+            .post(
+                &format!("/api/v1/workspaces/{ws}/test-suites"),
+                json!({ "name": "billing fixture", "kind": "integration", "config": {} }),
+            )
+            .await,
+    );
+    let suite_id = str_field("billing suite", &suite, "id");
+    let run = ok(
+        "trigger billing fixture",
+        owner.post(&format!("/api/v1/test-suites/{suite_id}/runs"), json!({})).await,
+    );
+    let run_id = str_field("billing run", &run, "id");
+    let usage_before: i64 = sqlx::query_scalar(
+        "SELECT COALESCE(SUM(runner_seconds_used), 0)::BIGINT FROM usage_counters WHERE org_id = $1",
+    ).bind(org_id).fetch_one(&pool).await.unwrap();
+    let finish_url = format!("{}/api/v1/internal/test-runs/{run_id}/finish", base_url());
+    let body = json!({ "status": "errored", "runner_seconds": 37, "summary": { "error": "fixture execution refused" } });
+    client_err(
+        "user credentials cannot call internal finish",
+        send(owner.client.post(&finish_url).bearer_auth(&owner.access_token).json(&body)).await,
+    );
+    let internal = std::env::var("MOCKFORGE_INTERNAL_API_TOKEN")
+        .unwrap_or_else(|_| "e2e-internal-token-do-not-use-in-prod".to_string());
+    ok(
+        "legacy errored finish",
+        send(owner.client.post(&finish_url).bearer_auth(&internal).json(&body)).await,
+    );
+    let stored = ok("get errored run", owner.get(&format!("/api/v1/test-runs/{run_id}")).await);
+    assert_eq!(stored["status"], json!("errored"));
+    assert_eq!(stored["runner_seconds"], json!(0), "errored run cannot be billed");
+    ok(
+        "retry errored finish",
+        send(owner.client.post(&finish_url).bearer_auth(&internal).json(&body)).await,
+    );
+    let usage_after: i64 = sqlx::query_scalar(
+        "SELECT COALESCE(SUM(runner_seconds_used), 0)::BIGINT FROM usage_counters WHERE org_id = $1",
+    ).bind(org_id).fetch_one(&pool).await.unwrap();
+    assert_eq!(
+        usage_after, usage_before,
+        "errored callbacks and retries must not consume runner seconds"
+    );
+
+    // A completed run with failed assertions still consumes its real runtime.
+    let failed = ok(
+        "trigger failed-assertion control",
+        owner.post(&format!("/api/v1/test-suites/{suite_id}/runs"), json!({})).await,
+    );
+    let failed_id = str_field("failed-assertion control", &failed, "id");
+    let failed_url = format!("{}/api/v1/internal/test-runs/{failed_id}/finish", base_url());
+    let failed_body =
+        json!({ "status": "failed", "runner_seconds": 2, "summary": { "failed": 1 } });
+    ok(
+        "completed assertion failure remains billable",
+        send(owner.client.post(&failed_url).bearer_auth(&internal).json(&failed_body)).await,
+    );
+    ok(
+        "retry completed assertion failure",
+        send(owner.client.post(&failed_url).bearer_auth(&internal).json(&failed_body)).await,
+    );
+    let failed_stored = ok(
+        "get failed-assertion control",
+        owner.get(&format!("/api/v1/test-runs/{failed_id}")).await,
+    );
+    assert_eq!(failed_stored["runner_seconds"], json!(2));
+    let usage_final: i64 = sqlx::query_scalar(
+        "SELECT COALESCE(SUM(runner_seconds_used), 0)::BIGINT FROM usage_counters WHERE org_id = $1",
+    ).bind(org_id).fetch_one(&pool).await.unwrap();
+    assert_eq!(usage_final, usage_before + 2, "completed failed run is billed exactly once");
 }
