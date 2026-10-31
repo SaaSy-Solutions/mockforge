@@ -170,6 +170,15 @@ pub struct FlyioService {
     pub protocol: String,
     pub internal_port: u16,
     pub ports: Vec<FlyioPort>,
+    /// `"stop"` or `"suspend"` lets Fly stop the machine when no connections
+    /// arrive; `"off"` (Fly's default) keeps it running.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub autostop: Option<String>,
+    /// Start a stopped machine when a connection arrives.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub autostart: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_machines_running: Option<u32>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -457,7 +466,10 @@ impl FlyioClient {
     /// Delete a machine
     pub async fn delete_machine(&self, app_name: &str, machine_id: &str) -> Result<()> {
         let client = reqwest::Client::new();
-        let url = format!("{}/v1/apps/{}/machines/{}", self.base_url, app_name, machine_id);
+        // `force=true` destroys a running machine. Without it Fly answers 412
+        // ("not currently stopped") and the deployment stays in `deleting`.
+        let url =
+            format!("{}/v1/apps/{}/machines/{}?force=true", self.base_url, app_name, machine_id);
 
         let response = client
             .delete(&url)

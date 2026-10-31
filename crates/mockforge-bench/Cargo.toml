@@ -8,21 +8,21 @@ description = "Load and performance testing for MockForge"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/SaaSy-Solutions/mockforge"
 homepage = "https://mockforge.dev"
-documentation = "https://docs.rs/mockforge"
+documentation = "https://docs.mockforge.dev"
 readme = "README.md"
 keywords = ["mock", "api", "testing", "benchmark", "load"]
 categories = ["development-tools", "api-bindings"]
 
 [dependencies]
 # Core dependencies
-mockforge-core = { version = "0.3.236", path = "../mockforge-core" }
+mockforge-core = { version = "0.3.238", path = "../mockforge-core" }
 mockforge-openapi = { path = "../mockforge-openapi" }
-mockforge-data = { version = "0.3.236", path = "../mockforge-data" }
-mockforge-recorder = { version = "0.3.236", path = "../mockforge-recorder", optional = true }
+mockforge-data = { version = "0.3.238", path = "../mockforge-data" }
+mockforge-recorder = { version = "0.3.238", path = "../mockforge-recorder", optional = true }
 # Round 36 (#876) — shared constants for the client/server stamp
 # headers (`X-Mockforge-Client-Version`, `X-Mockforge-Client-Sent-At`)
 # so bench and openapi don't drift on the wire format.
-mockforge-foundation = { version = "0.3.236", path = "../mockforge-foundation" }
+mockforge-foundation = { version = "0.3.238", path = "../mockforge-foundation" }
 
 # OpenAPI and spec parsing
 openapiv3 = "2.0"

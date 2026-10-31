@@ -8,14 +8,14 @@ license.workspace = true
 description = "SMTP mocking support for MockForge"
 repository.workspace = true
 homepage.workspace = true
-documentation = "https://docs.rs/mockforge"
+documentation = "https://docs.mockforge.dev"
 readme = "README.md"
 keywords = ["smtp", "email", "mock", "testing", "api"]
 categories = ["development-tools", "email"]
 
 [dependencies]
 # MockForge core
-mockforge-core = { version = "0.3.236", path = "../mockforge-core" }
+mockforge-core = { version = "0.3.238", path = "../mockforge-core" }
 
 # Standard workspace dependencies
 tokio = { workspace = true, features = ["net", "io-util"] }

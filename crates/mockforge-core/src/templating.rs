@@ -557,6 +557,35 @@ fn replace_response_function(
 
 /// Replace encryption tokens in a template string
 fn replace_encryption_tokens(input: &str) -> String {
+    let password = std::env::var("MOCKFORGE_ENCRYPTION_KEY").ok();
+    replace_encryption_tokens_with(input, password.as_deref())
+}
+
+/// Salt for deriving the template key from `MOCKFORGE_ENCRYPTION_KEY`. It is
+/// fixed so `{{decrypt}}` derives the same key `{{encrypt}}` used; without it
+/// PBKDF2 picked a random salt per call and nothing could ever be decrypted.
+const TEMPLATE_KEY_SALT: &[u8] = b"mockforge-template-encryption-v1";
+
+/// Derive the fallback key used when the key store has no key for the
+/// requested id. There is deliberately no built-in password: without
+/// `MOCKFORGE_ENCRYPTION_KEY` the tokens fail instead of encrypting with a key
+/// published in the source (#1273).
+fn fallback_encryption_key(
+    password: Option<&str>,
+    algorithm: crate::encryption::EncryptionAlgorithm,
+) -> Result<crate::encryption::EncryptionKey, &'static str> {
+    let password = password.filter(|p| !p.trim().is_empty()).ok_or("no key configured")?;
+    crate::encryption::EncryptionKey::from_password_pbkdf2(
+        password,
+        Some(TEMPLATE_KEY_SALT),
+        algorithm,
+    )
+    .map_err(|_| "key creation failed")
+}
+
+fn replace_encryption_tokens_with(input: &str, password: Option<&str>) -> String {
+    use crate::encryption::EncryptionAlgorithm;
+
     // Key store is initialized at startup
     let key_store = init_key_store();
 
@@ -571,28 +600,12 @@ fn replace_encryption_tokens(input: &str) -> String {
             let key_id = caps.get(1).map(|m| m.as_str()).unwrap_or(default_key_id);
             let plaintext = caps.get(2).map(|m| m.as_str()).unwrap_or("");
 
-            match key_store.get_key(key_id) {
-                Some(key) => match key.encrypt(plaintext, None) {
-                    Ok(ciphertext) => ciphertext,
-                    Err(_) => "<encryption_error>".to_string(),
-                },
-                None => {
-                    // Create a default key if none exists
-                    let password = std::env::var("MOCKFORGE_ENCRYPTION_KEY")
-                        .unwrap_or_else(|_| "mockforge_default_encryption_key_2024".to_string());
-                    match crate::encryption::EncryptionKey::from_password_pbkdf2(
-                        &password,
-                        None,
-                        crate::encryption::EncryptionAlgorithm::Aes256Gcm,
-                    ) {
-                        Ok(key) => match key.encrypt(plaintext, None) {
-                            Ok(ciphertext) => ciphertext,
-                            Err(_) => "<encryption_error>".to_string(),
-                        },
-                        Err(_) => "<key_creation_error>".to_string(),
-                    }
-                }
-            }
+            let result = match key_store.get_key(key_id) {
+                Some(key) => key.encrypt(plaintext, None).map_err(|_| "encryption failed"),
+                None => fallback_encryption_key(password, EncryptionAlgorithm::Aes256Gcm)
+                    .and_then(|key| key.encrypt(plaintext, None).map_err(|_| "encryption failed")),
+            };
+            result.unwrap_or_else(|e| format!("<encryption_error: {e}>"))
         })
         .to_string();
 
@@ -602,31 +615,14 @@ fn replace_encryption_tokens(input: &str) -> String {
             let key_id = caps.get(1).map(|m| m.as_str()).unwrap_or(default_key_id);
             let plaintext = caps.get(2).map(|m| m.as_str()).unwrap_or("");
 
-            match key_store.get_key(key_id) {
-                Some(key) => {
-                    // Use ChaCha20-Poly1305 for secure() function
-                    match key.encrypt_chacha20(plaintext, None) {
-                        Ok(ciphertext) => ciphertext,
-                        Err(_) => "<encryption_error>".to_string(),
-                    }
-                }
-                None => {
-                    // Create a default key if none exists
-                    let password = std::env::var("MOCKFORGE_ENCRYPTION_KEY")
-                        .unwrap_or_else(|_| "mockforge_default_encryption_key_2024".to_string());
-                    match crate::encryption::EncryptionKey::from_password_pbkdf2(
-                        &password,
-                        None,
-                        crate::encryption::EncryptionAlgorithm::ChaCha20Poly1305,
-                    ) {
-                        Ok(key) => match key.encrypt_chacha20(plaintext, None) {
-                            Ok(ciphertext) => ciphertext,
-                            Err(_) => "<encryption_error>".to_string(),
-                        },
-                        Err(_) => "<key_creation_error>".to_string(),
-                    }
-                }
-            }
+            let result = match key_store.get_key(key_id) {
+                Some(key) => key.encrypt_chacha20(plaintext, None).map_err(|_| "encryption failed"),
+                None => fallback_encryption_key(password, EncryptionAlgorithm::ChaCha20Poly1305)
+                    .and_then(|key| {
+                        key.encrypt_chacha20(plaintext, None).map_err(|_| "encryption failed")
+                    }),
+            };
+            result.unwrap_or_else(|e| format!("<encryption_error: {e}>"))
         })
         .to_string();
 
@@ -636,28 +632,12 @@ fn replace_encryption_tokens(input: &str) -> String {
             let key_id = caps.get(1).map(|m| m.as_str()).unwrap_or(default_key_id);
             let ciphertext = caps.get(2).map(|m| m.as_str()).unwrap_or("");
 
-            match key_store.get_key(key_id) {
-                Some(key) => match key.decrypt(ciphertext, None) {
-                    Ok(plaintext) => plaintext,
-                    Err(_) => "<decryption_error>".to_string(),
-                },
-                None => {
-                    // Create a default key if none exists
-                    let password = std::env::var("MOCKFORGE_ENCRYPTION_KEY")
-                        .unwrap_or_else(|_| "mockforge_default_encryption_key_2024".to_string());
-                    match crate::encryption::EncryptionKey::from_password_pbkdf2(
-                        &password,
-                        None,
-                        crate::encryption::EncryptionAlgorithm::Aes256Gcm,
-                    ) {
-                        Ok(key) => match key.decrypt(ciphertext, None) {
-                            Ok(plaintext) => plaintext,
-                            Err(_) => "<decryption_error>".to_string(),
-                        },
-                        Err(_) => "<key_creation_error>".to_string(),
-                    }
-                }
-            }
+            let result = match key_store.get_key(key_id) {
+                Some(key) => key.decrypt(ciphertext, None).map_err(|_| "decryption failed"),
+                None => fallback_encryption_key(password, EncryptionAlgorithm::Aes256Gcm)
+                    .and_then(|key| key.decrypt(ciphertext, None).map_err(|_| "decryption failed")),
+            };
+            result.unwrap_or_else(|e| format!("<decryption_error: {e}>"))
         })
         .to_string();
 
@@ -675,9 +655,13 @@ fn replace_fs_tokens(input: &str) -> String {
                 return "<fs.readFile: empty path>".to_string();
             }
 
-            match std::fs::read_to_string(file_path) {
+            // Sandboxed to the configured fixtures root (#1015).
+            match crate::template_fs::read_template_file(file_path) {
                 Ok(content) => content,
-                Err(e) => format!("<fs.readFile error: {}>", e),
+                Err(e) => {
+                    tracing::warn!(path = %file_path, error = %e, "fs.readFile refused");
+                    format!("<fs.readFile error: {}>", e)
+                }
             }
         })
         .to_string()
@@ -738,6 +722,46 @@ fn replace_with_fallback(input: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // #1273: encrypt/secure/decrypt used to fall back to a password in the
+    // source. Without a configured key they must fail, never encrypt.
+    #[test]
+    fn test_encryption_tokens_fail_without_configured_key() {
+        for password in [None, Some(""), Some("   ")] {
+            let out = replace_encryption_tokens_with(
+                r#"{{encrypt "a"}}|{{secure "b"}}|{{decrypt "c"}}"#,
+                password,
+            );
+            assert_eq!(
+                out,
+                "<encryption_error: no key configured>|<encryption_error: no key configured>|\
+                 <decryption_error: no key configured>"
+            );
+        }
+    }
+
+    #[test]
+    fn test_encryption_tokens_round_trip_with_configured_key() {
+        use base64::Engine as _;
+        let password = Some("operator-chosen-secret");
+        let ciphertext = replace_encryption_tokens_with(r#"{{encrypt "hello"}}"#, password);
+        assert_ne!(ciphertext, "hello");
+        assert!(base64::engine::general_purpose::STANDARD.decode(&ciphertext).is_ok());
+        let decrypted =
+            replace_encryption_tokens_with(&format!(r#"{{{{decrypt "{ciphertext}"}}}}"#), password);
+        assert_eq!(decrypted, "hello");
+
+        // secure() uses ChaCha20-Poly1305 and also needs a configured key.
+        let secured = replace_encryption_tokens_with(r#"{{secure "test message"}}"#, password);
+        assert!(base64::engine::general_purpose::STANDARD.decode(&secured).is_ok());
+
+        // A different key cannot read it.
+        let wrong = replace_encryption_tokens_with(
+            &format!(r#"{{{{decrypt "{ciphertext}"}}}}"#),
+            Some("another-secret"),
+        );
+        assert_eq!(wrong, "<decryption_error: decryption failed>");
+    }
     use crate::request_chaining::{ChainContext, ChainResponse, ChainTemplatingContext};
     use serde_json::json;
 
@@ -843,34 +867,40 @@ mod tests {
 
     #[test]
     fn test_fs_readfile() {
-        // Create a temporary file for testing
-        use std::fs;
+        // One test owns the process-wide default root to avoid racing itself.
+        if std::env::var(crate::template_fs::ROOT_ENV).is_ok()
+            || std::env::var(crate::template_fs::HOSTED_ENV).is_ok()
+        {
+            return;
+        }
+        let dir = tempfile::TempDir::new().unwrap();
+        let root = dir.path().join("spec");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("body.txt"), "Hello, fixture!").unwrap();
+        std::fs::write(dir.path().join("secret.txt"), "top-secret").unwrap();
+        crate::template_fs::set_default_root(Some(root.clone()));
 
-        let temp_file = "/tmp/mockforge_test_file.txt";
-        let test_content = "Hello, this is test content!";
-        fs::write(temp_file, test_content).unwrap();
+        // Legitimate reads inside the spec directory still work, both syntaxes.
+        assert_eq!(expand_str(r#"{{fs.readFile "body.txt"}}"#), "Hello, fixture!");
+        assert_eq!(expand_str(r#"{{fs.readFile('body.txt')}}"#), "Hello, fixture!");
 
-        // Test successful file reading
-        let template = format!(r#"{{{{fs.readFile "{}"}}}}"#, temp_file);
-        let result = expand_str(&template);
-        assert_eq!(result, test_content);
+        // Escapes are refused and never leak content.
+        for t in [
+            r#"{{fs.readFile "../secret.txt"}}"#,
+            r#"{{fs.readFile "/etc/passwd"}}"#,
+            r#"{{fs.readFile "/proc/self/environ"}}"#,
+        ] {
+            let out = expand_str(t);
+            assert!(out.starts_with("<fs.readFile error:"), "{t} -> {out}");
+            assert!(!out.contains("top-secret") && !out.contains("root:"), "{t} -> {out}");
+        }
 
-        // Test with parentheses
-        let template = format!(r#"{{{{fs.readFile('{}')}}}}"#, temp_file);
-        let result = expand_str(&template);
-        assert_eq!(result, test_content);
+        // Disabled when no root is registered.
+        crate::template_fs::set_default_root(None);
+        let out = expand_str(r#"{{fs.readFile "body.txt"}}"#);
+        assert!(out.starts_with("<fs.readFile error: disabled"), "{out}");
 
-        // Test file not found
-        let template = r#"{{fs.readFile "/nonexistent/file.txt"}}"#;
-        let result = expand_str(template);
-        assert!(result.contains("fs.readFile error:"));
-
-        // Test empty path
-        let template = r#"{{fs.readFile ""}}"#;
-        let result = expand_str(template);
-        assert_eq!(result, "<fs.readFile: empty path>");
-
-        // Clean up
-        let _ = fs::remove_file(temp_file);
+        // Empty path
+        assert_eq!(expand_str(r#"{{fs.readFile ""}}"#), "<fs.readFile: empty path>");
     }
 }

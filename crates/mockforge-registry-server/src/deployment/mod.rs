@@ -5,9 +5,12 @@
 mod account_allowance;
 
 pub mod cleanup;
+pub mod cloudflare;
+pub mod fly_services;
 pub mod flyio;
 pub mod health_check;
 pub(crate) mod local_runtime;
+pub mod machine_config;
 pub mod metrics;
 pub mod orchestrator;
 pub mod router;

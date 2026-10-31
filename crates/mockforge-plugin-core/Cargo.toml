@@ -41,8 +41,8 @@ uuid.workspace = true
 chrono.workspace = true
 
 # WebAssembly runtime for plugin execution
-wasmtime = "36.0.10"
-wasmtime-wasi = "36.0.10"
+wasmtime = "36.0.20"
+wasmtime-wasi = "36.0.20"
 
 # Plugin communication
 wit-bindgen = "0.46"

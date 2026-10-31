@@ -29,6 +29,11 @@ on:
 
 # All load/perf jobs run on refs/heads/main (post-merge) or manual dispatch.
 # Concurrency keys are GitHub-internal context, safe to interpolate.
+env:
+  # Concurrent release builds exhausted RAM and swap on the shared runner.
+  CARGO_BUILD_JOBS: "2"
+  CARGO_INCREMENTAL: "0"
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   # #1000: supersede an older run rather than queueing behind it. These jobs are

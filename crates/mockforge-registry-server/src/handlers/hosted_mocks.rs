@@ -449,7 +449,8 @@ pub async fn delete_deployment(
     // rows without a backend marker require provider reconciliation as well.
     let local = deployment.metadata_json.get("hosting_backend").and_then(|value| value.as_str())
         == Some("multitenant");
-    let flyio_client = if local {
+    let on_cloudflare = crate::deployment::cloudflare::is_cloudflare(&deployment);
+    let flyio_client = if local || on_cloudflare {
         None
     } else {
         Some(FlyioClient::new(std::env::var("FLYIO_API_TOKEN").map_err(|_| {
@@ -469,7 +470,12 @@ pub async fn delete_deployment(
 
     lifecycle.request_deletion().await?;
 
-    if let Some(flyio_client) = flyio_client {
+    if on_cloudflare {
+        let cf = crate::deployment::cloudflare::CloudflareMocks::from_env().ok_or_else(|| {
+            ApiError::InvalidRequest("Cloudflare is not configured; cannot confirm cleanup".into())
+        })?;
+        cf.destroy(&deployment).await.map_err(ApiError::Internal)?;
+    } else if let Some(flyio_client) = flyio_client {
         flyio_client
             .delete_app_confirmed(&deployment_app_name(&deployment))
             .await
@@ -634,6 +640,9 @@ pub async fn redeploy_deployment(
     // request task-local, so it binds the org authorized above explicitly on
     // the runtime pool (#1087).
     let rt_pool = state.db.runtime_pool().clone();
+    // The orchestrator updates deployment rows on the owner pool, as its
+    // background deploy loop does.
+    let owner_pool = std::sync::Arc::new(state.db.pool().clone());
     let bg_org_id = org_ctx.org_id;
     let storage = state.storage.clone();
     tokio::spawn(async move {
@@ -679,200 +688,30 @@ pub async fn redeploy_deployment(
                 }
             };
 
-        if crate::deployment::local_runtime::is_local(&updated_deployment) {
-            let compiled =
-                crate::deployment::spec_source::refresh(rt_pool, &storage, &updated_deployment)
-                    .await
-                    .and_then(|deployment| {
-                        crate::deployment::local_runtime::prepare(&deployment)
-                            .map_err(anyhow::Error::msg)
-                    });
-            // Same log trail as the provider path, so users see the outcome.
-            let (level, message) = match compiled {
-                Ok(_) => {
-                    let _ = set_status(DeploymentStatus::Active, None).await;
-                    ("info", "Redeployment completed successfully".to_string())
-                }
-                Err(error) => {
-                    let _ = set_status(DeploymentStatus::Failed, Some(error.to_string())).await;
-                    ("error", format!("Redeployment failed: {error}"))
-                }
-            };
+        // Redeploy through the orchestrator so every backend (Fly machines,
+        // Cloudflare Containers) gets the same configuration as a first
+        // deploy. The handler retains the lifecycle lock and records completion.
+        let orchestrator =
+            crate::deployment::orchestrator::DeploymentOrchestrator::from_env(owner_pool)
+                .with_storage(storage);
+        if let Err(e) = orchestrator.redeploy_on_backend(&updated_deployment).await {
+            tracing::error!("Redeployment failed for {}: {:#}", deployment_id_clone, e);
+            let _ =
+                set_status(DeploymentStatus::Failed, Some(format!("Redeployment failed: {:#}", e)))
+                    .await;
             let _ = log_deployment_event(
                 rt_pool,
                 bg_org_id,
                 deployment_id_clone,
-                level,
-                &message,
+                "error",
+                &format!("Redeployment failed: {:#}", e),
                 None,
             )
             .await;
             return;
         }
-        // Try to redeploy via Fly.io if configured
-        if let Ok(flyio_token) = std::env::var("FLYIO_API_TOKEN") {
-            let flyio_client = FlyioClient::new(flyio_token);
 
-            let machine_id = updated_deployment
-                .metadata_json
-                .get("flyio_machine_id")
-                .and_then(|v| v.as_str());
-
-            if let Some(machine_id) = machine_id {
-                let app_name = format!(
-                    "mockforge-{}-{}",
-                    updated_deployment
-                        .org_id
-                        .to_string()
-                        .replace('-', "")
-                        .chars()
-                        .take(8)
-                        .collect::<String>(),
-                    updated_deployment.slug
-                );
-
-                // Build updated machine config
-                let mut env = std::collections::HashMap::new();
-                env.insert(
-                    "MOCKFORGE_DEPLOYMENT_ID".to_string(),
-                    updated_deployment.id.to_string(),
-                );
-                env.insert("MOCKFORGE_ORG_ID".to_string(), updated_deployment.org_id.to_string());
-                if let Ok(config_str) = serde_json::to_string(&updated_deployment.config_json) {
-                    env.insert("MOCKFORGE_CONFIG".to_string(), config_str);
-                }
-                env.insert("PORT".to_string(), "3000".to_string());
-                env.insert("MOCKFORGE_ADMIN_ENABLED".to_string(), "true".to_string());
-                env.extend(crate::handlers::management_token::env_entry(updated_deployment.id));
-                env.extend(crate::handlers::hosted_mock_overrides::overrides_env(
-                    &updated_deployment,
-                ));
-
-                if let Some(ref spec_url) = updated_deployment.openapi_spec_url {
-                    env.insert("MOCKFORGE_OPENAPI_SPEC_URL".to_string(), spec_url.clone());
-                }
-
-                let image = std::env::var("MOCKFORGE_DOCKER_IMAGE")
-                    .unwrap_or_else(|_| "ghcr.io/saasy-solutions/mockforge:latest".to_string());
-
-                use crate::deployment::flyio::{
-                    FlyioCheck, FlyioMachineConfig, FlyioPort, FlyioRegistryAuth, FlyioService,
-                };
-
-                let services = vec![FlyioService {
-                    protocol: "tcp".to_string(),
-                    internal_port: 3000,
-                    ports: vec![
-                        FlyioPort {
-                            port: 80,
-                            handlers: vec!["http".to_string()],
-                        },
-                        FlyioPort {
-                            port: 443,
-                            handlers: vec!["tls".to_string(), "http".to_string()],
-                        },
-                    ],
-                }];
-
-                let mut checks = std::collections::HashMap::new();
-                checks.insert(
-                    "alive".to_string(),
-                    FlyioCheck {
-                        check_type: "http".to_string(),
-                        port: 3000,
-                        grace_period: "10s".to_string(),
-                        interval: "15s".to_string(),
-                        method: "GET".to_string(),
-                        timeout: "2s".to_string(),
-                        tls_skip_verify: false,
-                        path: Some("/health/live".to_string()),
-                    },
-                );
-
-                let machine_config = FlyioMachineConfig {
-                    image,
-                    env,
-                    services,
-                    checks: Some(checks),
-                    // None = accept Fly's API default
-                    // (shared-cpu-1x:256MB) — same as other call
-                    // sites. Plugin-enabled redeploys will set this
-                    // via FlyioGuest::for_hosted_mock in Phase 2.
-                    guest: None,
-                };
-
-                // Build registry auth
-                let registry_auth = if let (Ok(server), Ok(username), Ok(password)) = (
-                    std::env::var("DOCKER_REGISTRY_SERVER"),
-                    std::env::var("DOCKER_REGISTRY_USERNAME"),
-                    std::env::var("DOCKER_REGISTRY_PASSWORD"),
-                ) {
-                    Some(FlyioRegistryAuth {
-                        server,
-                        username,
-                        password,
-                    })
-                } else if machine_config.image.starts_with("registry.fly.io/") {
-                    Some(FlyioRegistryAuth {
-                        server: "registry.fly.io".to_string(),
-                        username: "x".to_string(),
-                        password: flyio_client.api_token().to_string(),
-                    })
-                } else {
-                    None
-                };
-
-                match flyio_client
-                    .update_machine(&app_name, machine_id, machine_config, registry_auth)
-                    .await
-                {
-                    Ok(_) => {
-                        let _ = log_deployment_event(
-                            rt_pool,
-                            bg_org_id,
-                            deployment_id_clone,
-                            "info",
-                            "Machine updated and restarting",
-                            None,
-                        )
-                        .await;
-                    }
-                    Err(e) => {
-                        tracing::error!("Redeployment failed for {}: {:#}", deployment_id_clone, e);
-                        let _ = set_status(
-                            DeploymentStatus::Failed,
-                            Some(format!("Redeployment failed: {}", e)),
-                        )
-                        .await;
-                        let _ = log_deployment_event(
-                            rt_pool,
-                            bg_org_id,
-                            deployment_id_clone,
-                            "error",
-                            &format!("Redeployment failed: {}", e),
-                            None,
-                        )
-                        .await;
-                        return;
-                    }
-                }
-            } else {
-                tracing::error!(
-                    "No Fly.io machine ID found for deployment {}",
-                    deployment_id_clone
-                );
-                let _ = set_status(
-                    DeploymentStatus::Failed,
-                    Some("No Fly.io machine ID found in deployment metadata".to_string()),
-                )
-                .await;
-                return;
-            }
-        }
-
-        // Mark as active
         let _ = set_status(DeploymentStatus::Active, None).await;
-
         let _ = log_deployment_event(
             rt_pool,
             bg_org_id,
@@ -882,7 +721,6 @@ pub async fn redeploy_deployment(
             None,
         )
         .await;
-
         tracing::info!("Successfully redeployed mock service: {}", deployment_id_clone);
     });
 
@@ -976,7 +814,12 @@ pub async fn stop_deployment(
         )));
     }
 
-    if !crate::deployment::local_runtime::is_local(&deployment) {
+    if crate::deployment::cloudflare::is_cloudflare(&deployment) {
+        let cf = crate::deployment::cloudflare::CloudflareMocks::from_env().ok_or_else(|| {
+            ApiError::InvalidRequest("Cloudflare is not configured; cannot confirm stop".into())
+        })?;
+        cf.destroy(&deployment).await.map_err(ApiError::Internal)?;
+    } else if !crate::deployment::local_runtime::is_local(&deployment) {
         let machine_id = deployment
             .metadata_json
             .get("flyio_machine_id")
@@ -1077,6 +920,8 @@ pub async fn start_deployment(
         .map_err(|error| ApiError::InvalidRequest(error.to_string()))?;
         let _router = crate::deployment::local_runtime::prepare(&refreshed)
             .map_err(ApiError::InvalidRequest)?;
+    } else if crate::deployment::cloudflare::is_cloudflare(&deployment) {
+        lifecycle.reserve_restart().await?;
     } else {
         let flyio_token = std::env::var("FLYIO_API_TOKEN").map_err(|_| {
             ApiError::InvalidRequest("Hosted deployment provider is not configured".into())

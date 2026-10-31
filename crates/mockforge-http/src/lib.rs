@@ -790,7 +790,7 @@ pub async fn build_router_with_multi_tenant(
         .with_state(state_for_routes);
 
     // Merge the routes router with the main app
-    app = app.merge(routes_router);
+    app = app.merge(management_auth::protect(routes_router));
 
     // Add API docs page (Scalar-powered interactive explorer)
     app = app.route("/__mockforge/docs", axum::routing::get(get_docs_handler));
@@ -865,7 +865,10 @@ pub async fn build_router_with_multi_tenant(
     #[cfg(not(feature = "smtp"))]
     let _ = smtp_registry;
     let management_state_for_fallback = management_state.clone();
-    app = app.nest("/__mockforge/api", management_router(management_state));
+    app = app.nest(
+        "/__mockforge/api",
+        management_auth::protect(management_router(management_state)),
+    );
     // Serve any request that the rest of the router doesn't handle as a dynamic
     // mock lookup. Lets the Node/Rust SDK register stubs via the management
     // API and have requests actually reach them. Falls through to 404 when
@@ -876,7 +879,7 @@ pub async fn build_router_with_multi_tenant(
     );
 
     // Add verification API endpoint
-    app = app.merge(verification_router());
+    app = app.merge(management_auth::protect(verification_router()));
 
     // Add OIDC well-known endpoints
     use crate::auth::oidc::oidc_router;
@@ -888,7 +891,10 @@ pub async fn build_router_with_multi_tenant(
         if let Some(service) = get_global_access_review_service().await {
             use crate::handlers::access_review::{access_review_router, AccessReviewState};
             let review_state = AccessReviewState { service };
-            app = app.nest("/api/v1/security/access-reviews", access_review_router(review_state));
+            app = app.nest(
+                "/api/v1/security/access-reviews",
+                management_auth::protect(access_review_router(review_state)),
+            );
             debug!("Access review API mounted at /api/v1/security/access-reviews");
         }
     }
@@ -903,7 +909,7 @@ pub async fn build_router_with_multi_tenant(
             let privileged_state = PrivilegedAccessState { manager };
             app = app.nest(
                 "/api/v1/security/privileged-access",
-                privileged_access_router(privileged_state),
+                management_auth::protect(privileged_access_router(privileged_state)),
             );
             debug!("Privileged access API mounted at /api/v1/security/privileged-access");
         }
@@ -917,7 +923,10 @@ pub async fn build_router_with_multi_tenant(
                 change_management_router, ChangeManagementState,
             };
             let change_state = ChangeManagementState { engine };
-            app = app.nest("/api/v1/change-management", change_management_router(change_state));
+            app = app.nest(
+                "/api/v1/change-management",
+                management_auth::protect(change_management_router(change_state)),
+            );
             debug!("Change management API mounted at /api/v1/change-management");
         }
     }
@@ -928,7 +937,10 @@ pub async fn build_router_with_multi_tenant(
         if let Some(engine) = get_global_risk_assessment_engine().await {
             use crate::handlers::risk_assessment::{risk_assessment_router, RiskAssessmentState};
             let risk_state = RiskAssessmentState { engine };
-            app = app.nest("/api/v1/security", risk_assessment_router(risk_state));
+            app = app.nest(
+                "/api/v1/security",
+                management_auth::protect(risk_assessment_router(risk_state)),
+            );
             debug!("Risk assessment API mounted at /api/v1/security/risks");
         }
     }
@@ -941,7 +953,10 @@ pub async fn build_router_with_multi_tenant(
         let lifecycle_state = TokenLifecycleState {
             manager: lifecycle_manager,
         };
-        app = app.nest("/api/v1/auth", token_lifecycle_router(lifecycle_state));
+        app = app.nest(
+            "/api/v1/auth",
+            management_auth::protect(token_lifecycle_router(lifecycle_state)),
+        );
         debug!("Token lifecycle API mounted at /api/v1/auth");
     }
 
@@ -994,12 +1009,13 @@ pub async fn build_router_with_multi_tenant(
         use crate::handlers::risk_simulation::{risk_simulation_router, RiskSimulationState};
         let risk_engine = Arc::new(RiskEngine::default());
         let risk_state = RiskSimulationState { risk_engine };
-        app = app.nest("/api/v1/auth", risk_simulation_router(risk_state));
+        app =
+            app.nest("/api/v1/auth", management_auth::protect(risk_simulation_router(risk_state)));
         debug!("Risk simulation API mounted at /api/v1/auth/risk");
     }
 
     // Add management WebSocket endpoint
-    app = app.nest("/__mockforge/ws", ws_management_router(ws_state));
+    app = app.nest("/__mockforge/ws", management_auth::protect(ws_management_router(ws_state)));
 
     // Add request logging middleware to capture all requests
     app = app.layer(axum::middleware::from_fn(request_logging::log_http_requests));
@@ -1415,9 +1431,51 @@ pub async fn serve_router_with_tls_notify_chaos_shutdown(
     chaos_config: Option<Arc<RwLock<mockforge_chaos::ChaosConfig>>>,
     shutdown: impl std::future::Future<Output = ()> + Send + 'static,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    serve_router_with_tls_notify_chaos_shutdown_on(
+        std::net::Ipv4Addr::UNSPECIFIED.into(),
+        port,
+        app,
+        tls_config,
+        bound_port_tx,
+        chaos_config,
+        shutdown,
+    )
+    .await
+}
+
+/// The address the HTTP server binds for a configured `host`.
+///
+/// IP literals (bare or bracketed IPv6) are used as given and `localhost`
+/// means `127.0.0.1`. Anything else, such as a hostname, falls back to
+/// `0.0.0.0` with a warning, which is what every host meant before the
+/// data port honoured this setting.
+pub fn resolve_bind_ip(host: &str) -> std::net::IpAddr {
+    let trimmed = host.trim().trim_start_matches('[').trim_end_matches(']');
+    if trimmed.eq_ignore_ascii_case("localhost") {
+        return std::net::Ipv4Addr::LOCALHOST.into();
+    }
+    match trimmed.parse::<std::net::IpAddr>() {
+        Ok(ip) => ip,
+        Err(_) => {
+            warn!("HTTP host '{}' is not an IP address; binding 0.0.0.0", host);
+            std::net::Ipv4Addr::UNSPECIFIED.into()
+        }
+    }
+}
+
+/// [`serve_router_with_tls_notify_chaos_shutdown`] on a specific address
+pub async fn serve_router_with_tls_notify_chaos_shutdown_on(
+    bind_ip: std::net::IpAddr,
+    port: u16,
+    app: Router,
+    tls_config: Option<mockforge_core::config::HttpTlsConfig>,
+    bound_port_tx: Option<tokio::sync::oneshot::Sender<u16>>,
+    chaos_config: Option<Arc<RwLock<mockforge_chaos::ChaosConfig>>>,
+    shutdown: impl std::future::Future<Output = ()> + Send + 'static,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use std::net::SocketAddr;
 
-    let addr = mockforge_core::wildcard_socket_addr(port);
+    let addr = SocketAddr::new(bind_ip, port);
 
     if let Some(ref tls) = tls_config {
         if tls.enabled {
@@ -2009,7 +2067,10 @@ pub async fn build_router_with_chains_and_multi_tenant(
         management_state
     };
     let management_state_for_fallback = management_state.clone();
-    app = app.nest("/__mockforge/api", management_router(management_state));
+    app = app.nest(
+        "/__mockforge/api",
+        management_auth::protect(management_router(management_state)),
+    );
     // Dynamic-mock fallback; see identical block earlier in this file.
     app = app.fallback_service(
         axum::routing::any(management::dynamic_mock_fallback)
@@ -2017,7 +2078,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
     );
 
     // Add verification API endpoint
-    app = app.merge(verification_router());
+    app = app.merge(management_auth::protect(verification_router()));
 
     // Mount the request-chains management API at the prefix the UI's
     // ChainsPage expects (`/__mockforge/chains/*`). Without this nest the
@@ -2035,7 +2096,10 @@ pub async fn build_router_with_chains_and_multi_tenant(
         ));
         app = app.nest(
             "/__mockforge/chains",
-            chains_router(create_chain_state(chain_registry, chain_engine)),
+            management_auth::protect(chains_router(create_chain_state(
+                chain_registry,
+                chain_engine,
+            ))),
         );
     }
 
@@ -2046,7 +2110,10 @@ pub async fn build_router_with_chains_and_multi_tenant(
     {
         use crate::contract_diff_api::{contract_diff_api_router, ContractDiffApiState};
         let cd_state = Arc::new(ContractDiffApiState::new(spec_path.clone()));
-        app = app.nest("/__mockforge/api/contract-diff", contract_diff_api_router(cd_state));
+        app = app.nest(
+            "/__mockforge/api/contract-diff",
+            management_auth::protect(contract_diff_api_router(cd_state)),
+        );
     }
 
     // Fixtures management API. Lives on the admin server too (port 9080),
@@ -2058,7 +2125,8 @@ pub async fn build_router_with_chains_and_multi_tenant(
     {
         use crate::fixtures_api::{fixtures_api_router, FixturesApiState};
         let fx_state = FixturesApiState::from_env();
-        app = app.nest("/__mockforge/fixtures", fixtures_api_router(fx_state));
+        app = app
+            .nest("/__mockforge/fixtures", management_auth::protect(fixtures_api_router(fx_state)));
     }
 
     // Standalone MockAI API. Until now MockAI was only invoked from the
@@ -2070,7 +2138,10 @@ pub async fn build_router_with_chains_and_multi_tenant(
     {
         use crate::mockai_api::{mockai_api_router, MockAiApiState};
         let api_state = MockAiApiState::new(mockai.clone());
-        app = app.nest("/__mockforge/api/mockai", mockai_api_router(api_state));
+        app = app.nest(
+            "/__mockforge/api/mockai",
+            management_auth::protect(mockai_api_router(api_state)),
+        );
     }
 
     // Time-travel runtime API. The admin server mounts these routes on
@@ -2079,7 +2150,10 @@ pub async fn build_router_with_chains_and_multi_tenant(
     // virtual time on a deployed mock. The handlers consult a process-
     // wide TimeTravelManager that serve.rs initialises alongside the
     // existing admin-server registration; both paths see the same Arc.
-    app = app.nest("/__mockforge/time-travel", time_travel_api::time_travel_router());
+    app = app.nest(
+        "/__mockforge/time-travel",
+        management_auth::protect(time_travel_api::time_travel_router()),
+    );
 
     // Runtime route-chaos rules API + middleware. This sits in front of
     // the static per-route handlers so operators can add/remove fault and
@@ -2093,7 +2167,10 @@ pub async fn build_router_with_chains_and_multi_tenant(
         let runtime_state = RuntimeRouteChaosState::new(Vec::new());
         let middleware_state = runtime_state.clone();
         app = app.layer(from_fn_with_state(middleware_state, runtime_route_chaos_middleware));
-        app = app.nest("/__mockforge/api/route-chaos", route_chaos_api_router(runtime_state));
+        app = app.nest(
+            "/__mockforge/api/route-chaos",
+            management_auth::protect(route_chaos_api_router(runtime_state)),
+        );
     }
 
     // Runtime network-profile switching. Operators activate a named
@@ -2110,8 +2187,10 @@ pub async fn build_router_with_chains_and_multi_tenant(
         );
         let middleware_state = runtime_state.clone();
         app = app.layer(from_fn_with_state(middleware_state, network_profile_middleware));
-        app = app
-            .nest("/__mockforge/api/network-profiles", network_profile_api_router(runtime_state));
+        app = app.nest(
+            "/__mockforge/api/network-profiles",
+            management_auth::protect(network_profile_api_router(runtime_state)),
+        );
     }
 
     // Add OIDC well-known endpoints
@@ -2124,7 +2203,10 @@ pub async fn build_router_with_chains_and_multi_tenant(
         if let Some(service) = get_global_access_review_service().await {
             use crate::handlers::access_review::{access_review_router, AccessReviewState};
             let review_state = AccessReviewState { service };
-            app = app.nest("/api/v1/security/access-reviews", access_review_router(review_state));
+            app = app.nest(
+                "/api/v1/security/access-reviews",
+                management_auth::protect(access_review_router(review_state)),
+            );
             debug!("Access review API mounted at /api/v1/security/access-reviews");
         }
     }
@@ -2139,7 +2221,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
             let privileged_state = PrivilegedAccessState { manager };
             app = app.nest(
                 "/api/v1/security/privileged-access",
-                privileged_access_router(privileged_state),
+                management_auth::protect(privileged_access_router(privileged_state)),
             );
             debug!("Privileged access API mounted at /api/v1/security/privileged-access");
         }
@@ -2153,7 +2235,10 @@ pub async fn build_router_with_chains_and_multi_tenant(
                 change_management_router, ChangeManagementState,
             };
             let change_state = ChangeManagementState { engine };
-            app = app.nest("/api/v1/change-management", change_management_router(change_state));
+            app = app.nest(
+                "/api/v1/change-management",
+                management_auth::protect(change_management_router(change_state)),
+            );
             debug!("Change management API mounted at /api/v1/change-management");
         }
     }
@@ -2164,7 +2249,10 @@ pub async fn build_router_with_chains_and_multi_tenant(
         if let Some(engine) = get_global_risk_assessment_engine().await {
             use crate::handlers::risk_assessment::{risk_assessment_router, RiskAssessmentState};
             let risk_state = RiskAssessmentState { engine };
-            app = app.nest("/api/v1/security", risk_assessment_router(risk_state));
+            app = app.nest(
+                "/api/v1/security",
+                management_auth::protect(risk_assessment_router(risk_state)),
+            );
             debug!("Risk assessment API mounted at /api/v1/security/risks");
         }
     }
@@ -2177,7 +2265,10 @@ pub async fn build_router_with_chains_and_multi_tenant(
         let lifecycle_state = TokenLifecycleState {
             manager: lifecycle_manager,
         };
-        app = app.nest("/api/v1/auth", token_lifecycle_router(lifecycle_state));
+        app = app.nest(
+            "/api/v1/auth",
+            management_auth::protect(token_lifecycle_router(lifecycle_state)),
+        );
         debug!("Token lifecycle API mounted at /api/v1/auth");
     }
 
@@ -2230,7 +2321,8 @@ pub async fn build_router_with_chains_and_multi_tenant(
         use crate::handlers::risk_simulation::{risk_simulation_router, RiskSimulationState};
         let risk_engine = Arc::new(RiskEngine::default());
         let risk_state = RiskSimulationState { risk_engine };
-        app = app.nest("/api/v1/auth", risk_simulation_router(risk_state));
+        app =
+            app.nest("/api/v1/auth", management_auth::protect(risk_simulation_router(risk_state)));
         debug!("Risk simulation API mounted at /api/v1/auth/risk");
     }
 
@@ -2357,7 +2449,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
             gitops_handler: None, // Can be initialized later if GitOps is configured
         };
 
-        app = app.merge(drift_budget_router(drift_state));
+        app = app.merge(management_auth::protect(drift_budget_router(drift_state)));
         debug!("Drift budget and incident management endpoints mounted at /api/v1/drift");
     }
 
@@ -2367,7 +2459,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
         use crate::handlers::pipelines::{pipeline_router, PipelineState};
 
         let pipeline_state = PipelineState::new();
-        app = app.merge(pipeline_router(pipeline_state));
+        app = app.merge(management_auth::protect(pipeline_router(pipeline_state)));
         debug!("Pipeline management endpoints mounted at /api/v1/pipelines");
     }
 
@@ -2454,16 +2546,16 @@ pub async fn build_router_with_chains_and_multi_tenant(
         };
 
         // Register routers
-        app = app.merge(forecasting_router(forecasting_state));
+        app = app.merge(management_auth::protect(forecasting_router(forecasting_state)));
         debug!("Forecasting endpoints mounted at /api/v1/forecasts");
 
-        app = app.merge(semantic_drift_router(semantic_state));
+        app = app.merge(management_auth::protect(semantic_drift_router(semantic_state)));
         debug!("Semantic drift endpoints mounted at /api/v1/semantic-drift");
 
-        app = app.merge(threat_modeling_router(threat_state));
+        app = app.merge(management_auth::protect(threat_modeling_router(threat_state)));
         debug!("Threat modeling endpoints mounted at /api/v1/threats");
 
-        app = app.merge(contract_health_router(contract_health_state));
+        app = app.merge(management_auth::protect(contract_health_router(contract_health_state)));
         debug!("Contract health endpoints mounted at /api/v1/contract-health");
     }
 
@@ -2535,7 +2627,10 @@ pub async fn build_router_with_chains_and_multi_tenant(
             consumer_analyzer: Some(consumer_analyzer),
         };
 
-        app = app.nest("/api/v1/contracts", protocol_contracts_router(protocol_state));
+        app = app.nest(
+            "/api/v1/contracts",
+            management_auth::protect(protocol_contracts_router(protocol_state)),
+        );
         debug!("Protocol contracts endpoints mounted at /api/v1/contracts");
     }
 
@@ -2609,7 +2704,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
             violations: Arc::new(RwLock::new(HashMap::new())),
         };
 
-        app = app.merge(consumer_contracts_router(consumer_state));
+        app = app.merge(management_auth::protect(consumer_contracts_router(consumer_state)));
         debug!("Consumer contracts endpoints mounted at /api/v1/consumers");
     }
 
@@ -2633,7 +2728,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
             BehavioralCloningState::new()
         };
 
-        app = app.merge(behavioral_cloning_router(bc_state));
+        app = app.merge(management_auth::protect(behavioral_cloning_router(bc_state)));
         debug!("Behavioral cloning endpoints mounted at /api/v1/behavioral-cloning");
     }
 
@@ -2704,7 +2799,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
         ));
 
         // Add consistency API endpoints
-        app = app.merge(consistency_router(consistency_state));
+        app = app.merge(management_auth::protect(consistency_router(consistency_state)));
         debug!("Consistency engine initialized and endpoints mounted at /api/v1/consistency");
 
         // Runtime named-scenario activation API. Locally-installed
@@ -2739,7 +2834,10 @@ pub async fn build_router_with_chains_and_multi_tenant(
             }
             let scenarios_state =
                 ScenarioRuntimeState::new(scenario_storage, consistency_engine.clone());
-            app = app.nest("/__mockforge/api/scenarios", scenarios_api_router(scenarios_state));
+            app = app.nest(
+                "/__mockforge/api/scenarios",
+                management_auth::protect(scenarios_api_router(scenarios_state)),
+            );
             debug!("Scenario runtime API mounted at /__mockforge/api/scenarios");
         }
 
@@ -2747,7 +2845,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
         {
             use mockforge_intelligence::handlers::fidelity::{fidelity_router, FidelityState};
             let fidelity_state = FidelityState::new();
-            app = app.merge(fidelity_router(fidelity_state));
+            app = app.merge(management_auth::protect(fidelity_router(fidelity_state)));
             debug!("Fidelity score endpoints mounted at /api/v1/workspace/:workspace_id/fidelity");
         }
 
@@ -2757,7 +2855,8 @@ pub async fn build_router_with_chains_and_multi_tenant(
                 scenario_studio_router, ScenarioStudioState,
             };
             let scenario_studio_state = ScenarioStudioState::new();
-            app = app.merge(scenario_studio_router(scenario_studio_state));
+            app =
+                app.merge(management_auth::protect(scenario_studio_router(scenario_studio_state)));
             debug!("Scenario Studio endpoints mounted at /api/v1/scenario-studio");
         }
 
@@ -2766,7 +2865,10 @@ pub async fn build_router_with_chains_and_multi_tenant(
         {
             use crate::handlers::performance::{performance_router, PerformanceState};
             let performance_state = PerformanceState::new();
-            app = app.nest("/api/performance", performance_router(performance_state));
+            app = app.nest(
+                "/api/performance",
+                management_auth::protect(performance_router(performance_state)),
+            );
             debug!("Performance mode endpoints mounted at /api/performance");
         }
 
@@ -2782,7 +2884,10 @@ pub async fn build_router_with_chains_and_multi_tenant(
             let world_state_state = WorldStateState {
                 engine: world_state_engine,
             };
-            app = app.nest("/api/world-state", world_state_router().with_state(world_state_state));
+            app = app.nest(
+                "/api/world-state",
+                management_auth::protect(world_state_router().with_state(world_state_state)),
+            );
             debug!("World state endpoints mounted at /api/world-state");
         }
 
@@ -2803,13 +2908,13 @@ pub async fn build_router_with_chains_and_multi_tenant(
                 recorder: None,   // Can be initialized when Recorder is available in server state
             };
 
-            app = app.merge(snapshot_router(snapshot_state));
+            app = app.merge(management_auth::protect(snapshot_router(snapshot_state)));
             debug!("Snapshot management endpoints mounted at /api/v1/snapshots");
 
             // Add X-Ray API endpoints for browser extension
             {
                 use mockforge_intelligence::handlers::xray::xray_router;
-                app = app.merge(xray_router((*xray_state).clone()));
+                app = app.merge(management_auth::protect(xray_router((*xray_state).clone())));
                 debug!("X-Ray API endpoints mounted at /api/v1/xray");
             }
         }
@@ -2838,7 +2943,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
             ));
 
             // Add A/B testing API endpoints
-            app = app.merge(ab_testing_router(ab_testing_state));
+            app = app.merge(management_auth::protect(ab_testing_router(ab_testing_state)));
             debug!("A/B testing endpoints mounted at /api/v1/ab-tests");
         }
     }
@@ -2876,7 +2981,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
             generator: generator.clone(),
         };
 
-        app = app.merge(pr_generation_router(pr_state));
+        app = app.merge(management_auth::protect(pr_generation_router(pr_state)));
         if generator.is_some() {
             debug!(
                 "PR generation endpoints mounted at /api/v1/pr (configured for {:?})",
@@ -2888,7 +2993,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
     }
 
     // Add management WebSocket endpoint
-    app = app.nest("/__mockforge/ws", ws_management_router(ws_state));
+    app = app.nest("/__mockforge/ws", management_auth::protect(ws_management_router(ws_state)));
 
     // Add workspace routing middleware if multi-tenant is enabled
     if let Some(mt_config) = multi_tenant_config {
@@ -3124,7 +3229,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
         let routes_router = Router::new()
             .route("/__mockforge/routes", axum::routing::get(get_routes_handler))
             .with_state(routes_state);
-        app = app.merge(routes_router);
+        app = app.merge(management_auth::protect(routes_router));
     }
 
     // Add API docs page (Scalar-powered interactive explorer)

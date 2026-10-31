@@ -48,6 +48,23 @@ const DEFAULT_MOCK_RPS_LIMIT: i64 = 100;
 /// off proxy traffic once monthly usage reaches `N ×` the plan limit.
 const DEFAULT_OVERAGE_CEILING_MULT: i64 = 0;
 
+/// Path-based hosted-mock URL with nothing after the slug.
+const MOCK_ROUTE: &str = "/mocks/{org_id}/{slug}";
+/// The same with a trailing slash; the wildcard below needs a non-empty path.
+const MOCK_ROUTE_SLASH: &str = "/mocks/{org_id}/{slug}/";
+/// Path-based hosted-mock URL with a sub-path proxied to the deployment.
+const MOCK_SUBPATH_ROUTE: &str = "/mocks/{org_id}/{slug}/{*path}";
+
+/// Captures shared by both mock routes. Extracted by name, so the wildcard
+/// `path` capture is ignored here: a 2-tuple extractor rejected every
+/// sub-path request with a 500 before the handler ran (#1280). The proxied
+/// path comes from the raw URI so percent-encoding survives.
+#[derive(serde::Deserialize)]
+struct MockRoute {
+    org_id: String,
+    slug: String,
+}
+
 /// Multitenant router that routes requests to deployed mock services
 pub struct MultitenantRouter;
 
@@ -56,29 +73,31 @@ impl MultitenantRouter {
     /// Routes are nested under `/mocks/` to avoid conflicts with API routes
     pub fn create_router() -> Router<AppState> {
         Router::new()
-            .route("/mocks/{org_id}/{slug}/{*path}", any(Self::route_request))
-            .route("/mocks/{org_id}/{slug}", any(Self::route_request))
+            .route(MOCK_SUBPATH_ROUTE, any(Self::route_request))
+            .route(MOCK_ROUTE_SLASH, any(Self::route_request))
+            .route(MOCK_ROUTE, any(Self::route_request))
     }
 
     /// Route request to the appropriate mock service
     async fn route_request(
         State(state): State<AppState>,
         method: Method,
-        Path(route): Path<std::collections::HashMap<String, String>>,
+        Path(MockRoute {
+            org_id: org_id_str,
+            slug,
+        }): Path<MockRoute>,
         uri: Uri,
         headers: HeaderMap,
         body: axum::body::Body,
     ) -> Result<Response, StatusCode> {
-        let org_id_str = route.get("org_id").ok_or(StatusCode::BAD_REQUEST)?;
-        let slug = route.get("slug").ok_or(StatusCode::BAD_REQUEST)?;
         // Parse org_id
-        let org_id = Uuid::parse_str(org_id_str).map_err(|e| {
+        let org_id = Uuid::parse_str(&org_id_str).map_err(|e| {
             tracing::warn!("Invalid org_id '{}': {}", org_id_str, e);
             StatusCode::BAD_REQUEST
         })?;
 
         // Find deployment
-        let deployment = HostedMock::find_by_slug(state.db.pool(), org_id, slug)
+        let deployment = HostedMock::find_by_slug(state.db.pool(), org_id, &slug)
             .await
             .map_err(|e| {
                 tracing::error!("Database error looking up deployment {}/{}: {}", org_id, slug, e);
@@ -89,6 +108,23 @@ impl MultitenantRouter {
         // Check if deployment is active
         if !matches!(deployment.status(), crate::models::DeploymentStatus::Active) {
             return Err(StatusCode::SERVICE_UNAVAILABLE);
+        }
+
+        // Cloudflare-served mocks are metered and rate limited at the edge.
+        // Proxying them here would count every request twice and drop
+        // WebSocket upgrades, so send the client to the edge URL instead.
+        if crate::deployment::cloudflare::is_cloudflare(&deployment) {
+            if let Some(ref edge_url) = deployment.deployment_url {
+                let path = uri.path();
+                let rest =
+                    path.strip_prefix(&format!("/mocks/{}/{}", org_id_str, slug)).unwrap_or("");
+                let location = build_target_url(edge_url, rest, uri.query());
+                return Ok((
+                    StatusCode::TEMPORARY_REDIRECT,
+                    [(axum::http::header::LOCATION, location)],
+                )
+                    .into_response());
+            }
         }
 
         // Admit Free requests under their hard monthly cap. Paid requests keep
@@ -509,6 +545,54 @@ async fn enforce_monthly_quota(state: &AppState, org_id: Uuid) -> Result<QuotaAd
     }
 }
 
+/// `Some((used, cutoff))` when the org has hit the opt-in hosted-mock overage
+/// ceiling (`MOCKFORGE_HOSTED_OVERAGE_CEILING_MULT`), otherwise `None`. Fails
+/// open on database errors, like the rest of the hot path.
+pub(crate) async fn quota_ceiling_reached(pool: &sqlx::PgPool, org_id: Uuid) -> Option<(i64, i64)> {
+    // No ceiling configured → no cutoff, and no need to touch the DB on the
+    // hot path. This is the default that matches the pricing copy.
+    let mult = overage_ceiling_mult();
+    if mult <= 0 {
+        return None;
+    }
+
+    let org = match Organization::find_by_id(pool, org_id).await {
+        Ok(Some(org)) => org,
+        Ok(None) => {
+            tracing::warn!("Org {} not found while enforcing monthly quota", org_id);
+            return None;
+        }
+        Err(e) => {
+            tracing::error!("DB error loading org {} for monthly quota check: {}", org_id, e);
+            return None;
+        }
+    };
+
+    // Unlimited plan (Team), or a multiplier that yields no cutoff.
+    let cutoff = overage_cutoff(monthly_request_limit(&org.limits_json)?, mult)?;
+
+    let used = match UsageCounter::get_or_create_current(pool, org_id).await {
+        Ok(counter) => counter.requests,
+        Err(e) => {
+            tracing::error!("Failed to read usage counter for org {}: {}", org_id, e);
+            return None; // fail open on DB read errors
+        }
+    };
+
+    if used >= cutoff {
+        tracing::warn!(
+            "Hosted-mock overage ceiling reached for org {}: {}/{} ({}x plan limit)",
+            org_id,
+            used,
+            cutoff,
+            mult
+        );
+        Some((used, cutoff))
+    } else {
+        None
+    }
+}
+
 /// Bump the org's monthly request counter after a successful proxy response.
 ///
 /// Only response-metered requests count 2xx; Free admission was already
@@ -565,11 +649,11 @@ struct QuotaAdmission {
 }
 
 #[derive(Debug, Clone, Copy)]
-struct ProxyLimits {
+pub(crate) struct ProxyLimits {
     /// Max inbound request body size in bytes (cap → HTTP 413)
-    max_body_bytes: usize,
+    pub(crate) max_body_bytes: usize,
     /// Per-deployment requests-per-second cap (overage → HTTP 429)
-    rps: i64,
+    pub(crate) rps: i64,
 }
 
 /// Derive proxy caps from a raw `limits_json` value. Pure helper — extracted
@@ -597,6 +681,27 @@ fn proxy_limits_from_json(limits_json: &serde_json::Value) -> ProxyLimits {
         max_body_bytes: (body_mb as usize).saturating_mul(1024 * 1024),
         rps,
     }
+}
+
+/// Look up the org's `limits_json` and derive the per-deployment proxy caps.
+///
+/// On any DB error or missing org we return the conservative built-in defaults
+/// rather than failing the request — the caps exist to *prevent* runaway cost,
+/// so an unavailable database shouldn't open the floodgates.
+pub(crate) async fn resolve_proxy_limits(pool: &sqlx::PgPool, org_id: Uuid) -> ProxyLimits {
+    let limits_json = match Organization::find_by_id(pool, org_id).await {
+        Ok(Some(org)) => org.limits_json,
+        Ok(None) => {
+            tracing::warn!("Org {} not found while resolving proxy limits", org_id);
+            serde_json::Value::Null
+        }
+        Err(e) => {
+            tracing::error!("DB error resolving proxy limits for org {}: {}", org_id, e);
+            serde_json::Value::Null
+        }
+    };
+
+    proxy_limits_from_json(&limits_json)
 }
 
 /// Per-deployment RPS check using a fixed 1-second Redis window.
@@ -640,6 +745,35 @@ async fn enforce_rps(
 mod tests {
     use super::*;
     use serde_json::json;
+
+    /// Both mock routes, with the real patterns, reach a handler using the
+    /// real extractor (#1280).
+    #[tokio::test]
+    async fn mock_routes_extract_org_and_slug_with_and_without_a_subpath() {
+        use tower::ServiceExt;
+        async fn echo(Path(route): Path<MockRoute>) -> String {
+            format!("{}|{}", route.org_id, route.slug)
+        }
+        let app = Router::new()
+            .route(MOCK_SUBPATH_ROUTE, any(echo))
+            .route(MOCK_ROUTE_SLASH, any(echo))
+            .route(MOCK_ROUTE, any(echo));
+        for uri in [
+            "/mocks/org-1/shop",
+            "/mocks/org-1/shop/",
+            "/mocks/org-1/shop/__mockforge/health",
+            "/mocks/org-1/shop/api/v1/users/42?x=1",
+        ] {
+            let response = app
+                .clone()
+                .oneshot(axum::http::Request::get(uri).body(axum::body::Body::empty()).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK, "{uri}");
+            let body = axum::body::to_bytes(response.into_body(), 1024).await.unwrap();
+            assert_eq!(&body[..], b"org-1|shop", "{uri}");
+        }
+    }
 
     #[test]
     fn monthly_limit_pro_plan_default() {

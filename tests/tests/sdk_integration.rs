@@ -11,6 +11,7 @@
 //! Note: Most SDKs require the MockForge CLI to be installed and available in PATH.
 //! These tests verify that SDKs can communicate with MockForge servers.
 
+use mockforge_http::management_auth::MANAGEMENT_TOKEN_HEADER;
 use mockforge_test::MockForgeServer;
 use reqwest::Client;
 use serde_json::json;
@@ -47,6 +48,7 @@ async fn test_rust_sdk_integration() {
     // Simulate Rust SDK usage: create stub programmatically
     let stub_response = client
         .post(format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
+        .header(MANAGEMENT_TOKEN_HEADER, server.management_token())
         .json(&json!({
             "path": "/api/rust-sdk-test",
             "method": "GET",
@@ -109,6 +111,7 @@ async fn test_nodejs_sdk_integration() {
     // Test endpoints that Node.js SDK would use
     let health_response = client
         .get(format!("http://localhost:{}/__mockforge/health", admin_port))
+        .header(MANAGEMENT_TOKEN_HEADER, server.management_token())
         .send()
         .await;
 
@@ -119,6 +122,7 @@ async fn test_nodejs_sdk_integration() {
     // Test stub creation endpoint (what Node.js SDK would call)
     let stub_response = client
         .post(format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
+        .header(MANAGEMENT_TOKEN_HEADER, server.management_token())
         .json(&json!({
             "path": "/api/nodejs-sdk-test",
             "method": "GET",
@@ -173,6 +177,7 @@ async fn test_python_sdk_integration() {
     // Test endpoints that Python SDK would use
     let stub_response = client
         .post(format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
+        .header(MANAGEMENT_TOKEN_HEADER, server.management_token())
         .json(&json!({
             "path": "/api/python-sdk-test",
             "method": "GET",
@@ -227,6 +232,7 @@ async fn test_go_sdk_integration() {
     // Test endpoints that Go SDK would use
     let stub_response = client
         .post(format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
+        .header(MANAGEMENT_TOKEN_HEADER, server.management_token())
         .json(&json!({
             "path": "/api/go-sdk-test",
             "method": "GET",
@@ -281,6 +287,7 @@ async fn test_java_sdk_integration() {
     // Test endpoints that Java SDK would use
     let stub_response = client
         .post(format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
+        .header(MANAGEMENT_TOKEN_HEADER, server.management_token())
         .json(&json!({
             "path": "/api/java-sdk-test",
             "method": "GET",
@@ -335,6 +342,7 @@ async fn test_dotnet_sdk_integration() {
     // Test endpoints that .NET SDK would use
     let stub_response = client
         .post(format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
+        .header(MANAGEMENT_TOKEN_HEADER, server.management_token())
         .json(&json!({
             "path": "/api/dotnet-sdk-test",
             "method": "GET",
@@ -398,6 +406,7 @@ async fn test_sdk_common_functionality() {
     // management API (no auth required there).
     let stub_response = client
         .post(format!("http://localhost:{}/__mockforge/api/mocks", http_port))
+        .header(MANAGEMENT_TOKEN_HEADER, server.management_token())
         .json(&json!({
             "path": "/api/common-test",
             "method": "GET",
@@ -422,6 +431,7 @@ async fn test_sdk_common_functionality() {
     // Test stub retrieval (all SDKs use this)
     let get_stub_response = client
         .get(format!("http://localhost:{}/__mockforge/api/mocks", http_port))
+        .header(MANAGEMENT_TOKEN_HEADER, server.management_token())
         .send()
         .await;
 

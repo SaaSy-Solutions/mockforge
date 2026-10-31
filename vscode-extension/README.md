@@ -23,6 +23,7 @@ Control and visualize your MockForge API mocks directly from Visual Studio Code.
 ## Configuration
 
 - `mockforge.serverUrl`: MockForge server URL (default: `http://localhost:3000`)
+- `mockforge.managementToken`: the server's `MOCKFORGE_MANAGEMENT_TOKEN`, sent as `X-MockForge-Management-Token` (default: empty). Stored as a plain setting, not SecretStorage
 - `mockforge.autoConnect`: Automatically connect on startup (default: `true`)
 - `mockforge.showNotifications`: Show notifications for mock changes (default: `true`)
 - `mockforge.inlinePreview.enabled`: Enable inline preview of mock responses when hovering (default: `true`)
@@ -97,6 +98,14 @@ Get real-time validation for your `mockforge.yaml` files:
 ## Release Notes
 
 See [CHANGELOG.md](CHANGELOG.md) for detailed release notes.
+
+## Development
+
+```bash
+npm ci
+npm test               # compiles, downloads VS Code 1.85.2 and runs the suite in it
+xvfb-run -a npm test   # Linux without a display
+```
 
 ## Contributing
 

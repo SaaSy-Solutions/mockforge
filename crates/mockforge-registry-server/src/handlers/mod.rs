@@ -27,6 +27,7 @@ pub mod hosted_mock_overrides;
 pub mod hosted_mocks;
 pub mod incidents;
 pub mod internal_contract_diff;
+pub mod internal_hosted_mocks;
 pub mod internal_test_runs;
 pub mod legal;
 pub mod management_token;

@@ -65,6 +65,7 @@ function parseCriterionResults(criterionPath) {
                         results[benchName][dirType] = {
                             mean: data.mean.point_estimate,
                             stddev: data.std_dev ? data.std_dev.point_estimate : 0,
+                            samples: Array.isArray(data.samples) ? data.samples : undefined,
                             unit: 'ns'
                         };
                     }
@@ -117,6 +118,25 @@ function formatTime(nanoseconds) {
 }
 
 /**
+ * Classify one benchmark. With paired samples for both sides, a change counts
+ * only when the ranges separate by more than the threshold: every candidate
+ * sample slower (or faster) than every base sample. Two samples per side are
+ * too few for the means alone; identical code moved up to 8% between runs on
+ * a shared host (#1309). Without samples, fall back to comparing means.
+ */
+function classify(percentChange, baseSamples, currentSamples) {
+    const t = REGRESSION_THRESHOLD / 100;
+    if (baseSamples?.length && currentSamples?.length) {
+        if (Math.min(...currentSamples) > Math.max(...baseSamples) * (1 + t)) return 'regression';
+        if (Math.max(...currentSamples) < Math.min(...baseSamples) * (1 - t)) return 'improvement';
+        return 'stable';
+    }
+    if (percentChange > REGRESSION_THRESHOLD) return 'regression';
+    if (percentChange < -REGRESSION_THRESHOLD) return 'improvement';
+    return 'stable';
+}
+
+/**
  * Compare benchmark results and generate report
  */
 function compareBenchmarks(current, baseline) {
@@ -129,8 +149,10 @@ function compareBenchmarks(current, baseline) {
     for (const [name, data] of Object.entries(current)) {
         const currentMean = data.new ? data.new.mean : data.main?.mean;
         if (!currentMean) continue;
+        const currentSamples = data.new ? data.new.samples : data.main?.samples;
 
         const baselineMean = baseline[name]?.new?.mean || baseline[name]?.main?.mean;
+        const baselineSamples = baseline[name]?.new?.samples || baseline[name]?.main?.samples;
 
         if (!baselineMean) {
             newBenchmarks.push({
@@ -154,9 +176,10 @@ function compareBenchmarks(current, baseline) {
             formattedBaseline: formatTime(baselineMean)
         };
 
-        if (percentChange > REGRESSION_THRESHOLD) {
+        const kind = classify(percentChange, baselineSamples, currentSamples);
+        if (kind === 'regression') {
             regressions.push(result);
-        } else if (percentChange < -REGRESSION_THRESHOLD) {
+        } else if (kind === 'improvement') {
             improvements.push(result);
         } else {
             stable.push(result);
@@ -188,6 +211,7 @@ function generateReport(comparison) {
 
     // Regression threshold
     report += `**Regression Threshold**: ${REGRESSION_THRESHOLD}%\n\n`;
+    report += `With paired samples, a change counts only when every candidate sample differs from every base sample by more than the threshold; otherwise it is listed as stable even if the means differ more.\n\n`;
 
     // Regressions (if any)
     if (comparison.regressions.length > 0) {

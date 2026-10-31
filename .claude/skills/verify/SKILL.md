@@ -49,12 +49,12 @@ cargo fmt --all --check
 
 #### Clippy (per affected crate)
 ```bash
-cargo clippy -p <crate> --all-targets -- -D warnings
+scripts/dev/cargo clippy -p <crate> --all-targets -- -D warnings
 ```
 
 #### Tests (per affected crate)
 ```bash
-cargo test -p <crate>
+scripts/dev/cargo test -p <crate>
 ```
 
 #### Template Variables (when bench scope or template files changed)

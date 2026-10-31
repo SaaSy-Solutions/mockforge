@@ -8,7 +8,7 @@ license = "MIT OR Apache-2.0"
 description = "Official SDK for developing MockForge plugins with helper macros and testing utilities"
 repository = "https://github.com/SaaSy-Solutions/mockforge"
 homepage = "https://mockforge.dev"
-documentation = "https://docs.rs/mockforge"
+documentation = "https://docs.mockforge.dev"
 readme = "README.md"
 keywords = ["mockforge", "plugin", "sdk", "wasm", "api"]
 categories = ["development-tools", "api-bindings", "wasm"]
@@ -22,7 +22,7 @@ crate-type = ["lib"]
 
 [dependencies]
 # Re-export core plugin functionality
-mockforge-plugin-core = { version = "0.3.236", path = "../mockforge-plugin-core" }
+mockforge-plugin-core = { version = "0.3.238", path = "../mockforge-plugin-core" }
 
 # Serialization
 serde = { workspace = true, features = ["derive"] }

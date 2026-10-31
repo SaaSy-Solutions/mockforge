@@ -18,18 +18,18 @@ categories = ["development-tools::testing"]
 # `ScenarioDefinition` / `ScenarioStep` (now shared foundation types).
 # Recorder-backed handlers use a store trait implemented downstream; adding
 # a recorder dependency here would reintroduce a core/intelligence cycle.
-mockforge-foundation = { path = "../mockforge-foundation", default-features = false }
+mockforge-foundation = { version = "0.3.238", path = "../mockforge-foundation", default-features = false }
 # `intelligent_behavior` (#562 phase 2) needs `OpenApiSpec`, `ResponseGenerator`,
 # and `OpenApiRouteRegistry`. `mockforge-openapi` is foundation-only, so this
 # dep is cycle-safe — it does NOT pull `mockforge-core` back in.
-mockforge-openapi = { path = "../mockforge-openapi" }
+mockforge-openapi = { version = "0.3.238", path = "../mockforge-openapi" }
 # `handlers::forecasting` (#555 phase 5) needs the contract-drift forecasting
 # engine. Cycle-safe: `mockforge-contracts` depends only on `mockforge-foundation`.
-mockforge-contracts = { path = "../mockforge-contracts" }
+mockforge-contracts = { version = "0.3.238", path = "../mockforge-contracts" }
 # `consistency` (#555 phase 7) uses `mockforge_data::{PersonaProfile,
 # PersonaGraph, PersonaLifecycle, LifecyclePreset, LifecycleState}`. Cycle-safe
 # — mockforge-data has no upstream deps in this workspace.
-mockforge-data = { path = "../mockforge-data" }
+mockforge-data = { version = "0.3.238", path = "../mockforge-data" }
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 # `handlers::*` (HTTP-handler files migrated out of `mockforge-http` under

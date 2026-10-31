@@ -217,6 +217,9 @@ ELEVATED_ALLOWLIST = {
     "handlers/internal_test_runs.rs::proxy_chaos_toggle": "internal shared-token API, no user org context",
     "handlers/internal_test_runs.rs::run_started": "internal shared-token runner callback, no user org context",
     "handlers/internal_test_runs.rs::run_finished": "internal shared-token runner callback, no user org context",
+    "handlers/internal_hosted_mocks.rs::get_runtime": "Cloudflare hosted-mocks Worker callback (internal token), no user org context",
+    "handlers/internal_hosted_mocks.rs::apply_usage_batch": "Authenticated Cloudflare Worker usage; org resolved from deployment, atomic receipt and counters on owner pool",
+    "handlers/internal_hosted_mocks.rs::report_usage": "Cloudflare hosted-mocks Worker callback (internal token); org taken from the deployment row",
     "handlers/internal_test_runs.rs::mirror_kind_status": "internal shared-token runner callback, no user org context",
     "handlers/internal_test_runs.rs::maybe_raise_finding_incident": "internal shared-token runner callback, no user org context",
     "handlers/internal_test_runs.rs::get_capture_exchanges": "internal shared-token replay callback, no user org context; SQL constrains captures to the session's org",
@@ -239,6 +242,7 @@ ELEVATED_ALLOWLIST = {
     "handlers/billing.rs::handle_subscription_deleted": "Stripe webhook: no user, org resolved from the signed payload",
     "handlers/billing.rs::handle_payment_succeeded": "Stripe webhook: no user, org resolved from the signed payload",
     "handlers/billing.rs::handle_payment_failed": "Stripe webhook: no user, org resolved from the signed payload",
+    "handlers/billing.rs::handle_trial_will_end": "Stripe webhook: no user, org resolved from the signed payload",
 }
 
 # Expressions that mean "this statement runs on the request-path (runtime) pool".

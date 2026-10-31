@@ -2,13 +2,25 @@ name: Docs Check
 
 on:
   pull_request:
+    # Check CLI changes even when their documentation was not updated, so a
+    # new command cannot leave a stale snapshot for the next docs edit to find.
+    # The hosted runner keeps these source scans off the Rust runner pool.
     paths:
       - 'book/**'
+      - 'docs/**'
+      - '*.md'
+      - '*.markdown'
+      - '**/*.md'
+      - '**/*.markdown'
+      - 'crates/mockforge-cli/src/**'
       - 'scripts/automated-tests/test-docs.sh'
       - 'scripts/check_docs_cli.py'
+      - 'scripts/inject_docs_canonicals.py'
+      - 'scripts/generate_docs_sitemap.py'
+      - 'scripts/tests/test_docs_canonicals.py'
       - 'scripts/check_docs_drift.py'
+      - 'scripts/check_config_field_drift.py'
       - 'scripts/docs-cli-surface.json'
-      - 'crates/mockforge-cli/src/main.rs'
       - '.github/workflows/docs-check.yml'
       - '.github/actions/setup-mdbook/**'
   workflow_dispatch:
@@ -25,13 +37,21 @@ permissions:
 jobs:
   docs:
     name: Verify mdBook Docs
-    # These checks build Markdown and inspect source; they do not compile Rust.
-    runs-on: ${{ fromJSON((github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && '["self-hosted","linux","x64","rust"]' || '["ubuntu-latest"]') }}
+    # Markdown build and Python source scans. They do not compile Rust, so
+    # this stays on a GitHub-hosted runner. Same-repo PRs used to take a slot
+    # on the two-runner [self-hosted, linux, x64, rust] pool whenever book/
+    # changed, which is most feature PRs. Fork PRs already used ubuntu-latest.
+    # "Verify mdBook Docs" is not a required status check, so a path miss
+    # skips the workflow instead of leaving a required check pending.
+    runs-on: ubuntu-latest
     timeout-minutes: 20
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+
+      - name: Verify canonical link generation
+        run: python3 scripts/tests/test_docs_canonicals.py
 
       - name: Setup mdBook
         uses: ./.github/actions/setup-mdbook

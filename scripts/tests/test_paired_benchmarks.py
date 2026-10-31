@@ -4,9 +4,12 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
+import time
+import tomllib
 import unittest
 from unittest.mock import patch
 
@@ -17,6 +20,7 @@ SPEC = importlib.util.spec_from_file_location(
 )
 PAIRED = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(PAIRED)
+import benchmark_measurements as MEASUREMENTS
 
 
 class PairedBenchmarkTest(unittest.TestCase):
@@ -85,6 +89,8 @@ class PairedBenchmarkTest(unittest.TestCase):
         self.assertEqual(status, 0)
         self.assertEqual(sources["base_sha"], "a" * 40)
         self.assertEqual(sources["head_sha"], "b" * 40)
+        self.assertRegex(sources["base_binary_sha256"], r"^[0-9a-f]{64}$")
+        self.assertRegex(sources["head_binary_sha256"], r"^[0-9a-f]{64}$")
         self.assertIn("**Regressions**: 0", report)
 
     def test_real_twenty_percent_regression_still_fails(self):
@@ -131,8 +137,82 @@ class PairedBenchmarkTest(unittest.TestCase):
         self.assertIn("CRITERION_DIR: paired-benchmarks/criterion", workflow)
         self.assertNotIn("- name: Fetch baseline", workflow)
         self.assertIn("REGRESSION_THRESHOLD: 5.0", workflow)
-        self.assertIn("runs-on: ubuntu-latest", workflow)
-        self.assertNotIn("runs-on: [self-hosted", workflow)
+        # Hetzner for trusted events, hosted for fork PRs (#1191).
+        self.assertIn(
+            "runs-on: ${{ (github.event_name != 'pull_request' || "
+            "github.event.pull_request.head.repo.full_name == github.repository) && "
+            "fromJSON('[\"self-hosted\",\"linux\",\"x64\",\"rust\"]') || 'ubuntu-latest' }}",
+            workflow,
+        )
+
+
+class CargoSourceFreshnessTest(unittest.TestCase):
+    def checkout(self, root, marker):
+        (root / "src").mkdir(parents=True)
+        (root / "benches").mkdir()
+        (root / "Cargo.toml").write_text(
+            '[package]\nname="mockforge-core"\nversion="0.0.0"\nedition="2021"\n'
+            '[workspace]\n[[bench]]\nname="core_benchmarks"\nharness=false\n'
+        )
+        (root / "Cargo.lock").write_text(
+            'version = 4\n\n[[package]]\nname = "mockforge-core"\nversion = "0.0.0"\n'
+        )
+        (root / "src/lib.rs").write_text(f"pub fn marker() -> u32 {{ {marker} }}\n")
+        (root / "benches/core_benchmarks.rs").write_text(
+            'fn main() { println!("{}", mockforge_core::marker()); }\n'
+        )
+        for args in (["git", "init", "-q"], ["git", "add", "."]):
+            subprocess.run(args, cwd=root, check=True, capture_output=True)
+
+    @unittest.skipUnless(
+        shutil.which("cargo") and shutil.which("rustc") and shutil.which("cc"),
+        "Cargo and a C linker are required for the isolated build regression",
+    )
+    def test_older_candidate_sources_do_not_reuse_base_executable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            base, head, target = root / "base", root / "head", root / "target"
+            self.checkout(base, 1)
+            self.checkout(head, 2)
+            for source in head.rglob("*.rs"):
+                os.utime(source, (time.time() - 3600, time.time() - 3600))
+            host = subprocess.check_output(["rustc", "-vV"], text=True)
+            triple = next(line.removeprefix("host: ") for line in host.splitlines()
+                          if line.startswith("host: "))
+            # Keep the fixture independent of project-specific linker flags
+            # and compiler wrappers inherited from a developer's environment.
+            env = {
+                "RUSTFLAGS": "", "CARGO_ENCODED_RUSTFLAGS": "",
+                "RUSTC_WRAPPER": "", "RUSTC_WORKSPACE_WRAPPER": "",
+                "RUSTUP_TOOLCHAIN": os.environ.get("RUSTUP_TOOLCHAIN")
+                    or tomllib.loads((ROOT / "rust-toolchain.toml").read_text())["toolchain"]["channel"],
+                "CARGO_BUILD_TARGET": triple,
+                "CARGO_TARGET_" + triple.upper().replace("-", "_") + "_LINKER":
+                    shutil.which("cc"),
+            }
+            with patch.dict(os.environ, env):
+                before = (head / "src/lib.rs").read_bytes()
+                base_copy = root / "base-binary"
+                shutil.copy2(MEASUREMENTS.build(base, target), base_copy)
+                candidate = MEASUREMENTS.build(head, target)
+                self.assertEqual(subprocess.check_output([str(base_copy)], text=True).strip(), "1")
+                self.assertEqual(subprocess.check_output([str(candidate)], text=True).strip(), "2")
+                self.assertEqual((head / "src/lib.rs").read_bytes(), before)
+
+    def test_source_refresh_refuses_symlinks_outside_checkout(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            checkout = root / "checkout"
+            self.checkout(checkout, 1)
+            outside = root / "outside.rs"
+            outside.write_text("pub fn outside() {}\n")
+            source = checkout / "src/lib.rs"
+            source.unlink()
+            source.symlink_to(outside)
+            before = outside.stat().st_mtime_ns
+            with self.assertRaisesRegex(RuntimeError, "escapes benchmark checkout"):
+                MEASUREMENTS.refresh_rust_sources(checkout)
+            self.assertEqual(outside.stat().st_mtime_ns, before)
 
 
 if __name__ == "__main__":

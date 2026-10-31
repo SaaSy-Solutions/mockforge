@@ -8,6 +8,26 @@ import re
 import subprocess
 
 
+def refresh_rust_sources(root):
+    """Invalidate mtime-based fingerprints inherited from another checkout."""
+    root = root.resolve()
+    tracked = subprocess.check_output(
+        ["git", "ls-files", "-z", "--", "*.rs"], cwd=root
+    )
+    sources = [root / os.fsdecode(path) for path in tracked.split(b"\0") if path]
+    if not sources:
+        raise RuntimeError("No tracked Rust sources in benchmark checkout")
+    for source in sources:
+        if not source.resolve(strict=True).is_relative_to(root):
+            raise RuntimeError("Rust source escapes benchmark checkout")
+    # Cargo dep-info uses workspace-relative paths. With a shared target,
+    # older source mtimes can make the next checkout reuse the prior library
+    # and executable. Refresh libraries, build scripts and bench entry points;
+    # dependency registry artifacts remain cached, and source bytes stay intact.
+    for source in sources:
+        os.utime(source, None)
+
+
 def build(root, target):
     env = {
         **os.environ,
@@ -15,6 +35,7 @@ def build(root, target):
         "CARGO_BUILD_JOBS": "2",
         "CARGO_INCREMENTAL": "0",
     }
+    refresh_rust_sources(root)
     result = subprocess.run(
         [
             "cargo",
@@ -37,7 +58,7 @@ def build(root, target):
         json.loads(line) for line in result.stdout.splitlines() if line.startswith("{")
     ]
     executables = [
-        a["executable"]
+        a
         for a in artifacts
         if a.get("reason") == "compiler-artifact"
         and a.get("target", {}).get("name") == "core_benchmarks"
@@ -45,7 +66,10 @@ def build(root, target):
     ]
     if len(executables) != 1:
         raise RuntimeError("Expected one compiled core benchmark executable")
-    return Path(executables[0])
+    artifact = executables[0]
+    if artifact.get("fresh") is not False:
+        raise RuntimeError("Benchmark executable was reused instead of rebuilt")
+    return Path(artifact["executable"])
 
 
 def names(binary, root):
@@ -95,6 +119,14 @@ def aggregate(samples):
     if not samples or any(len(values) != 2 for values in samples.values()):
         raise ValueError("Every paired benchmark needs both measurements")
     return {
-        name: {"new": {"mean": sum(values) / len(values), "unit": "ns"}}
+        name: {
+            "new": {
+                "mean": sum(values) / len(values),
+                # Kept so the comparison can require base and head to separate,
+                # not just their means (#1309).
+                "samples": list(values),
+                "unit": "ns",
+            }
+        }
         for name, values in samples.items()
     }
