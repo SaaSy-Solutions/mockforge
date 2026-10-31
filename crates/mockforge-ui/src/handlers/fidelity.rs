@@ -11,6 +11,7 @@ use mockforge_recorder::models::RecordedExchange;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
+mod async_samples;
 mod sample;
 
 static COMPARISONS: once_cell::sync::Lazy<std::sync::Arc<tokio::sync::Semaphore>> =
@@ -19,18 +20,18 @@ static COMPARISONS: once_cell::sync::Lazy<std::sync::Arc<tokio::sync::Semaphore>
 /// Inputs are document contents, never file paths or upstream URLs.
 #[derive(Deserialize)]
 pub struct CompareRequest {
-    /// OpenAPI definition used to generate the mock.
+    /// OpenAPI or AsyncAPI definition used to generate the mock.
     pub mock_spec: String,
-    /// Current source OpenAPI definition.
+    /// Current source OpenAPI or AsyncAPI definition.
     pub source_spec: String,
-    /// Optional HTTP recorder JSON export; an explicitly empty sample fails.
+    /// Optional recorder JSON export; an explicitly empty sample fails.
     pub sample: Option<Vec<RecordedExchange>>,
 }
 
 #[derive(Serialize)]
 struct Assessment {
     definition: FidelityReport,
-    sample: Option<sample::SampleReport>,
+    sample: Option<Value>,
 }
 
 /// Compare on the blocking pool so schema work cannot stall the async server.
@@ -39,7 +40,7 @@ pub async fn compare(
 ) -> Response {
     let Json(payload) = match payload {
         Ok(payload) => payload,
-        Err(rejection) => return (rejection.status(), Json(json!({"error":"Check the definition fields and use a Flight Recorder export containing request/response exchanges"}))).into_response(),
+        Err(rejection) => return (rejection.status(), Json(json!({"error":"Check the definition fields and use a Flight Recorder export containing HTTP exchanges or asynchronous message events"}))).into_response(),
     };
     let permit = match COMPARISONS.clone().try_acquire_owned() {
         Ok(permit) => permit,
@@ -69,7 +70,7 @@ pub async fn compare(
     }
 }
 
-fn parse_document(content: &str) -> Result<OpenApiSpec, String> {
+fn parse_document(content: &str) -> Result<Value, String> {
     if content.len() > 2 * 1024 * 1024 {
         return Err("Each definition must be at most 2 MiB".into());
     }
@@ -79,18 +80,30 @@ fn parse_document(content: &str) -> Result<OpenApiSpec, String> {
     if value.get("swagger").and_then(Value::as_str) == Some("2.0") {
         value = mockforge_import::import::swagger2_convert::convert_swagger2_to_openapi3(&value)?;
     }
-    OpenApiSpec::from_json(value).map_err(|e| format!("Invalid OpenAPI 3 definition: {e}"))
+    if value.get("asyncapi").is_some() {
+        return Ok(value);
+    }
+    let spec =
+        OpenApiSpec::from_json(value).map_err(|e| format!("Invalid OpenAPI 3 definition: {e}"))?;
+    serde_json::to_value(&spec.spec).map_err(|e| e.to_string())
 }
 
 fn assess(payload: CompareRequest) -> Result<Assessment, String> {
     let mock = parse_document(&payload.mock_spec)?;
     let source = parse_document(&payload.source_spec)?;
-    let mock_json = serde_json::to_value(&mock.spec).map_err(|e| e.to_string())?;
-    let source_json = serde_json::to_value(&source.spec).map_err(|e| e.to_string())?;
-    let definition = compare_mock_spec_with_budget(&mock_json, &source_json, 16 * 1024 * 1024)?;
+    let definition = compare_mock_spec_with_budget(&mock, &source, 16 * 1024 * 1024)?;
     let sample = payload
         .sample
-        .map(|records| sample::verify(source, &source_json, records))
+        .map(|records| {
+            if source.get("asyncapi").is_some() {
+                serde_json::to_value(async_samples::verify(&source, records)?)
+                    .map_err(|e| e.to_string())
+            } else {
+                let parsed = OpenApiSpec::from_json(source.clone()).map_err(|e| e.to_string())?;
+                serde_json::to_value(sample::verify(parsed, &source, records)?)
+                    .map_err(|e| e.to_string())
+            }
+        })
         .transpose()?;
     Ok(Assessment { definition, sample })
 }

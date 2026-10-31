@@ -41,7 +41,13 @@ fn check(
     let spec = json!({"openapi":"3.0.3","info":{"title":"fixture","version":"1"},
         "paths":{"/items":{"get":{"responses":responses}}},"components":components});
     let registry = OpenApiRouteRegistry::new(OpenApiSpec::from_json(spec.clone()).unwrap());
-    check_response_drift(&registry, &spec, "GET", "/items", status, Some(body))
+    match check_response(&registry, &spec, "GET", "/items", status, None, Some(body)) {
+        ResponseAssessment::Verified => None,
+        ResponseAssessment::Drift(drift) => Some(drift),
+        ResponseAssessment::Unverified(reason) => {
+            panic!("unexpected unsupported test response: {reason}")
+        }
+    }
 }
 
 #[test]
@@ -180,4 +186,95 @@ async fn empty_capture_succeeds_even_with_fail_on_drift() {
         record: false,
     };
     handle_verify_mocks_command(args).await.unwrap();
+}
+
+#[tokio::test]
+async fn fixture_report_exposes_unverified_media_without_counting_proven_drift() {
+    let dir = tempfile::tempdir().unwrap();
+    let spec = dir.path().join("api.json");
+    let fixture = dir.path().join("fixture.json");
+    let output = dir.path().join("report.json");
+    std::fs::write(&spec, json!({"openapi":"3.0.3","info":{"title":"media","version":"1"},
+        "paths":{"/items":{"get":{"responses":{"200":{"description":"ok","content":{"text/plain":{"schema":{"type":"string"}}}}}}}}}).to_string()).unwrap();
+    std::fs::write(&fixture, json!({"fingerprint":{"method":"GET","path":"/items","query":"","headers":{},"body_hash":null},
+        "timestamp":"2026-10-20T00:00:00Z","status_code":200,"response_headers":{"content-type":"text/plain"},
+        "response_body":"unverified text","metadata":{}}).to_string()).unwrap();
+    handle_verify_mocks_command(VerifyMocksArgs {
+        spec,
+        capture_db: None,
+        mock_spec: None,
+        fixtures: Some(fixture),
+        limit: 500,
+        fail_on_drift: false,
+        output: Some(output.clone()),
+        record: false,
+    })
+    .await
+    .unwrap();
+    let report: Value = serde_json::from_slice(&std::fs::read(output).unwrap()).unwrap();
+    assert_eq!(report["endpoints_with_drift"], 0);
+    assert_eq!(report["endpoints_unverified"], 1);
+    assert_eq!(report["findings"][0]["kind"], "fixture-unverified");
+    assert_eq!(report["fixtures"]["routes"][0]["status"], "not-verified");
+}
+
+#[tokio::test]
+async fn recorded_response_media_is_not_inferred_from_an_unrelated_json_schema() {
+    let dir = tempfile::tempdir().unwrap();
+    let spec = dir.path().join("api.json");
+    let capture = dir.path().join("capture.sqlite");
+    let output = dir.path().join("report.json");
+    std::fs::write(&spec, json!({"openapi":"3.0.3","info":{"title":"media","version":"1"},
+        "paths":{"/items":{"get":{"responses":{"200":{"description":"ok","content":{
+            "application/json":{"schema":{"type":"integer"}},"text/plain":{"schema":{"type":"string"}}
+        }}}}}}}).to_string()).unwrap();
+    let db = mockforge_recorder::RecorderDatabase::new(&capture).await.unwrap();
+    let request = serde_json::from_value(json!({"id":"sample", "protocol":"Http",
+        "timestamp":"2026-10-20T00:00:00Z", "method":"GET", "path":"/items",
+        "headers":"{}", "body_encoding":"utf8"}))
+    .unwrap();
+    db.insert_request(&request).await.unwrap();
+    let response = serde_json::from_value(json!({"request_id":"sample", "status_code":200,
+        "timestamp":"2026-10-20T00:00:00Z", "headers":r#"{"Content-Type":"text/plain"}"#,
+        "body":"1", "body_encoding":"utf8", "size_bytes":1}))
+    .unwrap();
+    db.insert_response(&response).await.unwrap();
+    drop(db);
+    handle_verify_mocks_command(VerifyMocksArgs {
+        spec,
+        capture_db: Some(capture),
+        mock_spec: None,
+        fixtures: None,
+        limit: 500,
+        fail_on_drift: false,
+        output: Some(output.clone()),
+        record: false,
+    })
+    .await
+    .unwrap();
+    let report: Value = serde_json::from_slice(&std::fs::read(output).unwrap()).unwrap();
+    assert_eq!(report["exchanges_checked"], 1);
+    assert_eq!(report["endpoints_with_drift"], 0);
+    assert_eq!(report["endpoints_unverified"], 1);
+    assert_eq!(report["findings"][0]["kind"], "response-unverified");
+}
+
+#[test]
+fn persisted_verdict_distinguishes_unverified_evidence_and_prioritizes_proven_drift() {
+    let mut report = empty_capture_report(std::path::Path::new("api.json"));
+    report.endpoints_unverified = 1;
+    report.findings.push(DriftFinding {
+        endpoint: "GET /items".into(),
+        kind: "response-unverified".into(),
+        detail: "Unsupported media".into(),
+    });
+    let record = verification_record(&report, None);
+    assert_eq!(record.outcome, crate::status_commands::VerificationOutcome::Unverified);
+    assert_eq!(record.endpoints_unverified, 1);
+    assert_eq!(record.endpoints_with_drift, 0);
+    report.endpoints_with_drift = 1;
+    assert_eq!(
+        verification_record(&report, None).outcome,
+        crate::status_commands::VerificationOutcome::Drift
+    );
 }
