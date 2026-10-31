@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Changed
+
+- **[DevX]** Extract authentication middleware, token lifecycle and OAuth2/OIDC endpoints into `mockforge-auth`. Preserve HTTP authentication and OAuth2 handler import paths and shared state types; keep the risk-simulation implementation with its engine. (#635)
+
 ### Added
 
 - **[Cloud]** Share Free hosted capacity, monthly request limits and platform AI credits across a verified owner’s organizations. Preserve spent allowances through account recreation, bound deleted identity retention, retain uncertain provider budgets, and require audited usage evidence plus execution fences for stopped-call recovery. Keep provider execution connections separate from API requests. (#834, #868) The Privacy Policy and DPA disclose OpenAI as the platform AI sub-processor, with processing beginning no earlier than November 14, 2026.
@@ -10,6 +14,7 @@
 
 ### Fixed
 
+- **[Auth]** Authenticated handlers can extract `AuthClaims` with Axum’s standard extractor; middleware stores raw claims and the legacy wrapper while preserving credential-safe security events. (#635)
 - **[Security]** Admin database upgrades preserve the shipped SQLx migration checksum and remove only unchanged built-in accounts in a new migration. Operator credentials and unrelated sessions are retained. (#1016)
 - **[AI]** Use the selected provider/model for direct and chat debugging instead of a default cloud client. Apply workspace validation and seed overrides to the debug endpoints, including when runtime MockAI is disabled.
 - **[AI]** Keep the chosen provider/model and seed when applying Reality presets. Baked fixtures disable presets and reject cached configurations that would re-enable them. (#852)

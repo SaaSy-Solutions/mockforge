@@ -7786,6 +7786,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "mockforge-auth"
+version = "0.3.238"
+dependencies = [
+ "async-trait",
+ "axum 0.8.9",
+ "base64 0.22.1",
+ "bcrypt",
+ "chrono",
+ "hex",
+ "jsonwebtoken",
+ "mockforge-core",
+ "mockforge-foundation",
+ "mockforge-intelligence",
+ "mockforge-openapi",
+ "oauth2",
+ "rand 0.9.5",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "subtle",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "url",
+ "uuid",
+]
+
+[[package]]
 name = "mockforge-behavioral-cloning"
 version = "0.3.238"
 dependencies = [
@@ -8424,6 +8453,7 @@ dependencies = [
  "mime_guess",
  "mockforge-amqp",
  "mockforge-analytics",
+ "mockforge-auth",
  "mockforge-bench",
  "mockforge-chaos",
  "mockforge-contracts",
