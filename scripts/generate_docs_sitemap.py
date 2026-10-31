@@ -18,7 +18,12 @@ DEFAULT_BASE_URL = "https://docs.mockforge.dev/"
 
 
 def page_urls(src_dir: Path, out_dir: Path, base_url: str) -> list[str]:
-    urls = []
+    return [url for _, url in chapter_pages(src_dir, out_dir, base_url)]
+
+
+def chapter_pages(src_dir: Path, out_dir: Path, base_url: str) -> list[tuple[Path, str]]:
+    """(built HTML file, public URL) for every page rendered from a chapter."""
+    pages = []
     for html in sorted(out_dir.rglob("*.html")):
         rel = html.relative_to(out_dir)
         sources = [src_dir / rel.with_suffix(".md")]
@@ -30,8 +35,8 @@ def page_urls(src_dir: Path, out_dir: Path, base_url: str) -> list[str]:
         path = rel.as_posix()
         if rel.name == "index.html":
             path = path[: -len("index.html")]
-        urls.append(base_url + path)
-    return urls
+        pages.append((html, base_url + path))
+    return pages
 
 
 def main() -> int:

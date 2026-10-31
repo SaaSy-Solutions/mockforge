@@ -655,9 +655,13 @@ fn replace_fs_tokens(input: &str) -> String {
                 return "<fs.readFile: empty path>".to_string();
             }
 
-            match std::fs::read_to_string(file_path) {
+            // Sandboxed to the configured fixtures root (#1015).
+            match crate::template_fs::read_template_file(file_path) {
                 Ok(content) => content,
-                Err(e) => format!("<fs.readFile error: {}>", e),
+                Err(e) => {
+                    tracing::warn!(path = %file_path, error = %e, "fs.readFile refused");
+                    format!("<fs.readFile error: {}>", e)
+                }
             }
         })
         .to_string()
@@ -863,34 +867,40 @@ mod tests {
 
     #[test]
     fn test_fs_readfile() {
-        // Create a temporary file for testing
-        use std::fs;
+        // One test owns the process-wide default root to avoid racing itself.
+        if std::env::var(crate::template_fs::ROOT_ENV).is_ok()
+            || std::env::var(crate::template_fs::HOSTED_ENV).is_ok()
+        {
+            return;
+        }
+        let dir = tempfile::TempDir::new().unwrap();
+        let root = dir.path().join("spec");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("body.txt"), "Hello, fixture!").unwrap();
+        std::fs::write(dir.path().join("secret.txt"), "top-secret").unwrap();
+        crate::template_fs::set_default_root(Some(root.clone()));
 
-        let temp_file = "/tmp/mockforge_test_file.txt";
-        let test_content = "Hello, this is test content!";
-        fs::write(temp_file, test_content).unwrap();
+        // Legitimate reads inside the spec directory still work, both syntaxes.
+        assert_eq!(expand_str(r#"{{fs.readFile "body.txt"}}"#), "Hello, fixture!");
+        assert_eq!(expand_str(r#"{{fs.readFile('body.txt')}}"#), "Hello, fixture!");
 
-        // Test successful file reading
-        let template = format!(r#"{{{{fs.readFile "{}"}}}}"#, temp_file);
-        let result = expand_str(&template);
-        assert_eq!(result, test_content);
+        // Escapes are refused and never leak content.
+        for t in [
+            r#"{{fs.readFile "../secret.txt"}}"#,
+            r#"{{fs.readFile "/etc/passwd"}}"#,
+            r#"{{fs.readFile "/proc/self/environ"}}"#,
+        ] {
+            let out = expand_str(t);
+            assert!(out.starts_with("<fs.readFile error:"), "{t} -> {out}");
+            assert!(!out.contains("top-secret") && !out.contains("root:"), "{t} -> {out}");
+        }
 
-        // Test with parentheses
-        let template = format!(r#"{{{{fs.readFile('{}')}}}}"#, temp_file);
-        let result = expand_str(&template);
-        assert_eq!(result, test_content);
+        // Disabled when no root is registered.
+        crate::template_fs::set_default_root(None);
+        let out = expand_str(r#"{{fs.readFile "body.txt"}}"#);
+        assert!(out.starts_with("<fs.readFile error: disabled"), "{out}");
 
-        // Test file not found
-        let template = r#"{{fs.readFile "/nonexistent/file.txt"}}"#;
-        let result = expand_str(template);
-        assert!(result.contains("fs.readFile error:"));
-
-        // Test empty path
-        let template = r#"{{fs.readFile ""}}"#;
-        let result = expand_str(template);
-        assert_eq!(result, "<fs.readFile: empty path>");
-
-        // Clean up
-        let _ = fs::remove_file(temp_file);
+        // Empty path
+        assert_eq!(expand_str(r#"{{fs.readFile ""}}"#), "<fs.readFile: empty path>");
     }
 }
