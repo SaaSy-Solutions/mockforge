@@ -65,6 +65,7 @@ impl PersonaGenerator {
         if let Some(frozen) = snapshot.load("persona").await? {
             let persona = frozen_generation::payload(&frozen);
             return Ok(PersonaGenerationResponse {
+                replayed: true,
                 persona: Some(persona),
                 message: format!(
                     "Loaded frozen persona artifact from {} (deterministic mode)",
@@ -183,6 +184,7 @@ Make the persona realistic and consistent. Traits should align with the descript
             .unwrap_or(persona_value);
 
         Ok(PersonaGenerationResponse {
+            replayed: false,
             persona: Some(persona_value),
             message: format!(
                 "Successfully generated persona '{}' with {} traits{}",
@@ -239,6 +241,7 @@ Return the updated persona in the same JSON structure as the input."#;
         let response = self.llm_client.generate(&llm_request).await?;
 
         Ok(PersonaGenerationResponse {
+            replayed: false,
             persona: Some(response),
             message: "Successfully updated persona".to_string(),
             frozen_artifact: None,
@@ -268,6 +271,10 @@ pub struct PersonaGenerationRequest {
 /// Response from persona generation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PersonaGenerationResponse {
+    /// True when generation loaded a verified snapshot without calling a provider.
+    #[serde(default)]
+    pub replayed: bool,
+
     /// Generated persona (if any)
     pub persona: Option<serde_json::Value>,
 

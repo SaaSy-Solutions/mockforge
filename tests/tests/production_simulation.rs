@@ -13,43 +13,52 @@ use serde_json::json;
 use std::time::Duration;
 use tokio::time::timeout;
 
+/// Create a mock on the serving port and return its actual generated ID.
+async fn create_dynamic_mock(client: &Client, http_port: u16, config: serde_json::Value) -> String {
+    let response = client
+        .post(format!("http://127.0.0.1:{http_port}/__mockforge/api/mocks"))
+        .json(&config)
+        .send()
+        .await
+        .expect("Mock creation request must complete");
+    assert_eq!(response.status(), reqwest::StatusCode::CREATED);
+    let created: serde_json::Value = response.json().await.expect("Created mock must be JSON");
+    let id = created["id"].as_str().expect("Created mock must have an ID");
+    assert!(!id.is_empty());
+    id.to_string()
+}
+
 /// Test high-load HTTP scenario
 #[tokio::test]
 #[ignore] // Long-running test
 async fn test_production_high_load_http() {
-    let server = match MockForgeServer::builder()
+    let server = MockForgeServer::builder()
         .http_port(0)
+        .ws_port(0)
+        .grpc_port(0)
         .admin_port(0)
         .enable_admin(true)
         .health_timeout(Duration::from_secs(30))
         .build()
         .await
-    {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("Skipping test: Failed to start server: {}", e);
-            return;
-        }
-    };
+        .expect("Production simulation server must start");
 
     let http_port = server.http_port();
-    let admin_port = 9080;
     let client = Client::new();
 
     // Create multiple stubs
     for i in 0..100 {
-        let _ = client
-            .post(format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
-            .json(&json!({
-                "path": format!("/api/load-test/{}", i),
+        create_dynamic_mock(
+            &client,
+            http_port,
+            json!({
+                "path": format!("/api/load-test/{i}"),
                 "method": "GET",
-                "response": {
-                    "status": 200,
-                    "body": {"id": i, "message": "load test"}
-                }
-            }))
-            .send()
-            .await;
+                "status_code": 200,
+                "response": {"body": {"id": i, "message": "load test"}}
+            }),
+        )
+        .await;
     }
 
     // Make concurrent requests
@@ -59,14 +68,23 @@ async fn test_production_high_load_http() {
         let url = format!("http://localhost:{}/api/load-test/{}", http_port, i);
         handles.push(tokio::spawn(async move {
             for _ in 0..10 {
-                let _ = client.get(url.as_str()).send().await;
+                let response =
+                    client.get(url.as_str()).send().await.expect("Load request must complete");
+                assert_eq!(response.status(), reqwest::StatusCode::OK);
+                let body: serde_json::Value =
+                    response.json().await.expect("Load response must be JSON");
+                assert_eq!(body["id"], json!(i));
             }
         }));
     }
 
     // Wait for all requests to complete (with timeout)
-    let result = timeout(Duration::from_secs(30), futures_util::future::join_all(handles)).await;
-    assert!(result.is_ok(), "All requests should complete within timeout");
+    let results = timeout(Duration::from_secs(30), futures_util::future::join_all(handles))
+        .await
+        .expect("Load test must finish within its deadline");
+    for result in results {
+        result.expect("Every load worker must succeed");
+    }
 
     server.stop().expect("Failed to stop server");
 }
@@ -75,7 +93,7 @@ async fn test_production_high_load_http() {
 #[tokio::test]
 #[ignore] // Long-running test
 async fn test_production_multi_protocol_concurrent() {
-    let server = match MockForgeServer::builder()
+    let server = MockForgeServer::builder()
         .http_port(0)
         .ws_port(0)
         .grpc_port(0)
@@ -84,13 +102,7 @@ async fn test_production_multi_protocol_concurrent() {
         .health_timeout(Duration::from_secs(30))
         .build()
         .await
-    {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("Skipping test: Failed to start server: {}", e);
-            return;
-        }
-    };
+        .expect("Production simulation server must start");
 
     let http_port = server.http_port();
     let client = Client::new();
@@ -119,37 +131,30 @@ async fn test_production_multi_protocol_concurrent() {
 /// Test error recovery and resilience
 #[tokio::test]
 async fn test_production_error_recovery() {
-    let server = match MockForgeServer::builder()
+    let server = MockForgeServer::builder()
         .http_port(0)
+        .ws_port(0)
+        .grpc_port(0)
         .admin_port(0)
         .enable_admin(true)
         .health_timeout(Duration::from_secs(30))
         .build()
         .await
-    {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("Skipping test: Failed to start server: {}", e);
-            return;
-        }
-    };
+        .expect("Production simulation server must start");
 
     let http_port = server.http_port();
     let client = Client::new();
 
     // Create stub that returns errors
-    let _ = client
-        .post(format!("http://localhost:{}/__mockforge/api/mocks", 9080))
-        .json(&json!({
-            "path": "/api/error-test",
-            "method": "GET",
-            "response": {
-                "status": 500,
-                "body": {"error": "test error"}
-            }
-        }))
-        .send()
-        .await;
+    create_dynamic_mock(
+        &client,
+        http_port,
+        json!({
+            "path": "/api/error-test", "method": "GET", "status_code": 500,
+            "response": {"body": {"error": "test error"}}
+        }),
+    )
+    .await;
 
     // Make request and verify error handling
     let response = client
@@ -159,7 +164,7 @@ async fn test_production_error_recovery() {
         .expect("Request should complete");
 
     // Server should handle errors gracefully
-    assert!(response.status().is_client_error() || response.status().is_server_error());
+    assert_eq!(response.status(), reqwest::StatusCode::INTERNAL_SERVER_ERROR);
 
     // Verify server is still running
     let health_response = client
@@ -176,58 +181,49 @@ async fn test_production_error_recovery() {
 /// Test resource limits and cleanup
 #[tokio::test]
 async fn test_production_resource_cleanup() {
-    let server = match MockForgeServer::builder()
+    let server = MockForgeServer::builder()
         .http_port(0)
+        .ws_port(0)
+        .grpc_port(0)
         .admin_port(0)
         .enable_admin(true)
         .health_timeout(Duration::from_secs(30))
         .build()
         .await
-    {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("Skipping test: Failed to start server: {}", e);
-            return;
-        }
-    };
+        .expect("Production simulation server must start");
 
-    let admin_port = 9080;
+    let http_port = server.http_port();
     let client = Client::new();
-
-    // Create many stubs
+    let mut ids = Vec::new();
     for i in 0..50 {
-        let _ = client
-            .post(format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
-            .json(&json!({
-                "path": format!("/api/resource-test/{}", i),
-                "method": "GET",
-                "response": {"status": 200, "body": {"id": i}}
-            }))
-            .send()
-            .await;
+        ids.push(
+            create_dynamic_mock(
+                &client,
+                http_port,
+                json!({
+                    "path": format!("/api/resource-test/{i}"), "method": "GET",
+                    "response": {"body": {"id": i}}
+                }),
+            )
+            .await,
+        );
     }
-
-    // Delete all stubs
-    for i in 0..50 {
-        let _ = client
-            .delete(format!(
-                "http://localhost:{}/__mockforge/api/mocks/resource-test/{}",
-                admin_port, i
-            ))
+    for id in ids {
+        let response = client
+            .delete(format!("http://127.0.0.1:{http_port}/__mockforge/api/mocks/{id}"))
             .send()
-            .await;
+            .await
+            .expect("Delete request must complete");
+        assert_eq!(response.status(), reqwest::StatusCode::NO_CONTENT);
     }
-
-    // Verify cleanup
-    let list_response = client
-        .get(format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
+    let list = client
+        .get(format!("http://127.0.0.1:{http_port}/__mockforge/api/mocks"))
         .send()
-        .await;
-
-    // Server should handle cleanup gracefully
-    if let Ok(resp) = list_response {
-        assert!(resp.status().is_success() || resp.status().as_u16() == 404);
-    }
+        .await
+        .expect("Mock list must be reachable");
+    assert!(list.status().is_success());
+    let remaining: serde_json::Value = list.json().await.expect("Mock list must be JSON");
+    assert!(remaining["mocks"].as_array().expect("Mock list array").is_empty());
 
     server.stop().expect("Failed to stop server");
 }
@@ -235,20 +231,16 @@ async fn test_production_resource_cleanup() {
 /// Test deployment readiness verification
 #[tokio::test]
 async fn test_production_deployment_readiness() {
-    let server = match MockForgeServer::builder()
+    let server = MockForgeServer::builder()
         .http_port(0)
+        .ws_port(0)
+        .grpc_port(0)
         .admin_port(0)
         .enable_admin(true)
         .health_timeout(Duration::from_secs(30))
         .build()
         .await
-    {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("Skipping test: Failed to start server: {}", e);
-            return;
-        }
-    };
+        .expect("Production simulation server must start");
 
     let http_port = server.http_port();
     let client = Client::new();
