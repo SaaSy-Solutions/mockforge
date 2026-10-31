@@ -157,6 +157,31 @@
         "{\"policy_sha256\": \"5de45082645bb5f7236dc78f2c41fdd6ee4dcabe4c199be8abe34273f18bad7e\", \"workload_class\": \"targeted-test\", \"admission_class\": \"HEAVY_BUILD\", \"admission_slot\": 2, \"pressure_wait_seconds\": 0.0, \"classification_reason\": \"Unknown or unmeasured workload\", \"minimum_available_mib\": 16384, \"max_concurrent\": 4, \"reserved_checks\": 2, \"limits\": {\"memory_mib\": 12288, \"cpu_percent\": 200, \"jobs\": 2}, \"cargo_command\": \"test\", \"worktree\": \"a4bb4bcf8c7f7163\", \"admission_seconds\": 5.126, \"execution_seconds\": 271.221, \"exit_status\": 0}"
       ],
       "note": "113 extracted auth unit tests passed; HTTP integrations pending"
+    },
+    {
+      "name": "auth-http-integrations",
+      "tested_source": "8e83bd1f",
+      "original_log": "/tmp/mockforge-auth-http-tests-20261031.log",
+      "log_sha256": "3471ef433d32915ce59e5ed3788a7a13c7f1b814fd63a30b5575f5e7d7821843",
+      "result_lines": [
+        "    Finished `test` profile [unoptimized] target(s) in 7m 07s",
+        "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s",
+        "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s",
+        "{\"policy_sha256\": \"5de45082645bb5f7236dc78f2c41fdd6ee4dcabe4c199be8abe34273f18bad7e\", \"workload_class\": \"targeted-test\", \"admission_class\": \"HEAVY_BUILD\", \"admission_slot\": 1, \"pressure_wait_seconds\": 0.0, \"classification_reason\": \"Unknown or unmeasured workload\", \"minimum_available_mib\": 16384, \"max_concurrent\": 4, \"reserved_checks\": 2, \"limits\": {\"memory_mib\": 12288, \"cpu_percent\": 200, \"jobs\": 2}, \"cargo_command\": \"test\", \"worktree\": \"a4bb4bcf8c7f7163\", \"admission_seconds\": 0.0, \"execution_seconds\": 428.037, \"exit_status\": 0}"
+      ],
+      "note": "Before merge; two compatibility, actual credential privacy and two TCP risk-route tests"
+    },
+    {
+      "name": "desktop-final-freehosting",
+      "tested_source": "a1ee8779",
+      "original_log": "/tmp/mockforge-desktop-freehosting-check-20261031.log",
+      "log_sha256": "6b7d26e6901d3e1b48d71d7d6eaf19243cdd0a121556fb9d50c70467e03d5b0f",
+      "result_lines": [
+        "    Finished `dev` profile [unoptimized] target(s) in 1m 38s",
+        "{\"policy_sha256\": \"5de45082645bb5f7236dc78f2c41fdd6ee4dcabe4c199be8abe34273f18bad7e\", \"workload_class\": \"check\", \"admission_class\": \"STANDARD_CHECK\", \"admission_slot\": 2, \"pressure_wait_seconds\": 0.0, \"classification_reason\": \"Unmeasured Cargo compiler, target or profile override\", \"minimum_available_mib\": 16384, \"max_concurrent\": 4, \"reserved_checks\": 2, \"limits\": {\"memory_mib\": 12288, \"cpu_percent\": 200, \"jobs\": 2}, \"cargo_command\": \"check\", \"worktree\": \"f13168662f095a9d\", \"admission_seconds\": 0.0, \"execution_seconds\": 98.324, \"exit_status\": 0}"
+      ],
+      "note": "Before merge; includes extracted auth and Free hosting shared HTTP routing; final merged tree identical"
     }
   ]
 }
