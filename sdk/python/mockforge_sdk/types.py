@@ -1,6 +1,6 @@
 """Type definitions for MockForge SDK"""
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
 
 
@@ -19,6 +19,9 @@ class MockServerConfig:
 
     openapi_spec: Optional[str] = None
     """Path to OpenAPI specification"""
+
+    management_token: Optional[str] = None
+    """Control-plane credential (default: $MOCKFORGE_MANAGEMENT_TOKEN, else random)"""
 
 
 @dataclass
