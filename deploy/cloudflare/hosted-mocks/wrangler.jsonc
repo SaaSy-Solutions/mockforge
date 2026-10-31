@@ -1,0 +1,23 @@
+{
+	"$schema": "./node_modules/wrangler/config-schema.json",
+	"name": "mockforge-hosted-mocks",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-10-01",
+	"observability": { "enabled": true },
+	"routes": [{ "pattern": "mocks.mockforge.dev", "custom_domain": true }],
+	"vars": { "REGISTRY_URL": "https://api.mockforge.dev" },
+	// Secrets (wrangler secret put): REGISTRY_INTERNAL_TOKEN, EDGE_TOKEN
+	"containers": [
+		{
+			"class_name": "HostedMock",
+			"image": "./Dockerfile",
+			// 1/16 vCPU, 256 MiB: what a mock needs, billed only while running.
+			"instance_type": "lite",
+			"max_instances": 50
+		}
+	],
+	"durable_objects": {
+		"bindings": [{ "name": "HOSTED_MOCK", "class_name": "HostedMock" }]
+	},
+	"migrations": [{ "tag": "v1", "new_sqlite_classes": ["HostedMock"] }]
+}
