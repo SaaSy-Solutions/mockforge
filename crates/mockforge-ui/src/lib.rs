@@ -131,6 +131,62 @@ pub async fn start_admin_server_notify(
     overrides: Option<mockforge_core::SharedOverrides>,
     bound_port_tx: Option<tokio::sync::oneshot::Sender<u16>>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    start_admin_server_notify_with_authoring(
+        addr,
+        http_server_addr,
+        ws_server_addr,
+        grpc_server_addr,
+        graphql_server_addr,
+        api_enabled,
+        prometheus_url,
+        chaos_api_state,
+        latency_injector,
+        mockai,
+        continuum_config,
+        virtual_clock,
+        recorder,
+        federation,
+        vbr_engine,
+        resilience_api_state,
+        overrides,
+        bound_port_tx,
+        None,
+    )
+    .await
+}
+
+/// Start the admin server with explicit authoring defaults, independently of runtime AI.
+#[allow(clippy::too_many_arguments)]
+pub async fn start_admin_server_notify_with_authoring(
+    addr: SocketAddr,
+    http_server_addr: Option<SocketAddr>,
+    ws_server_addr: Option<SocketAddr>,
+    grpc_server_addr: Option<SocketAddr>,
+    graphql_server_addr: Option<SocketAddr>,
+    api_enabled: bool,
+    prometheus_url: String,
+    chaos_api_state: Option<std::sync::Arc<mockforge_chaos::api::ChaosApiState>>,
+    latency_injector: Option<
+        std::sync::Arc<tokio::sync::RwLock<mockforge_foundation::latency::LatencyInjector>>,
+    >,
+    mockai: Option<
+        std::sync::Arc<tokio::sync::RwLock<mockforge_core::intelligent_behavior::MockAI>>,
+    >,
+    continuum_config: Option<mockforge_core::ContinuumConfig>,
+    virtual_clock: Option<std::sync::Arc<mockforge_core::VirtualClock>>,
+    recorder: Option<std::sync::Arc<mockforge_recorder::Recorder>>,
+    federation: Option<std::sync::Arc<mockforge_federation::Federation>>,
+    vbr_engine: Option<std::sync::Arc<mockforge_vbr::VbrEngine>>,
+    resilience_api_state: Option<mockforge_chaos::resilience_api::ResilienceApiState>,
+    overrides: Option<mockforge_core::SharedOverrides>,
+    bound_port_tx: Option<tokio::sync::oneshot::Sender<u16>>,
+    authoring: Option<handlers::ai_studio::AiAuthoringDefaults>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    tracing::debug!(
+        has_authoring_defaults = authoring.is_some(),
+        runtime_mockai = mockai.is_some(),
+        "Starting admin authoring configuration"
+    );
     // Decide who may reach this server before anything is bound (#1019).
     // A non-loopback bind without credentials refuses to start.
     let auth_env = admin_access::AdminAuthEnv::from_process_env();
@@ -166,6 +222,9 @@ pub async fn start_admin_server_notify(
         vbr_engine,
         resilience_api_state,
     );
+    if let Some(authoring) = authoring {
+        app = app.layer(axum::Extension(authoring));
+    }
     if let Some(overrides) = overrides {
         app = merge_overrides_router(app, overrides);
     }

@@ -76,7 +76,7 @@ pub fn create_admin_router(
 
     let cors = admin_cors_layer(std::env::var("CORS_ALLOWED_ORIGINS").ok().as_deref());
 
-    let state = AdminState::new(
+    let mut state = AdminState::new(
         http_server_addr,
         ws_server_addr,
         grpc_server_addr,
@@ -92,6 +92,18 @@ pub fn create_admin_router(
         federation,
         vbr_engine,
     );
+
+    // Share one registry between workspace management and AI policy resolution.
+    let ai_workspace_registry = std::sync::Arc::new(tokio::sync::RwLock::new(
+        mockforge_core::MultiTenantWorkspaceRegistry::new(
+            mockforge_core::multi_tenant::MultiTenantConfig {
+                enabled: true,
+                default_workspace: "default".to_string(),
+                ..Default::default()
+            },
+        ),
+    ));
+    state.workspace_registry = Some(ai_workspace_registry.clone());
 
     // Start system monitoring background task to poll CPU, memory, and thread metrics
     let state_clone = state.clone();
@@ -541,17 +553,7 @@ pub fn create_admin_router(
     // Add workspace router with WorkspaceState
     {
         use crate::handlers::workspaces::WorkspaceState;
-        use mockforge_core::multi_tenant::{MultiTenantConfig, MultiTenantWorkspaceRegistry};
-        use std::sync::Arc;
-
-        // Create workspace registry
-        let mt_config = MultiTenantConfig {
-            enabled: true,
-            default_workspace: "default".to_string(),
-            ..Default::default()
-        };
-        let registry = MultiTenantWorkspaceRegistry::new(mt_config);
-        let workspace_state = WorkspaceState::new(Arc::new(tokio::sync::RwLock::new(registry)));
+        let workspace_state = WorkspaceState::new(ai_workspace_registry);
 
         // Create workspace router with state
         use crate::handlers::workspaces;
