@@ -1,5 +1,24 @@
 ## [Unreleased]
 
+### Added
+
+- **[Reality]** AsyncAPI 2/3 fidelity compares channel and directional operation contracts, including payload/header schemas, bindings, server/security references and traits. CLI and authenticated admin comparisons can check recorder message samples; the CLI also checks complete recorder-JSON fixture sets. Recorded MQTT, Kafka, AMQP and WebSocket messages use protocol-aware direction, exact JSON/text schema validation and explicit unverified outcomes when capture or format support is incomplete. Capture reads remain read-only and filter message events before the limit. (#849)
+- **[Reality]** The self-hosted Admin UI adds a Mock fidelity panel in Contract Diff for comparing mock/source OpenAPI definitions and optional Flight Recorder HTTP samples. Authenticated comparisons report per-route definition deltas, sample drift, and incomplete coverage, with bounded inputs and paginated details. (#849)
+- **[Reality]** `verify-mocks --fixtures` checks a complete HTTP replay fixture set against its source OpenAPI definition, reporting missing and removed routes, invalid statuses, and field-level JSON response errors. It can run alongside mock-definition and recorder checks. Loading is read-only and rejects empty, malformed, symlinked or excessive fixture inputs. (#849)
+- **[Reality]** `verify-mocks --mock-spec` compares the OpenAPI definition used by a mock with its current source specification. Structured reports include added, removed and changed endpoints, field-level JSON-pointer deltas, and per-route fidelity status. Definition checks can run alone or alongside captured upstream traffic and use the existing `--fail-on-drift` CI gate. (#849)
+
+### Fixed
+
+- **[Reality]** Fidelity checks preserve AsyncAPI server variables whose names match documentation keys. HTTP captures and replay fixtures now report unsupported or ambiguous response media as unverified, and `--fail-on-drift` fails those checks instead of accepting unchecked responses. Recorded verification and project status use schema 2 with an `unverified` outcome and continue reading schema-1 records. (#849)
+- **[Reality]** JSON-content request parameters are decoded and checked against their schemas instead of silently passing validation. JSON types stay distinct, local component references are resolved, malformed JSON fails even without a schema, and unsupported parameter media types fail explicitly. (#849)
+- **[Reality]** Request parameter `schema` references are checked in normal, style-aware and detailed validation instead of silently passing. Local aliases, nested and recursive components retain their schema context; referenced arrays and deep-object values are coerced by declared type, and integer parameters retain 64-bit precision. Unresolved/cyclic references fail explicitly, and parameter validation does not fetch external resources. (#849)
+- **[Reality]** Request conformance checks match HTTP header names without ASCII case differences in normal and detailed validation. A captured `x-trace` now satisfies a declared `X-Trace`; missing headers and invalid values still fail, while cookie, query and path parameter names remain case-sensitive. (#849)
+- **[Reality]** `verify-mocks` reads declared cookie parameters from recorded `Cookie` headers using serving's case and delimiter rules. Previously, even a valid captured cookie was treated as missing. Missing or invalid required cookies still report request drift. (#849)
+- **[Reality]** Fidelity checks treat omitted or empty root server lists as the OpenAPI default `/`, preventing false drift between equivalent Swagger/OpenAPI definitions while retaining real server changes and route overrides. Recorded CLI query parameters now use the serving parser, including form spaces (`+`), encoded literal plus signs and empty values. (#849)
+- **[Reality]** `verify-mocks` enforces captured request contracts even when server validation is set to `off` or `warn`, route overrides disable checking, or shadow mode is enabled. The offline verifier uses an isolated strict registry policy; serving retains its configured behavior. (#849)
+- **[Reality]** Fidelity checks prefer literal path segments over parameters, matching HTTP routing. Previously, registry iteration order could select a parameter route's schema for a literal endpoint, randomly passing invalid responses or failing valid ones. (#849)
+- **[Reality]** `verify-mocks --fail-on-drift` now fails on unknown endpoints, missing responses and undeclared statuses, and validates range/default/referenced response schemas. Empty captures still succeed (and `--record` stores a `no_traffic` verification), databases open read-only, and the positive `--limit` applies to recent HTTP records in SQL rather than silently stopping at 100 or being displaced by other protocols. (#849)
+
 ## [0.3.238] - 2026-10-30
 
 ### Added
@@ -23,6 +42,7 @@
 - **[UI]** Marketplace navigation and hosted workspace/token controls use the shared Tailwind/CVA controls and Lucide icons instead of MUI compatibility components. Marketplace routes expose native links and current-page state, workspace selection keeps explicit assignment, and control-token guidance covers management requests. (#722)
 
 ### Fixed
+
 
 - **[DevX]** Discussion exports work without GitHub CLI; CVE tips preserve partial feed results and check CISA KEV; unfinished CVE templates are rejected before tests run. (#79)
 
