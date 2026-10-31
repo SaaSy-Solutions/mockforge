@@ -226,6 +226,7 @@ prost = "0.14"
 opentelemetry-proto = { version = "0.32", default-features = false, features = ["gen-tonic", "trace"] }
 
 [dev-dependencies]
+mockforge-registry-core = { path = "../mockforge-registry-core", default-features = false, features = ["sqlite"] }
 mockforge-test-runner = { path = "../mockforge-test-runner" }
 tokio-test = "0.4"
 reqwest = { workspace = true }
