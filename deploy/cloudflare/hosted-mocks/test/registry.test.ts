@@ -89,6 +89,22 @@ describe("UsageMeter", () => {
 		expect(fetchMock).toHaveBeenCalledOnce();
 		expect(JSON.parse(String(fetchMock.mock.calls[0][1].body))).toMatchObject({ requests: 10, egress_bytes: 100 });
 	});
+	it("replays the committed batch when clearing its durable receipt fails", async () => {
+		const store = storage();
+		const meter = new UsageMeter(store);
+		await meter.record(ok());
+		const bodies: string[] = [];
+		vi.stubGlobal("fetch", vi.fn(async (_url: string, init: RequestInit) => {
+			bodies.push(String(init.body));
+			if (bodies.length === 1) vi.spyOn(store, "put").mockRejectedValueOnce(new Error("acknowledgement storage failed"));
+			return Response.json({ blocked: false });
+		}));
+		await meter.flush(env, "dep-1");
+		await new UsageMeter(store).flush(env, "dep-1");
+		expect(bodies).toHaveLength(2);
+		expect(bodies[1]).toBe(bodies[0]);
+	});
+
 	it("does not send a batch before durable storage acknowledges it", async () => {
 		const store = storage();
 		const meter = new UsageMeter(store);
