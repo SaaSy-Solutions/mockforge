@@ -4,6 +4,16 @@
 
 [Reality] - Everything that makes mocks feel like a real, evolving backend
 
+## Keep mocks aligned with your API
+
+Realistic data helps most when a mock still matches the API it represents.
+The unreleased `verify-mocks --mock-spec` comparison reports changed routes and
+field-level contract differences between a mock's OpenAPI definition and its
+current source. Add a fresh recorder capture to check observed upstream traffic,
+and use `--fail-on-drift` to make differences visible in CI.
+
+Start with the [Mock Fidelity and Drift Detection guide](../user-guide/mock-fidelity.md).
+
 ## Start Here If...
 
 You care about **realism**. You want mocks that feel indistinguishable from production backends, with realistic data, stateful behavior, and production-like network conditions.
@@ -285,4 +295,3 @@ chaos:
 ---
 
 **Ready to dive deeper?** Continue to the [Reality Continuum Guide](../../docs/REALITY_CONTINUUM.md) or explore [all Reality features](../../docs/PILLARS.md#reality--everything-that-makes-mocks-feel-like-a-real-evolving-backend).
-

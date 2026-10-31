@@ -64,6 +64,10 @@ The plugin automatically detects MockForge server at `http://localhost:3000`. To
 1. Go to Settings/Preferences → Tools → MockForge
 2. Set the server URL
 
+The server's control plane requires a management token. The plugin reads it from the
+`MOCKFORGE_MANAGEMENT_TOKEN` environment variable of the IDE process and sends it as
+`X-MockForge-Management-Token`.
+
 ## Building
 
 ```bash

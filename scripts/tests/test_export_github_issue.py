@@ -3,6 +3,8 @@
 import copy
 import importlib.util
 import json
+import io
+import urllib.error
 import subprocess
 import tempfile
 import unittest
@@ -87,6 +89,43 @@ class ExportTests(unittest.TestCase):
             ],
         )
         self.assertNotIn("shell", run.call_args.kwargs)
+
+    def test_missing_gh_exports_all_pages_over_http(self):
+        data = snapshot(205)
+        responses = [
+            io.BytesIO(json.dumps(value).encode())
+            for value in (
+                data["issue"],
+                data["comments"][:100],
+                data["comments"][100:200],
+                data["comments"][200:],
+            )
+        ]
+        with (
+            patch.object(MODULE.subprocess, "run", side_effect=FileNotFoundError),
+            patch.object(
+                MODULE.urllib.request, "urlopen", side_effect=responses
+            ) as get,
+            patch.dict(MODULE.os.environ, {}, clear=True),
+        ):
+            fetched = MODULE.fetch_snapshot(data["repository"], 79)
+        self.assertEqual(
+            len(MODULE.validate_snapshot(fetched, data["repository"], 79)), 205
+        )
+        self.assertTrue(get.call_args.args[0].full_url.endswith("&page=3"))
+        self.assertIsNone(get.call_args.args[0].get_header("Authorization"))
+
+    def test_http_rate_limit_has_actionable_error_without_token(self):
+        error = urllib.error.HTTPError(
+            "https://api.github.com", 403, "secret", {}, None
+        )
+        with (
+            patch.object(MODULE.urllib.request, "urlopen", side_effect=error),
+            patch.dict(MODULE.os.environ, {"GH_TOKEN": "secret"}),
+        ):
+            with self.assertRaisesRegex(ValueError, "HTTP 403.*GH_TOKEN") as raised:
+                MODULE.github_http_json("repos/test/repo/issues/1")
+        self.assertNotIn("secret", str(raised.exception))
 
     def test_all_bodies_are_preserved_and_html_never_runs_comment_markup(self):
         data = snapshot()
