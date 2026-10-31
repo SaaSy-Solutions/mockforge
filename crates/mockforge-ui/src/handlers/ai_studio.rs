@@ -237,13 +237,21 @@ pub struct DebugTestRequest {
 ///
 /// POST /api/v1/ai-studio/debug-test
 pub async fn debug_test(
+    State(state): State<AdminState>,
+    defaults: Option<Extension<AiAuthoringDefaults>>,
     Json(request): Json<DebugTestRequest>,
 ) -> Result<ResponseJson<ApiResponse<DebugResponse>>, StatusCode> {
     if request.test_logs.trim().is_empty() {
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    let analyzer = DebugAnalyzer::new();
+    let settings = policy::resolve(
+        &state,
+        request.workspace_id.as_deref(),
+        defaults.as_ref().map(|Extension(defaults)| defaults),
+    )
+    .await?;
+    let analyzer = DebugAnalyzer::with_config(settings.behavior);
 
     let debug_request = DebugRequest {
         test_logs: request.test_logs,
@@ -280,13 +288,21 @@ pub struct DebugWithContextRequest {
 ///
 /// POST /api/v1/ai-studio/debug/analyze-with-context
 pub async fn debug_analyze_with_context(
+    State(state): State<AdminState>,
+    defaults: Option<Extension<AiAuthoringDefaults>>,
     Json(request): Json<DebugWithContextRequest>,
 ) -> Result<ResponseJson<ApiResponse<DebugResponse>>, StatusCode> {
     if request.test_logs.trim().is_empty() {
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    let analyzer = DebugAnalyzer::new();
+    let settings = policy::resolve(
+        &state,
+        request.workspace_id.as_deref(),
+        defaults.as_ref().map(|Extension(defaults)| defaults),
+    )
+    .await?;
+    let analyzer = DebugAnalyzer::with_config(settings.behavior);
 
     // Create debug context integrator (optional - would need subsystem references in production)
     // For now, pass None as we don't have direct access to RealityEngine, etc. here
