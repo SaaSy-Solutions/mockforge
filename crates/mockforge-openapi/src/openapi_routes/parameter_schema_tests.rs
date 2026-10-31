@@ -14,20 +14,29 @@ fn fixture(schema: Value, schemas: Value) -> (OpenApiSpec, openapiv3::ParameterD
 
 fn check(schema: Value, schemas: Value, value: Option<Value>, expected_valid: bool) {
     let (spec, parameter) = fixture(schema, schemas);
+    check_parameter(&spec, &parameter, value, expected_valid);
+}
+
+fn check_parameter(
+    spec: &OpenApiSpec,
+    parameter: &openapiv3::ParameterData,
+    value: Option<Value>,
+    expected_valid: bool,
+) {
     let values = value.clone().map(|v| json!({"value":v})).unwrap_or(json!({}));
     let map = values.as_object().unwrap();
     let mut errors = Vec::new();
     let mut details = Vec::new();
-    validate_parameter(&parameter, map, "query", true, &mut errors, &mut details, &spec);
+    validate_parameter(parameter, map, "query", true, &mut errors, &mut details, spec);
     assert_eq!(errors.is_empty(), expected_valid, "normal: {errors:?}");
     let mut detailed = Vec::new();
-    validate_parameter_detailed(&parameter, map, "query", "query parameter", &mut detailed, &spec);
+    validate_parameter_detailed(parameter, map, "query", "query parameter", &mut detailed, spec);
     assert_eq!(detailed.is_empty(), expected_valid, "detailed: {detailed:?}");
     errors.clear();
     details.clear();
     detailed.clear();
     validate_parameter_with_deep_object(
-        &parameter,
+        parameter,
         map,
         "query",
         value.clone(),
@@ -35,18 +44,18 @@ fn check(schema: Value, schemas: Value, value: Option<Value>, expected_valid: bo
         true,
         &mut errors,
         &mut details,
-        &spec,
+        spec,
     );
     assert_eq!(errors.is_empty(), expected_valid, "style: {errors:?}");
     validate_parameter_detailed_with_deep(
-        &parameter,
+        parameter,
         map,
         "query",
         "query parameter",
         value,
         &mut detailed,
         Some("form"),
-        &spec,
+        spec,
     );
     assert_eq!(detailed.is_empty(), expected_valid, "detailed style: {detailed:?}");
 }
@@ -221,4 +230,97 @@ fn referenced_integer_parameters_keep_precision_above_float_integer_range() {
         Some(json!("9007199254740992")),
         false,
     );
+}
+
+fn check_content(
+    media: &str,
+    schema: Option<Value>,
+    schemas: Value,
+    value: Option<Value>,
+    valid: bool,
+) {
+    let (spec, mut parameter) = fixture(json!({}), schemas);
+    let declaration = match schema {
+        Some(schema) => json!({media:{"schema":schema}}),
+        None => json!({media:{}}),
+    };
+    parameter.format =
+        openapiv3::ParameterSchemaOrContent::Content(serde_json::from_value(declaration).unwrap());
+    check_parameter(&spec, &parameter, value, valid);
+}
+
+#[test]
+fn json_content_preserves_json_types_and_rejects_malformed_values() {
+    for (text, valid) in [
+        ("2", true),
+        ("0", false),
+        ("wrong", false),
+        ("\"2\"", false),
+        ("null", false),
+        ("2 trailing", false),
+    ] {
+        check_content(
+            "application/json",
+            Some(json!({"type":"integer","minimum":1})),
+            json!({}),
+            Some(json!(text)),
+            valid,
+        );
+    }
+    check_content(
+        "application/json",
+        None,
+        json!({}),
+        Some(json!("{\"anything\":[1,true,null]}")),
+        true,
+    );
+    check_content("application/json", None, json!({}), Some(json!("wrong")), false);
+    check_content(
+        "application/json",
+        Some(json!({"type":"string"})),
+        json!({}),
+        Some(json!("\"2\"")),
+        true,
+    );
+    check_content(
+        "application/json",
+        Some(json!({"type":"string"})),
+        json!({}),
+        Some(json!("2")),
+        false,
+    );
+}
+
+#[test]
+fn json_content_resolves_root_aliases_and_nested_components_without_coercion() {
+    let schemas = json!({"Count":{"type":"integer","minimum":1},"Object":{"type":"object","required":["count"],"properties":{"count":{"$ref":"#/components/schemas/Count"}}},"Alias":{"$ref":"#/components/schemas/Object"}});
+    for media in ["application/json", "application/vnd.example+json"] {
+        for (text, valid) in [
+            ("{\"count\":2}", true),
+            ("{\"count\":\"2\"}", false),
+            ("{}", false),
+        ] {
+            check_content(
+                media,
+                Some(json!({"$ref":"#/components/schemas/Alias"})),
+                schemas.clone(),
+                Some(json!(text)),
+                valid,
+            );
+        }
+    }
+    check_content(
+        "application/json",
+        Some(json!({"$ref":"https://example.invalid/schema"})),
+        json!({}),
+        None,
+        false,
+    );
+}
+
+#[test]
+fn unsupported_parameter_media_cannot_silently_pass() {
+    for value in [None, Some(json!("text"))] {
+        check_content("text/plain", Some(json!({"type":"string"})), json!({}), value, false);
+    }
 }

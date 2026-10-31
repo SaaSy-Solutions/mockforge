@@ -3105,10 +3105,14 @@ fn validate_parameter(
     };
     match parameter_value(params_map, &parameter_data.name, prefix) {
         Some(value) => {
-            if let Some(schema) = schema {
-                if let Err((_, message)) = parameter_schema::validate(value, schema, spec, None) {
-                    parameter_failure(parameter_data, prefix, message, aggregate, errors, details);
-                }
+            if let Err((_, message)) = parameter_schema::validate_parameter_value(
+                value,
+                schema,
+                parameter_data,
+                spec,
+                None,
+            ) {
+                parameter_failure(parameter_data, prefix, message, aggregate, errors, details);
             }
         }
         None if parameter_data.required => {
@@ -3143,10 +3147,14 @@ fn validate_parameter_with_deep_object(
         .or_else(|| parameter_value(params_map, &parameter_data.name, prefix))
     {
         Some(value) => {
-            if let Some(schema) = schema {
-                if let Err((_, message)) = parameter_schema::validate(value, schema, spec, style) {
-                    parameter_failure(parameter_data, prefix, message, aggregate, errors, details);
-                }
+            if let Err((_, message)) = parameter_schema::validate_parameter_value(
+                value,
+                schema,
+                parameter_data,
+                spec,
+                style,
+            ) {
+                parameter_failure(parameter_data, prefix, message, aggregate, errors, details);
             }
         }
         None if parameter_data.required => {
@@ -3176,11 +3184,14 @@ fn validate_parameter_detailed(
     };
     match parameter_value(params_map, &parameter_data.name, location) {
         Some(value) => {
-            if let Some(schema) = schema {
-                if let Err((found, message)) = parameter_schema::validate(value, schema, spec, None)
-                {
-                    field_errors.push(json!({"path":path,"expected":"valid according to schema","found":found,"message":message}));
-                }
+            if let Err((found, message)) = parameter_schema::validate_parameter_value(
+                value,
+                schema,
+                parameter_data,
+                spec,
+                None,
+            ) {
+                field_errors.push(json!({"path":path,"expected":"valid according to schema","found":found,"message":message}));
             }
         }
         None if parameter_data.required => {
@@ -3214,12 +3225,14 @@ fn validate_parameter_detailed_with_deep(
         .or_else(|| parameter_value(params_map, &parameter_data.name, location))
     {
         Some(value) => {
-            if let Some(schema) = schema {
-                if let Err((found, message)) =
-                    parameter_schema::validate(value, schema, spec, style)
-                {
-                    field_errors.push(json!({"path":path,"expected":"valid according to schema","found":found,"message":message}));
-                }
+            if let Err((found, message)) = parameter_schema::validate_parameter_value(
+                value,
+                schema,
+                parameter_data,
+                spec,
+                style,
+            ) {
+                field_errors.push(json!({"path":path,"expected":"valid according to schema","found":found,"message":message}));
             }
         }
         None if parameter_data.required => {
