@@ -217,3 +217,44 @@ async fn fixture_report_exposes_unverified_media_without_counting_proven_drift()
     assert_eq!(report["findings"][0]["kind"], "fixture-unverified");
     assert_eq!(report["fixtures"]["routes"][0]["status"], "not-verified");
 }
+
+#[tokio::test]
+async fn recorded_response_media_is_not_inferred_from_an_unrelated_json_schema() {
+    let dir = tempfile::tempdir().unwrap();
+    let spec = dir.path().join("api.json");
+    let capture = dir.path().join("capture.sqlite");
+    let output = dir.path().join("report.json");
+    std::fs::write(&spec, json!({"openapi":"3.0.3","info":{"title":"media","version":"1"},
+        "paths":{"/items":{"get":{"responses":{"200":{"description":"ok","content":{
+            "application/json":{"schema":{"type":"integer"}},"text/plain":{"schema":{"type":"string"}}
+        }}}}}}}).to_string()).unwrap();
+    let db = mockforge_recorder::RecorderDatabase::new(&capture).await.unwrap();
+    let request = serde_json::from_value(json!({"id":"sample", "protocol":"Http",
+        "timestamp":"2026-10-20T00:00:00Z", "method":"GET", "path":"/items",
+        "headers":"{}", "body_encoding":"utf8"}))
+    .unwrap();
+    db.insert_request(&request).await.unwrap();
+    let response = serde_json::from_value(json!({"request_id":"sample", "status_code":200,
+        "timestamp":"2026-10-20T00:00:00Z", "headers":r#"{"Content-Type":"text/plain"}"#,
+        "body":"1", "body_encoding":"utf8", "size_bytes":1}))
+    .unwrap();
+    db.insert_response(&response).await.unwrap();
+    drop(db);
+    handle_verify_mocks_command(VerifyMocksArgs {
+        spec,
+        capture_db: Some(capture),
+        mock_spec: None,
+        fixtures: None,
+        limit: 500,
+        fail_on_drift: false,
+        output: Some(output.clone()),
+        record: false,
+    })
+    .await
+    .unwrap();
+    let report: Value = serde_json::from_slice(&std::fs::read(output).unwrap()).unwrap();
+    assert_eq!(report["exchanges_checked"], 1);
+    assert_eq!(report["endpoints_with_drift"], 0);
+    assert_eq!(report["endpoints_unverified"], 1);
+    assert_eq!(report["findings"][0]["kind"], "response-unverified");
+}
