@@ -39,6 +39,21 @@ pub struct AiStudioConfig {
     pub features: FeatureConfig,
 }
 
+/// Persisted authoring policy for a local/self-hosted workspace.
+/// Provider/model and credentials remain server configuration; workspace policy
+/// can select a sampling seed and snapshot behavior without storing API keys.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct AiGenerationConfig {
+    /// Override the server sampling seed for this workspace.
+    #[serde(default)]
+    pub seed: Option<i64>,
+    /// Format, destination, provenance and auto-freeze settings.
+    #[serde(default)]
+    pub deterministic_mode: DeterministicModeConfig,
+}
+
 /// Freeze mode for deterministic artifacts
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
