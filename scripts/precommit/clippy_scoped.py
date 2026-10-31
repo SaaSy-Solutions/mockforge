@@ -18,6 +18,7 @@ Fallback to a full `cargo clippy --workspace` happens when:
 Matches the policy in `.claude/rules/self-verification.md`:
 "Do NOT run cargo clippy --workspace unless changes span 10+ crates".
 """
+
 from __future__ import annotations
 
 import subprocess
@@ -27,7 +28,7 @@ from pathlib import Path
 WORKSPACE_THRESHOLD = 10
 
 WORKSPACE_CLIPPY_ARGS = [
-    "cargo",
+    str(Path(__file__).resolve().parents[1] / "dev" / "cargo"),
     "clippy",
     "--all-targets",
     "--all-features",
@@ -59,7 +60,10 @@ def main(argv: list[str]) -> int:
 
     for f in files:
         if str(f) in {"Cargo.toml", "Cargo.lock"}:
-            print(f"clippy: workspace-root file {f} changed → full workspace run", flush=True)
+            print(
+                f"clippy: workspace-root file {f} changed → full workspace run",
+                flush=True,
+            )
             return subprocess.call(WORKSPACE_CLIPPY_ARGS)
 
     affected: set[str] = set()
@@ -85,10 +89,12 @@ def main(argv: list[str]) -> int:
         )
         return subprocess.call(WORKSPACE_CLIPPY_ARGS)
 
-    print(f"clippy: scoping to {len(affected)} crate(s): {sorted(affected)}", flush=True)
+    print(
+        f"clippy: scoping to {len(affected)} crate(s): {sorted(affected)}", flush=True
+    )
     for crate in sorted(affected):
         cmd = [
-            "cargo",
+            str(Path(__file__).resolve().parents[1] / "dev" / "cargo"),
             "clippy",
             "-p",
             crate,
