@@ -29,10 +29,11 @@ async fn downgraded_fly_stop_retries_without_releasing_capacity_before_confirmat
     let deployment = HostedMock::find_by_id(&pool, id).await.unwrap().unwrap();
     let confirmed = Arc::new(AtomicBool::new(false));
     let stops = Arc::new(AtomicUsize::new(0));
+    let stopped = Arc::new(AtomicBool::new(false));
     let path = format!("/v1/apps/{}/machines/owned-machine", deployment.fly_app_name());
-    let router = Router::new().route(&path, get(|| async { Json(json!({"id":"owned-machine","name":"fixture","state":"started","instance_id":"owned-instance","region":"iad","image_ref":null,"config":{"image":"fixture","env":{},"services":[]}})) }))
+    let router = Router::new().route(&path, get({ let stopped=stopped.clone(); move || { let stopped=stopped.clone(); async move { Json(json!({"id":"owned-machine","name":"fixture","state":if stopped.load(Ordering::SeqCst) {"stopped"} else {"started"},"instance_id":"owned-instance","region":"iad","image_ref":null,"config":{"image":"fixture","env":{},"services":[]}})) }}}))
         .route(&format!("{path}/stop"), post({let stops=stops.clone(); move || {let stops=stops.clone(); async move {stops.fetch_add(1,Ordering::SeqCst); StatusCode::OK}}}))
-        .route(&format!("{path}/wait"), get({let confirmed=confirmed.clone(); move || {let confirmed=confirmed.clone(); async move {if confirmed.load(Ordering::SeqCst) {(StatusCode::OK,Json(json!({"ok":true})))} else {(StatusCode::SERVICE_UNAVAILABLE,Json(json!({"ok":false})))}}}}));
+        .route(&format!("{path}/wait"), get({let confirmed=confirmed.clone(); let stopped=stopped.clone(); move || {let confirmed=confirmed.clone(); let stopped=stopped.clone(); async move {if confirmed.load(Ordering::SeqCst) {stopped.store(true,Ordering::SeqCst); (StatusCode::OK,Json(json!({"ok":true})))} else {(StatusCode::SERVICE_UNAVAILABLE,Json(json!({"ok":false})))}}}}));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let url = format!("http://{}", listener.local_addr().unwrap());
     let task = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
@@ -50,6 +51,12 @@ async fn downgraded_fly_stop_retries_without_releasing_capacity_before_confirmat
         .execute(&pool)
         .await
         .unwrap();
+    // Owners can change display status; that must not hide a running backend.
+    sqlx::query("UPDATE hosted_mocks SET status='stopped' WHERE id=$1")
+        .bind(id)
+        .execute(&pool)
+        .await
+        .unwrap();
     assert!(orchestrator.stop_downgraded_backend(&deployment).await.is_err());
     let before: (String, bool) =
         sqlx::query_as("SELECT status,capacity_reserved FROM hosted_mocks WHERE id=$1")
@@ -57,7 +64,7 @@ async fn downgraded_fly_stop_retries_without_releasing_capacity_before_confirmat
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert_eq!(before, ("active".into(), true));
+    assert_eq!(before, ("stopped".into(), true));
     confirmed.store(true, Ordering::SeqCst);
     orchestrator.stop_downgraded_backend(&deployment).await.unwrap();
     assert_eq!(HostedMock::find_by_id(&pool, id).await.unwrap().unwrap().status, "stopped");
@@ -66,6 +73,18 @@ async fn downgraded_fly_stop_retries_without_releasing_capacity_before_confirmat
         stops.load(Ordering::SeqCst),
         2,
         "stopped deployment must not repeat provider calls"
+    );
+    sqlx::query("UPDATE hosted_mocks SET capacity_reserved=FALSE WHERE id=$1")
+        .bind(id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    stopped.store(false, Ordering::SeqCst);
+    orchestrator.stop_downgraded_backend(&deployment).await.unwrap();
+    assert_eq!(
+        stops.load(Ordering::SeqCst),
+        2,
+        "released capacity must not authorize further provider operations"
     );
     task.abort();
     sqlx::query("DELETE FROM organizations WHERE id=$1")

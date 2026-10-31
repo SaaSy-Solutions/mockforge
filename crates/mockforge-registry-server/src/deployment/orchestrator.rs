@@ -148,7 +148,7 @@ impl DeploymentOrchestrator {
     /// Stop externally reachable paid backends after a subscription downgrade.
     /// Failed confirmations retain status/capacity and are retried next poll.
     async fn reconcile_downgraded_backends(&self) -> Result<()> {
-        let deployments = sqlx::query_as::<_, HostedMock>("SELECT * FROM hosted_mocks WHERE deleted_at IS NULL AND deletion_requested_at IS NULL AND status IN ('active','failed','deploying') AND metadata_json->>'hosting_backend' IS DISTINCT FROM 'multitenant' ORDER BY updated_at ASC")
+        let deployments = sqlx::query_as::<_, HostedMock>("SELECT * FROM hosted_mocks WHERE deleted_at IS NULL AND deletion_requested_at IS NULL AND capacity_reserved AND metadata_json->>'hosting_backend' IS DISTINCT FROM 'multitenant' ORDER BY updated_at ASC")
             .fetch_all(self.db.as_ref()).await?;
         for deployment in deployments {
             if let Err(error) = self.stop_downgraded_backend(&deployment).await {
@@ -170,9 +170,15 @@ impl DeploymentOrchestrator {
             return Ok(());
         };
         lifecycle.ensure_not_deleting().await?;
-        if super::local_runtime::is_local(&current)
-            || matches!(current.status(), DeploymentStatus::Stopped)
-        {
+        let reserved: bool = sqlx::query_scalar(
+            "SELECT capacity_reserved FROM hosted_mocks WHERE id=$1 AND org_id=$2",
+        )
+        .bind(current.id)
+        .bind(current.org_id)
+        .fetch_one(pool)
+        .await?;
+        // Display status is owner-editable and cannot prove provider shutdown.
+        if !reserved || super::local_runtime::is_local(&current) {
             return Ok(());
         }
         let org = crate::models::Organization::find_by_id(pool, current.org_id)
