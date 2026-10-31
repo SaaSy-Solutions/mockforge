@@ -53,7 +53,7 @@ pub(super) fn operations(
             );
             for inherited in ["security", "servers"] {
                 if !contract.contains_key(inherited) {
-                    if let Some(value) = item.get(inherited).or_else(|| document.get(inherited)) {
+                    if let Some(value) = inherited_value(&item, document, inherited) {
                         contract.insert(
                             inherited.into(),
                             projection.value(
@@ -68,6 +68,11 @@ pub(super) fn operations(
                         );
                     }
                 }
+            }
+            // Canonical absence represents the root URL default. Keeping it absent
+            // also preserves existing whole-operation added/removed report values.
+            if contract.get("servers") == Some(&serde_json::json!([{"url":"/"}])) {
+                contract.remove("servers");
             }
             if let Some(requirements) = contract.get_mut("security").and_then(Value::as_array_mut) {
                 let mut schemes = Map::new();
@@ -97,4 +102,14 @@ pub(super) fn operations(
         }
     }
     Ok(out)
+}
+
+/// Ignore an empty root server list, whose OpenAPI meaning is the default `/`.
+/// Keep path/operation overrides intact, including explicit empty arrays.
+fn inherited_value<'a>(item: &'a Value, document: &'a Value, key: &str) -> Option<&'a Value> {
+    item.get(key).or_else(|| {
+        document
+            .get(key)
+            .filter(|value| key != "servers" || !value.as_array().is_some_and(Vec::is_empty))
+    })
 }

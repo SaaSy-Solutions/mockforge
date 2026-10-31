@@ -599,11 +599,11 @@ a spec's own `/health` route cannot shadow, then reads uptime from
 probe uses the declared port; a server started with `--http-port` elsewhere is
 not found. `0.0.0.0` and `::` are probed on `127.0.0.1`.
 
-The JSON document (`schema_version` 1):
+The JSON document (`schema_version` 2):
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "version": "0.3.237",
   "dir": "/abs/project",
   "config": { "path": "/abs/project/mockforge.yaml", "error": null },
@@ -615,10 +615,10 @@ The JSON document (`schema_version` 1):
     "uptime_seconds": 12, "error": null
   },
   "verification": {
-    "schema_version": 1, "recorded_at": "2026-10-26T10:30:43Z",
+    "schema_version": 2, "recorded_at": "2026-10-26T10:30:43Z",
     "mockforge_version": "0.3.237", "spec": "examples/openapi.json",
     "capture_db": "captures.db", "outcome": "faithful",
-    "exchanges_checked": 8, "endpoints_with_drift": 0,
+    "exchanges_checked": 8, "endpoints_with_drift": 0, "endpoints_unverified": 0,
     "unmatched_real_paths": 4, "findings": []
   }
 }
@@ -627,8 +627,12 @@ The JSON document (`schema_version` 1):
 `config` is null when no configuration file exists; `config.error` names why an
 existing one cannot be loaded, and then `http`, `admin` and `server` are null.
 `server` is null when HTTP is disabled. `verification.outcome` is `faithful`,
-`drift` or `no_traffic`. Fields may be added within schema 1; a change that
-breaks readers raises `schema_version`.
+`drift`, `unverified` or `no_traffic`. `unverified` means response media could
+not be checked, without a proven contract violation. Proven drift takes
+precedence when a run contains both. Status and newly recorded verifications
+use schema 2 for this additional outcome; schema-1 verification files remain
+readable with `endpoints_unverified` defaulting to zero. Fields may be added
+within a schema; a change that breaks readers raises `schema_version`.
 
 Capture databases are opened read-only and must already exist. An empty HTTP capture is not drift: the command reports that no traffic was recorded and exits successfully, and with `--record` it stores a `no_traffic` verification. Unknown endpoints, missing responses, undeclared statuses and JSON-schema violations count as drift. Exact status declarations take precedence over status ranges and the default response; local response references are resolved before schema validation.
 
