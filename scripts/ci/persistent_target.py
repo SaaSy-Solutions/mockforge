@@ -15,6 +15,11 @@ on headroom; the next build then starts cold instead of filling the shared disk.
 The `release` action runs at the end of every job (even after failure) and
 drops the directory when the shared disk is short, so this repository's cache
 gives way before the host runs out of space.
+
+"Short" means less free space than a cold build needs. Several runners share
+one host disk, and a cold workspace build on a sibling runner writes well over
+30 GiB: with a 30 GiB threshold, run 41271675577 kept a 23 GiB target at
+30.9 GiB free and the next cold build on the sibling runner hit ENOSPC.
 """
 import argparse
 import os
@@ -82,7 +87,8 @@ def main() -> int:
     parser.add_argument("action", nargs="?", choices=("prepare", "release"), default="prepare")
     parser.add_argument("--runner-name", default=os.environ.get("RUNNER_NAME", ""))
     parser.add_argument("--max-gib", type=int, default=40)
-    parser.add_argument("--min-free-gib", type=int, default=30)
+    # Headroom for a cold build on a sibling runner sharing the disk.
+    parser.add_argument("--min-free-gib", type=int, default=50)
     args = parser.parse_args()
     target = target_for(args.runner_name)
     if args.action == "release":
