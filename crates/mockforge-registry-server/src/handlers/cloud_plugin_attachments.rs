@@ -510,7 +510,7 @@ pub async fn get_plugin_usage(
     let by_plugin: Vec<PluginUsageEntry> = rows.into_iter().map(into_usage_entry).collect();
     let deployment_total_invoke_ms: i64 = by_plugin.iter().map(|p| p.invoke_ms).sum();
 
-    let limits = &org_ctx.org.limits_json;
+    let limits = org_ctx.org.limits();
     let plan_limit_invoke_ms_per_month = limits
         .get("max_plugin_invoke_ms_per_month")
         .and_then(|v| v.as_i64())
@@ -667,7 +667,7 @@ async fn enforce_plan_limit(
     deployment_id: Uuid,
     plugin_id: Uuid,
 ) -> ApiResult<()> {
-    let limits = &org_ctx.org.limits_json;
+    let limits = org_ctx.org.limits();
     // -1 = unlimited (per existing convention in hosted_mocks).
     // None or 0 = feature disabled — explicit upgrade required.
     let max = limits.get("max_plugins_per_mock").and_then(|v| v.as_i64()).unwrap_or(0);

@@ -98,8 +98,11 @@ async fn check_org(
     // Effective limits: plan defaults + custom quota override (matches
     // handlers::usage::effective_limits semantics, but inlined to avoid taking
     // an ApiError dependency in worker code).
-    let mut limits = org.limits_json.clone();
-    if let Ok(Some(setting)) = state.store.get_org_setting(org.id, "quota").await {
+    // A billing-exempt org's limits are unlimited, so no threshold fires.
+    let mut limits = org.limits();
+    if org.billing_exempt {
+        // Quota overrides never re-impose limits on an exempt org.
+    } else if let Ok(Some(setting)) = state.store.get_org_setting(org.id, "quota").await {
         if let (Some(base), Some(over)) =
             (limits.as_object_mut(), setting.setting_value.as_object())
         {

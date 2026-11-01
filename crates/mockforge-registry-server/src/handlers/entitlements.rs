@@ -54,13 +54,30 @@ pub const PAST_DUE_GRACE_SECONDS: i64 = 24 * 60 * 60;
 ///
 /// Never mutates the stored `plan` column.
 pub async fn effective_plan(state: &AppState, org: &Organization) -> ApiResult<Plan> {
-    let stored = org.plan();
+    if org.billing_exempt {
+        return Ok(Plan::Team);
+    }
     let org_id = org.id;
     let sub = with_org_context(state.db.runtime_pool(), org_id, |tx| {
         Box::pin(async move { Ok(Subscription::find_by_org(&mut **tx, org_id).await?) })
     })
     .await?;
-    Ok(resolve_effective_plan(stored, sub.as_ref(), Utc::now()))
+    Ok(resolve_org_plan(org, sub.as_ref(), Utc::now()))
+}
+
+/// [`resolve_effective_plan`] for a loaded org. A billing-exempt (internal)
+/// org always resolves to Team, the highest plan, whatever its stored plan or
+/// subscription state, so it never needs a Stripe subscription.
+pub(crate) fn resolve_org_plan(
+    org: &Organization,
+    sub: Option<&Subscription>,
+    now: chrono::DateTime<Utc>,
+) -> Plan {
+    if org.billing_exempt {
+        Plan::Team
+    } else {
+        resolve_effective_plan(org.plan(), sub, now)
+    }
 }
 
 /// Free resources consume platform capacity; require the owning account's
@@ -168,6 +185,35 @@ mod tests {
             created_at: Utc::now(),
             updated_at,
         }
+    }
+
+    fn org_with(plan: &str, billing_exempt: bool) -> Organization {
+        Organization {
+            id: Uuid::new_v4(),
+            name: "Org".into(),
+            slug: "org".into(),
+            owner_id: Uuid::new_v4(),
+            plan: plan.into(),
+            limits_json: serde_json::json!({}),
+            stripe_customer_id: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            billing_exempt,
+        }
+    }
+
+    #[test]
+    fn billing_exempt_org_resolves_to_team_without_a_subscription() {
+        let now = Utc::now();
+        let canceled = sub_with(SubscriptionStatus::Canceled, now);
+        for plan in ["free", "pro", "team"] {
+            let exempt = org_with(plan, true);
+            assert_eq!(resolve_org_plan(&exempt, None, now), Plan::Team);
+            assert_eq!(resolve_org_plan(&exempt, Some(&canceled), now), Plan::Team);
+        }
+        // Without the flag the usual subscription rules apply.
+        assert_eq!(resolve_org_plan(&org_with("free", false), None, now), Plan::Free);
+        assert_eq!(resolve_org_plan(&org_with("team", false), Some(&canceled), now), Plan::Free);
     }
 
     #[test]

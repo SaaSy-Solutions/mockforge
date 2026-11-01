@@ -33,8 +33,8 @@ pub(crate) async fn require_paid_plan(
         .await?
         .ok_or(crate::error::ApiError::PermissionDenied)?;
     let subscription = crate::models::Subscription::find_by_org(pool, org_id).await?;
-    if crate::handlers::entitlements::resolve_effective_plan(
-        org.plan(),
+    if crate::handlers::entitlements::resolve_org_plan(
+        &org,
         subscription.as_ref(),
         chrono::Utc::now(),
     ) == crate::models::Plan::Free

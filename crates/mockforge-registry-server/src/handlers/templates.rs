@@ -234,7 +234,7 @@ pub async fn publish_template(
         .map_err(|_| ApiError::OrganizationNotFound)?;
 
     // Check publishing limits
-    let limits = &org_ctx.org.limits_json;
+    let limits = org_ctx.org.limits();
     let max_templates = limits.get("max_templates_published").and_then(|v| v.as_i64()).unwrap_or(3);
 
     if max_templates >= 0 {
