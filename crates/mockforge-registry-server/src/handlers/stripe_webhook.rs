@@ -219,14 +219,14 @@ pub fn parse_object<T: serde::de::DeserializeOwned>(
     object: serde_json::Value,
 ) -> Result<T, WebhookError> {
     serde_json::from_value(object)
-        .map_err(|e| WebhookError::Ignored(format!("unparseable event object: {e}")))
+        .map_err(|e| WebhookError::Ignored(format!("unparsable event object: {e}")))
 }
 
 /// Why an event was not applied.
 #[derive(Debug)]
 pub enum WebhookError {
     /// Nothing can ever be done with it (missing `org_id` metadata, an unknown
-    /// subscription, an unparseable object). Acknowledged with 200 and logged,
+    /// subscription, an unparsable object). Acknowledged with 200 and logged,
     /// so Stripe does not retry it for days.
     Ignored(String),
     /// Refused on purpose and alerted, e.g. a price id this deployment does not
