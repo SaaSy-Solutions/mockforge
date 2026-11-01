@@ -27,19 +27,26 @@ env:
 
 jobs:
   # Lightweight gate: decide whether this PR touches anything other than docs
-  # (book/**, docs/**, *.md) or agent config (.claude/**). The heavy Rust + UI
-  # jobs `needs: changes` and run only when `code == 'true'`. Non-PR events
-  # (push to main, tags, dispatch) always set code=true, so main stays fully
-  # tested and release builds are never skipped. Trusted repository jobs use
-  # the existing Hetzner pool; fork PRs retain isolated hosted runners. A skipped
-  # required check counts as success for branch protection, so docs-only PRs
-  # stay mergeable without burning self-hosted runner time on a full Rust build.
+  # (book/**, docs/**, *.md) or agent config (.claude/**), and which Rust
+  # packages it affects (#1451). The heavy Rust + UI jobs `needs: changes` and
+  # run only when `code == 'true'`. Non-PR events (push to main, tags, dispatch)
+  # always select the full suite, and nightly-rust.yml runs the full suite on
+  # main. A PR runs its changed packages plus their workspace dependents;
+  # anything scripts/ci/rust_scope.py cannot attribute to one package (root
+  # manifests, Cargo.lock, workflows, shared fixtures) runs everything. An
+  # empty diff runs everything too: it used to set code=false and turn the
+  # Test context into a green skip. Trusted repository jobs use the existing
+  # Hetzner pool; fork PRs retain isolated hosted runners. A skipped required
+  # check counts as success for branch protection, so docs-only PRs stay
+  # mergeable without burning self-hosted runner time on a Rust build.
   changes:
     name: Detect change scope
     runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","linux","x64","rust"]') || 'ubuntu-latest' }}
     timeout-minutes: 15
     outputs:
       code: ${{ steps.filter.outputs.code }}
+      scope: ${{ steps.filter.outputs.scope }}
+      cargo_args: ${{ steps.filter.outputs.cargo_args }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -71,6 +78,7 @@ jobs:
           python3 -m unittest discover -s scripts/tests -p test_dev_cargo.py -v
           python3 -m unittest discover -s scripts/tests -p test_rust_build_policy.py -v
           python3 -m unittest discover -s scripts/tests -p test_workload_admission.py -v
+          python3 -m unittest discover -s scripts/tests -p test_rust_ci_scope.py -v
       - name: Determine whether non-docs files changed
         id: filter
         env:
@@ -78,24 +86,19 @@ jobs:
           # injection best practice. Both are GitHub-controlled values anyway.
           BASE_REF: ${{ github.base_ref }}
           EVENT_NAME: ${{ github.event_name }}
+        # A failed diff fails this job, which the Test aggregate treats as a
+        # failure, never a skip. rust_scope.py fails closed to the full suite
+        # on an empty diff or an unreadable workspace graph.
         run: |
+          set -euo pipefail
           if [ "$EVENT_NAME" != "pull_request" ]; then
             echo "Non-PR event ($EVENT_NAME): running full CI."
-            echo "code=true" >> "$GITHUB_OUTPUT"
+            python3 scripts/ci/rust_scope.py --full < /dev/null
             exit 0
           fi
           files="$(git diff --name-only "origin/${BASE_REF}...HEAD")"
           echo "Changed files:"; printf '%s\n' "$files"
-          code=false
-          while IFS= read -r f; do
-            [ -z "$f" ] && continue
-            case "$f" in
-              book/*|docs/*|.claude/*|*.md) ;;   # docs / agent config: skip heavy CI
-              *) code=true ;;                     # anything else counts as code
-            esac
-          done <<< "$files"
-          echo "Heavy CI required: code=$code"
-          echo "code=$code" >> "$GITHUB_OUTPUT"
+          printf '%s\n' "$files" | python3 scripts/ci/rust_scope.py
 
   # Only stable runs per-PR. Beta/nightly produced constant noise (rustc churn,
   # not real regressions) and each PR was spending ~3x the self-hosted queue time
@@ -110,11 +113,15 @@ jobs:
     timeout-minutes: 60
     env:
       CARGO_INCREMENTAL: "0"
-      CARGO_BUILD_JOBS: "2"
+      # 4 matches integration-tests.yml on the same 8 vCPU host; this repo has
+      # two runners there, and #1450 removed two of the parallel Rust jobs.
+      CARGO_BUILD_JOBS: "4"
       # Full debuginfo for the whole workspace plus its test binaries filled
       # the hosted runner's disk and the linker died with "Bus error".
       CARGO_PROFILE_DEV_DEBUG: "0"
       CARGO_PROFILE_TEST_DEBUG: "0"
+      # `--workspace --exclude mockforge-desktop` or the affected `-p` list.
+      RUST_CARGO_ARGS: ${{ needs.changes.outputs.cargo_args }}
     strategy:
       fail-fast: false
       matrix:
@@ -172,11 +179,21 @@ jobs:
     # compile attempts. Self-hosted runners' rustc invocations include
     # absolute paths to /home/actions/actions-runner-{N}/_work/.../target/
     # in --extern args, so cache keys differ across the 9 sibling runners.
-    # Swatinem/rust-cache@v2 below covers the same use case (target/ caching).
-    - name: Cache dependencies
-      uses: Swatinem/rust-cache@v2
-      with:
-        env-vars: "CARGO_HOME"
+    # The persistent per-runner target dir below covers the same use case.
+    # rust-cache never restored here (#1449): the per-runner CARGO_HOME split
+    # every key and PR entries filled the 10 GB repository cache. Each Hetzner
+    # runner keeps one target dir outside the workspace instead. A runner runs
+    # one job at a time, so no two Cargo processes share it.
+    - name: Use the runner's persistent Cargo target dir on Hetzner
+      if: runner.environment == 'self-hosted'
+      run: python3 scripts/ci/persistent_target.py
+
+    - name: Install mold
+      if: runner.environment == 'github-hosted'
+      uses: rui314/setup-mold@v1
+
+    - name: Link with mold when available
+      run: bash scripts/ci/setup_mold.sh
 
     - name: Check formatting
       run: cargo fmt --all -- --check
@@ -191,11 +208,11 @@ jobs:
     # The dedicated gate stays as defense-in-depth.
     # Static command — no untrusted input is interpolated.
     - name: Run clippy
-      run: cargo clippy --workspace --exclude mockforge-desktop --lib --bins --all-features -- -D clippy::correctness -D unused_qualifications
+      run: cargo clippy $RUST_CARGO_ARGS --lib --bins --all-features -- -D clippy::correctness -D unused_qualifications
       if: matrix.rust == '1.96.0'
 
     - name: Build workspace
-      run: cargo build --workspace --exclude mockforge-desktop --verbose
+      run: cargo build $RUST_CARGO_ARGS --verbose
 
     # mockforge-cli's default features do NOT include `ws`/`grpc`/`mqtt` etc.
     # The integration tests in `tests/tests/e2e/protocols/*` spawn the
@@ -213,98 +230,32 @@ jobs:
     # `MOCKFORGE_TEST_BINARY` (honored by mockforge-test's binary resolver
     # ahead of target/debug) points the e2e subprocess tests at it.
     # $RUNNER_TEMP is per-runner, so sibling runners on this host don't
-    # collide. No untrusted input in either step.
+    # collide. No untrusted input in either step. Unchanged, this is a no-op
+    # rebuild in the persistent target dir.
     - name: Build mockforge binary with all protocols (for e2e tests)
       run: |
         cargo build --bin mockforge --features all-protocols
-        cp target/debug/mockforge "$RUNNER_TEMP/mockforge-all-protocols"
+        cp "${CARGO_TARGET_DIR:-target}/debug/mockforge" "$RUNNER_TEMP/mockforge-all-protocols"
 
     - name: Run tests
-      run: cargo test --workspace --exclude mockforge-desktop --verbose
+      run: cargo test $RUST_CARGO_ARGS --verbose
       env:
         MOCKFORGE_TEST_BINARY: ${{ runner.temp }}/mockforge-all-protocols
 
-    - name: Run tests with all features
-      run: cargo test --workspace --exclude mockforge-desktop --exclude mockforge-tui --all-features --verbose
-      if: matrix.rust == '1.96.0' && (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)
-      continue-on-error: true  # May fail if native libs (vosk) not installed
+    - name: Release the persistent target dir if the shared disk is short
+      if: always() && runner.environment == 'self-hosted'
+      run: python3 scripts/ci/persistent_target.py release
 
-    - name: Check documentation
-      run: cargo doc --workspace --exclude mockforge-desktop --no-deps
-      if: matrix.rust == '1.96.0' && (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)
+    # The all-features test run (continue-on-error, so it could never fail a
+    # PR) and `cargo doc` moved to nightly-rust.yml on main (#1450).
 
-  # Keep trusted Rust work sequential on the existing pool. No target or
-  # binary artifacts cross jobs; each lane uses its own normal job cache key.
-  test-extended:
-    name: Rust extended checks
-    needs: [changes, test]
-    if: ${{ needs.changes.outputs.code == 'true' && needs.test.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
-    runs-on: [self-hosted, linux, x64, rust]
-    timeout-minutes: 60
-    env:
-      CARGO_INCREMENTAL: "0"
-      CARGO_BUILD_JOBS: "2"
-      # Full debuginfo for the whole workspace plus its test binaries filled
-      # the hosted runner's disk and the linker died with "Bus error".
-      CARGO_PROFILE_DEV_DEBUG: "0"
-      CARGO_PROFILE_TEST_DEBUG: "0"
-    strategy:
-      fail-fast: false
-      matrix:
-        rust:
-          - "1.96.0"
-
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v7
-
-    - name: Set per-runner CARGO_HOME on Hetzner
-      if: runner.environment == 'self-hosted'
-      run: echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
-
-    - name: Verify provisioned Rust toolchain on Hetzner
-      if: runner.environment == 'self-hosted'
-      env:
-        EXPECTED_TOOLCHAIN: ${{ matrix.rust }}
-      run: |
-        command -v rustup >/dev/null || { echo "::error::Hetzner runner lacks rustup; operator provisioning is required."; exit 1; }
-        rustc_version="$(RUSTUP_AUTO_INSTALL=0 rustup run "$EXPECTED_TOOLCHAIN" rustc --version)"
-        cargo_version="$(RUSTUP_AUTO_INSTALL=0 rustup run "$EXPECTED_TOOLCHAIN" cargo --version)"
-        [[ "$rustc_version" == "rustc $EXPECTED_TOOLCHAIN "* ]]
-        [[ "$cargo_version" == "cargo $EXPECTED_TOOLCHAIN "* ]]
-        printf '%s\n' "$rustc_version" "$cargo_version"
-        RUSTUP_AUTO_INSTALL=0 rustup run "$EXPECTED_TOOLCHAIN" rustfmt --version
-        RUSTUP_AUTO_INSTALL=0 rustup run "$EXPECTED_TOOLCHAIN" cargo clippy --version
-
-    - name: Verify native build dependencies on Hetzner
-      if: runner.environment == 'self-hosted'
-      run: |
-        dpkg -s protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev >/dev/null 2>&1 || {
-          echo "::error::Hetzner runner is missing required native build packages; ask the runner operator to provision them."
-          exit 1
-        }
-
-    - name: Cache dependencies
-      uses: Swatinem/rust-cache@v2
-      with:
-        env-vars: "CARGO_HOME"
-
-    - name: Run tests with all features
-      run: cargo test --workspace --exclude mockforge-desktop --exclude mockforge-tui --all-features --verbose
-      if: matrix.rust == '1.96.0'
-      continue-on-error: true  # May fail if native libs (vosk) not installed
-
-    - name: Check documentation
-      run: cargo doc --workspace --exclude mockforge-desktop --no-deps
-      if: matrix.rust == '1.96.0'
-
-  # Preserve the original trusted Test (1.96.0) context only after both lanes
-  # finish. always() is intentional: failed/cancelled/skipped prerequisites
+  # Preserve the original trusted Test (1.96.0) context only after the Rust
+  # lane finishes. always() is intentional: failed/cancelled/skipped prerequisites
   # must not turn the required context into an automatically accepted skip.
   test-complete:
     # A skipped fork aggregate must not duplicate the fork's live Test context.
     name: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'Test (1.96.0)' || 'Trusted Rust completion' }}
-    needs: [changes, test, test-extended]
+    needs: [changes, test]
     if: ${{ always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && (needs.changes.result != 'success' || needs.changes.outputs.code != 'false') }}
     runs-on: [self-hosted, linux, x64, rust]
     timeout-minutes: 5
@@ -319,14 +270,13 @@ jobs:
           SCOPE_RESULT: ${{ needs.changes.result }}
           CODE_SCOPE: ${{ needs.changes.outputs.code }}
           DEFAULT_RESULT: ${{ needs.test.result }}
-          EXTENDED_RESULT: ${{ needs['test-extended'].result }}
         run: |
           set -euo pipefail
-          if [[ "$SCOPE_RESULT" != success || "$CODE_SCOPE" != true || "$DEFAULT_RESULT" != success || "$EXTENDED_RESULT" != success ]]; then
+          if [[ "$SCOPE_RESULT" != success || "$CODE_SCOPE" != true || "$DEFAULT_RESULT" != success ]]; then
             echo "::error::Rust validation is incomplete or unsuccessful; the original Test context cannot pass."
             exit 1
           fi
-          echo "Default, all-features, and documentation commands completed under their existing policies."
+          echo "Default Rust checks completed; all-features tests and docs run nightly on main."
 
   ui-test:
     name: UI Tests
@@ -421,6 +371,9 @@ jobs:
   # When cross-platform coverage is wanted back, add a dedicated workflow
   # with `on: schedule:` weekly + `workflow_dispatch:` rather than per-PR.
 
+  # One job for the blocking gate and the non-blocking ratchet preview (#1450):
+  # they used to compile the workspace twice in separate jobs. The preview is
+  # now a warning annotation from the same build (scripts/lint-warning-gate.sh).
   warning-gate:
     name: Incremental Warning Gate
     needs: changes
@@ -429,7 +382,10 @@ jobs:
     timeout-minutes: 40
     env:
       CARGO_INCREMENTAL: "0"
-      CARGO_BUILD_JOBS: "2"
+      CARGO_BUILD_JOBS: "4"
+      # Same profile as the test job so both reuse one persistent target dir.
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
     steps:
     - name: Checkout repository
       uses: actions/checkout@v7
@@ -470,72 +426,27 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev
 
-    - name: Cache dependencies
-      uses: Swatinem/rust-cache@v2
-      with:
-        env-vars: "CARGO_HOME"
+    # rust-cache never restored here (#1449): the per-runner CARGO_HOME split
+    # every key and PR entries filled the 10 GB repository cache. Each Hetzner
+    # runner keeps one target dir outside the workspace instead. A runner runs
+    # one job at a time, so no two Cargo processes share it.
+    - name: Use the runner's persistent Cargo target dir on Hetzner
+      if: runner.environment == 'self-hosted'
+      run: python3 scripts/ci/persistent_target.py
+
+    - name: Install mold
+      if: runner.environment == 'github-hosted'
+      uses: rui314/setup-mold@v1
+
+    - name: Link with mold when available
+      run: bash scripts/ci/setup_mold.sh
 
     - name: Run warning gate
       run: bash scripts/lint-warning-gate.sh
 
-  warning-ratchet-preview:
-    name: Warning Ratchet Preview
-    needs: changes
-    if: ${{ needs.changes.outputs.code == 'true' }}
-    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","linux","x64","rust"]') || 'ubuntu-latest' }}
-    timeout-minutes: 40
-    continue-on-error: true
-    env:
-      CARGO_INCREMENTAL: "0"
-      CARGO_BUILD_JOBS: "2"
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v7
-
-    - name: Set per-runner CARGO_HOME on Hetzner
-      if: runner.environment == 'self-hosted'
-      run: echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
-
-    - name: Verify provisioned Rust toolchain on Hetzner
-      if: runner.environment == 'self-hosted'
-      env:
-        EXPECTED_TOOLCHAIN: ${{ env.RUSTUP_TOOLCHAIN }}
-      run: |
-        command -v rustup >/dev/null || { echo "::error::Hetzner runner lacks rustup; operator provisioning is required."; exit 1; }
-        rustc_version="$(RUSTUP_AUTO_INSTALL=0 rustup run "$EXPECTED_TOOLCHAIN" rustc --version)"
-        cargo_version="$(RUSTUP_AUTO_INSTALL=0 rustup run "$EXPECTED_TOOLCHAIN" cargo --version)"
-        [[ "$rustc_version" == "rustc $EXPECTED_TOOLCHAIN "* ]]
-        [[ "$cargo_version" == "cargo $EXPECTED_TOOLCHAIN "* ]]
-        printf '%s\n' "$rustc_version" "$cargo_version"
-        RUSTUP_AUTO_INSTALL=0 rustup run "$EXPECTED_TOOLCHAIN" rustfmt --version
-        RUSTUP_AUTO_INSTALL=0 rustup run "$EXPECTED_TOOLCHAIN" cargo clippy --version
-
-    - name: Install Rust toolchain
-      if: runner.environment == 'github-hosted'
-      uses: ./.github/actions/rust-toolchain
-
-    - name: Verify native build dependencies on Hetzner
-      if: runner.environment == 'self-hosted'
-      run: |
-        dpkg -s protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev >/dev/null 2>&1 || {
-          echo "::error::Hetzner runner is missing required native build packages; ask the runner operator to provision them."
-          exit 1
-        }
-
-    - name: Install native build dependencies
-      if: runner.environment == 'github-hosted'
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev
-
-    - name: Cache dependencies
-      uses: Swatinem/rust-cache@v2
-      with:
-        env-vars: "CARGO_HOME"
-
-    - name: Run ratchet preview
-      run: bash scripts/lint-warning-ratchet-preview.sh
-
+    - name: Release the persistent target dir if the shared disk is short
+      if: always() && runner.environment == 'self-hosted'
+      run: python3 scripts/ci/persistent_target.py release
   security-audit:
     name: Security Audit
     needs: changes
@@ -689,11 +600,6 @@ jobs:
     - name: Install cargo-llvm-cov
       run: cargo install cargo-llvm-cov
 
-    - name: Cache dependencies
-      uses: Swatinem/rust-cache@v2
-      with:
-        env-vars: "CARGO_HOME"
-
     # The e2e protocol tests spawn `mockforge` and need the ws/grpc/mqtt
     # features; see the matching step in the Test job.
     - name: Build mockforge binary with all protocols (for e2e tests)
@@ -728,7 +634,9 @@ jobs:
       # Override the workflow-wide stable pin for every command in this job.
       RUSTUP_TOOLCHAIN: "1.96.0"
       CARGO_INCREMENTAL: "0"
-      CARGO_BUILD_JOBS: "2"
+      CARGO_BUILD_JOBS: "4"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
     steps:
     - name: Set per-runner CARGO_HOME on Hetzner
       if: runner.environment == 'self-hosted'
@@ -781,15 +689,29 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev
 
-    - name: Cache dependencies
-      uses: Swatinem/rust-cache@v2
-      with:
-        env-vars: "CARGO_HOME"
+    # rust-cache never restored here (#1449): the per-runner CARGO_HOME split
+    # every key and PR entries filled the 10 GB repository cache. Each Hetzner
+    # runner keeps one target dir outside the workspace instead. A runner runs
+    # one job at a time, so no two Cargo processes share it.
+    - name: Use the runner's persistent Cargo target dir on Hetzner
+      if: runner.environment == 'self-hosted'
+      run: python3 scripts/ci/persistent_target.py
+
+    - name: Install mold
+      if: runner.environment == 'github-hosted'
+      uses: rui314/setup-mold@v1
+
+    - name: Link with mold when available
+      run: bash scripts/ci/setup_mold.sh
 
     - name: Check MSRV compatibility
       run: |
         # Use the declared minimum, including the desktop workspace member.
         cargo check --workspace --locked
+
+    - name: Release the persistent target dir if the shared disk is short
+      if: always() && runner.environment == 'self-hosted'
+      run: python3 scripts/ci/persistent_target.py release
 
   typos:
     name: Spell Check

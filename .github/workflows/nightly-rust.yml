@@ -1,0 +1,102 @@
+name: Nightly Rust
+
+# Full-suite Rust checks moved off the pull-request path (#1450, #1451).
+# PRs build and test only the affected packages; this runs everything on main
+# once a day: the full default test suite, the all-features test run, and
+# `cargo doc`. It uses the existing Hetzner pool at an off-peak hour (07:23 UTC,
+# 02:23 US Central) and adds no runners. It also keeps that runner's persistent
+# target dir warm for the next day's PRs.
+
+on:
+  schedule:
+    - cron: '23 7 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-rust
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  RUSTUP_TOOLCHAIN: "1.96.0"
+  MOCKFORGE_REALITY_LEVEL: 3
+  MOCKFORGE_ALLOW_INMEMORY_AUTH: "true"
+  MOCKFORGE_ENABLE_DEV_AUTH: "true"
+  ENVIRONMENT: "development"
+
+jobs:
+  full-suite:
+    name: Full Rust suite (main)
+    if: github.repository == 'SaaSy-Solutions/mockforge' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, linux, x64, rust]
+    timeout-minutes: 180
+    env:
+      # Same flags as ci.yml's Rust jobs so the persistent target dir is shared.
+      CARGO_INCREMENTAL: "0"
+      CARGO_BUILD_JOBS: "4"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v7
+
+    - name: Set per-runner CARGO_HOME on Hetzner
+      run: echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
+
+    - name: Verify provisioned Rust toolchain on Hetzner
+      run: |
+        command -v rustup >/dev/null || { echo "::error::Hetzner runner lacks rustup; operator provisioning is required."; exit 1; }
+        rustc_version="$(RUSTUP_AUTO_INSTALL=0 rustup run "$RUSTUP_TOOLCHAIN" rustc --version)"
+        cargo_version="$(RUSTUP_AUTO_INSTALL=0 rustup run "$RUSTUP_TOOLCHAIN" cargo --version)"
+        [[ "$rustc_version" == "rustc $RUSTUP_TOOLCHAIN "* ]]
+        [[ "$cargo_version" == "cargo $RUSTUP_TOOLCHAIN "* ]]
+        printf '%s\n' "$rustc_version" "$cargo_version"
+
+    - name: Verify native build dependencies on Hetzner
+      run: |
+        dpkg -s protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev >/dev/null 2>&1 || {
+          echo "::error::Hetzner runner is missing required native build packages; ask the runner operator to provision them."
+          exit 1
+        }
+
+    - name: Use the runner's persistent Cargo target dir on Hetzner
+      run: python3 scripts/ci/persistent_target.py
+
+    - name: Link with mold when available
+      run: bash scripts/ci/setup_mold.sh
+
+    # See ci.yml: e2e protocol tests spawn an all-protocols `mockforge`.
+    - name: Build mockforge binary with all protocols (for e2e tests)
+      run: |
+        cargo build --bin mockforge --features all-protocols
+        cp "$CARGO_TARGET_DIR/debug/mockforge" "$RUNNER_TEMP/mockforge-all-protocols"
+
+    - name: Run full test suite
+      run: cargo test --workspace --exclude mockforge-desktop --verbose
+      env:
+        MOCKFORGE_TEST_BINARY: ${{ runner.temp }}/mockforge-all-protocols
+
+    # Kept non-blocking as before: the stt-vosk feature needs native vosk
+    # libraries the runners do not have. The outcome is annotated below.
+    - name: Run tests with all features
+      id: all-features
+      run: cargo test --workspace --exclude mockforge-desktop --exclude mockforge-tui --all-features --verbose
+      continue-on-error: true
+
+    - name: Check documentation
+      if: always()
+      run: cargo doc --workspace --exclude mockforge-desktop --no-deps
+
+    - name: Report all-features outcome
+      if: always() && steps.all-features.outcome != 'success'
+      env:
+        OUTCOME: ${{ steps.all-features.outcome }}
+      run: echo "::warning title=All-features tests::outcome=$OUTCOME (non-blocking; see the step log)"
+
+    - name: Release the persistent target dir if the shared disk is short
+      if: always()
+      run: python3 scripts/ci/persistent_target.py release
