@@ -125,6 +125,7 @@ ring = "0.17"
 hex = "0.4"
 base64 = { version = "0.21", features = ["default"] }
 sha2 = "0.10"
+hmac = "0.12" # Stripe webhook signature verification (#1456)
 sha1 = "0.10" # For TOTP (totp-lite 2.0 requires explicit hash types)
 
 # WASM artifact validation for the plugin security scanner worker.
@@ -237,6 +238,7 @@ chrono = { version = "0.4", features = ["serde"] }
 hex = "0.4"
 base64 = { version = "0.21", features = ["default"] }
 sha2 = "0.10"
+hmac = "0.12" # Stripe webhook signature verification (#1456)
 hmac = "0.12" # used by paid_flow_e2e.rs to forge Stripe webhook signatures
 uuid = { version = "1.23", features = ["v4"] }
 tempfile = "3"
