@@ -12,7 +12,7 @@ import { test, expect } from '@playwright/test';
  * Intentionally conservative: does NOT create/activate real scenarios — that
  * would leave test data in the prod registry. Read-only UI checks only. A
  * deeper integration test lives in
- * `crates/mockforge-registry-server/tests/federation_scenarios_e2e.rs` and
+ * `crates/mockforge-registry-server/tests/integration/federation_scenarios_e2e.rs` and
  * runs against a disposable local registry.
  *
  * Run with the deployed config:
