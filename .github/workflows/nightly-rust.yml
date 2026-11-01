@@ -96,3 +96,7 @@ jobs:
       env:
         OUTCOME: ${{ steps.all-features.outcome }}
       run: echo "::warning title=All-features tests::outcome=$OUTCOME (non-blocking; see the step log)"
+
+    - name: Release the persistent target dir if the shared disk is short
+      if: always()
+      run: python3 scripts/ci/persistent_target.py release

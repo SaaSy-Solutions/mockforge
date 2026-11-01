@@ -189,6 +189,9 @@ class WorkflowWiringTest(unittest.TestCase):
                 step = content.split("name: Use the runner's persistent Cargo target dir on Hetzner", 1)[1].split("- name:", 1)[0]
                 self.assertIn("if: runner.environment == 'self-hosted'", step)
                 self.assertIn("run: python3 scripts/ci/persistent_target.py", step)
+                release = content.split("name: Release the persistent target dir if the shared disk is short", 1)[1].split("- name:", 1)[0]
+                self.assertIn("if: always() && runner.environment == 'self-hosted'", release)
+                self.assertIn("run: python3 scripts/ci/persistent_target.py release", release)
                 self.assertIn("uses: rui314/setup-mold@v1", content)
                 self.assertIn("run: bash scripts/ci/setup_mold.sh", content)
                 for flag in ('CARGO_INCREMENTAL: "0"', 'CARGO_BUILD_JOBS: "4"',
@@ -239,6 +242,16 @@ class PersistentTargetTest(unittest.TestCase):
             self.assertTrue(target.is_dir())
             self.assertFalse((target / "artifact").exists())
             self.assertTrue((sibling / "keep").exists())
+
+    def test_release_drops_only_its_dir_when_disk_is_short(self):
+        with tempfile.TemporaryDirectory() as directory:
+            target = TARGET.target_for("runner-1", Path(directory))
+            target.mkdir()
+            self.assertEqual(TARGET.release(target, 0), "kept")
+            self.assertTrue(target.is_dir())
+            self.assertEqual(TARGET.release(target, 1 << 62), "released")
+            self.assertFalse(target.exists())
+            self.assertEqual(TARGET.release(target, 1 << 62), "absent")
 
     def test_refuses_symlinked_target(self):
         with tempfile.TemporaryDirectory() as directory:

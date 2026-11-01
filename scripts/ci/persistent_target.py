@@ -12,6 +12,9 @@ A runner executes one job at a time, so the directory is never shared by two
 concurrent Cargo processes. The only directory this script ever removes is that
 exact path, and only when it has grown past the size budget or the disk is short
 on headroom; the next build then starts cold instead of filling the shared disk.
+The `release` action runs at the end of every job (even after failure) and
+drops the directory when the shared disk is short, so this repository's cache
+gives way before the host runs out of space.
 """
 import argparse
 import os
@@ -62,13 +65,29 @@ def prepare(target: Path, max_bytes: int, min_free: int) -> str:
     return reason or "reused"
 
 
+def release(target: Path, min_free: int) -> str:
+    if target.is_symlink() or not target.is_dir():
+        return "absent"
+    free = shutil.disk_usage(target.parent).free
+    if free >= min_free:
+        print(f"Keeping {target}: {free / GIB:.1f} GiB free")
+        return "kept"
+    print(f"Releasing {target}: only {free / GIB:.1f} GiB free on the shared disk")
+    shutil.rmtree(target)
+    return "released"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
+    parser.add_argument("action", nargs="?", choices=("prepare", "release"), default="prepare")
     parser.add_argument("--runner-name", default=os.environ.get("RUNNER_NAME", ""))
-    parser.add_argument("--max-gib", type=int, default=60)
+    parser.add_argument("--max-gib", type=int, default=40)
     parser.add_argument("--min-free-gib", type=int, default=30)
     args = parser.parse_args()
     target = target_for(args.runner_name)
+    if args.action == "release":
+        release(target, args.min_free_gib * GIB)
+        return 0
     prepare(target, args.max_gib * GIB, args.min_free_gib * GIB)
     env = os.environ.get("GITHUB_ENV")
     if env:

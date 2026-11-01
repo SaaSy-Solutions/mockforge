@@ -242,6 +242,10 @@ jobs:
       env:
         MOCKFORGE_TEST_BINARY: ${{ runner.temp }}/mockforge-all-protocols
 
+    - name: Release the persistent target dir if the shared disk is short
+      if: always() && runner.environment == 'self-hosted'
+      run: python3 scripts/ci/persistent_target.py release
+
     # The all-features test run (continue-on-error, so it could never fail a
     # PR) and `cargo doc` moved to nightly-rust.yml on main (#1450).
 
@@ -439,6 +443,10 @@ jobs:
 
     - name: Run warning gate
       run: bash scripts/lint-warning-gate.sh
+
+    - name: Release the persistent target dir if the shared disk is short
+      if: always() && runner.environment == 'self-hosted'
+      run: python3 scripts/ci/persistent_target.py release
   security-audit:
     name: Security Audit
     needs: changes
@@ -700,6 +708,10 @@ jobs:
       run: |
         # Use the declared minimum, including the desktop workspace member.
         cargo check --workspace --locked
+
+    - name: Release the persistent target dir if the shared disk is short
+      if: always() && runner.environment == 'self-hosted'
+      run: python3 scripts/ci/persistent_target.py release
 
   typos:
     name: Spell Check
