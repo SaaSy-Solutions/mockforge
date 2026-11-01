@@ -285,6 +285,13 @@ async fn redeploy_background_status_write_lands_and_foreign_redeploy_rejected() 
         .execute(&pool)
         .await
         .expect("set deployment_url");
+    // Redeploy targets external hosting, which requires a paid plan
+    // (`require_paid_plan`); a fresh signup org is Free.
+    sqlx::query("UPDATE organizations SET plan = 'team' WHERE id = $1")
+        .bind(Uuid::parse_str(&owner.org_id).unwrap())
+        .execute(&pool)
+        .await
+        .expect("put owner org on a paid plan");
     let path = format!("/api/v1/hosted-mocks/{deployment}/redeploy");
 
     let (status, text) = call(&stranger, Method::POST, &path).await;
