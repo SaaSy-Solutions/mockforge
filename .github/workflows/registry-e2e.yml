@@ -368,26 +368,28 @@ jobs:
         # `--test-threads=1` keeps the tests serial; many of them create/delete orgs with
         # generated-but-occasionally-colliding slugs if two run at the same millisecond.
         run: |
-          cargo test -p mockforge-registry-server \
-            --test workspace_content_e2e \
-            --test signup_flow_e2e \
-            --test marketplace_e2e \
-            --test hosted_capture_workspaces_e2e \
-            --test cloud_verification_e2e \
-            --test cloud_ai_contract_diff_e2e \
-            --test diff_finding_incident_e2e \
-            --test cloud_conformance_e2e \
-            --test paid_flow_e2e \
-            --test hosted_mock_overrides_e2e \
-            --test audit_integrity_e2e \
-            --test rls_coverage_e2e \
-            --test hosted_mock_rls_routes_e2e \
-            --test rls_join_coverage_e2e \
-            --test query_token_e2e \
-            --test cross_tenant_chaos_capture_e2e \
-            --test seed_credentials_neutralised \
-            --test token_scope_e2e \
-            -- --ignored --nocapture --test-threads=1
+          # One integration binary (tests/integration/main.rs, #1451); each
+          # former per-file target is now a module, selected by libtest filter.
+          cargo test -p mockforge-registry-server --test integration \
+            -- --ignored --nocapture --test-threads=1 \
+            workspace_content_e2e:: \
+            signup_flow_e2e:: \
+            marketplace_e2e:: \
+            hosted_capture_workspaces_e2e:: \
+            cloud_verification_e2e:: \
+            cloud_ai_contract_diff_e2e:: \
+            diff_finding_incident_e2e:: \
+            cloud_conformance_e2e:: \
+            paid_flow_e2e:: \
+            hosted_mock_overrides_e2e:: \
+            audit_integrity_e2e:: \
+            rls_coverage_e2e:: \
+            hosted_mock_rls_routes_e2e:: \
+            rls_join_coverage_e2e:: \
+            query_token_e2e:: \
+            cross_tenant_chaos_capture_e2e:: \
+            seed_credentials_neutralised:: \
+            token_scope_e2e::
 
       - name: Dump registry-server log on failure
         if: failure()
