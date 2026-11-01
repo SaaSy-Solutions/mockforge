@@ -101,6 +101,9 @@ jobs:
       # registry server verifies them with the same value. Must match the
       # `DEFAULT_WEBHOOK_SECRET` constant in tests/paid_flow_e2e.rs.
       STRIPE_WEBHOOK_SECRET: "whsec_e2e_test_secret"
+      # Webhook prices map by exact id only (#1456); the e2e events use these.
+      STRIPE_PRICE_ID_PRO: "price_test_pro"
+      STRIPE_PRICE_ID_TEAM: "price_test_team"
 
       # Lift the rate limiter for E2E. All requests originate from
       # localhost so they share the same `ip:unknown` bucket; the
@@ -378,6 +381,7 @@ jobs:
             --test diff_finding_incident_e2e \
             --test cloud_conformance_e2e \
             --test paid_flow_e2e \
+            --test stripe_webhook_e2e \
             --test hosted_mock_overrides_e2e \
             --test audit_integrity_e2e \
             --test rls_coverage_e2e \

@@ -120,9 +120,9 @@ async fn register_and_setup(base_url: &str) -> E2e {
     let org_id = body["id"].as_str().expect("no org id").to_string();
 
     // Upgrade the org to Team via a Stripe-signed `customer.subscription.created`
-    // webhook (the only server-authoritative path to a paid plan). The
-    // `price_test_team` id triggers the handler's heuristic Team mapping in
-    // `determine_plan_from_price_id`, so no STRIPE_PRICE_ID_TEAM env is needed.
+    // webhook (the only server-authoritative path to a paid plan). The server
+    // maps prices by exact id only (#1456), so the e2e environment sets
+    // `STRIPE_PRICE_ID_TEAM=price_test_team`.
     upgrade_org_to_team(&client, base_url, &org_id, ts).await;
 
     E2e {

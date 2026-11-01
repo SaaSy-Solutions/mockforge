@@ -138,6 +138,7 @@ E2E_TESTS=(
   --test cloud_ai_contract_diff_e2e
   --test cloud_conformance_e2e
   --test paid_flow_e2e
+  --test stripe_webhook_e2e
   --test hosted_mock_overrides_e2e
   --test audit_integrity_e2e
   --test rls_coverage_e2e
@@ -159,6 +160,9 @@ export AWS_SECRET_ACCESS_KEY="minioadmin"
 export REGISTRY_URL="http://localhost:${REGISTRY_PORT}"
 export MOCKFORGE_INTERNAL_API_TOKEN="e2e-internal-token-do-not-use-in-prod"
 export STRIPE_WEBHOOK_SECRET="whsec_e2e_test_secret"
+# Webhook prices map by exact id only (#1456); these are the e2e test ids.
+export STRIPE_PRICE_ID_PRO="price_test_pro"
+export STRIPE_PRICE_ID_TEAM="price_test_team"
 export RATE_LIMIT_PER_MINUTE="100000"
 export RATE_LIMIT_PER_USER="100000"
 
