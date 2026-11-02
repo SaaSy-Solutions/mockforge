@@ -211,6 +211,11 @@ def receiver(port, address, backend):
 def owned_remove(engine, name, run_id):
     result = command([engine, "inspect", name], check=False)
     if result.returncode:
+        listing = command([engine, "ps", "-a", "--format", "{{.Names}}"], check=False)
+        if listing.returncode or name in listing.stdout.splitlines():
+            raise RuntimeError(
+                f"Cannot verify removal of {name}: {result.stderr[-1000:]}"
+            )
         return
     item = json.loads(result.stdout)[0]
     if item.get("Config", {}).get("Labels", {}).get(LABEL) != run_id:
@@ -400,7 +405,10 @@ def classify(baseline, target, before, after, records, block_status):
             "inconclusive",
             "ordinary requests to the protected route did not match the application redirect",
         )
-    if any(not any(r["tokens"]) for r in records):
+    expected_tokens = {target["token"]} | {
+        c[key] for c in (before, after) for key in ("token", "root_token")
+    }
+    if any(not expected_tokens.intersection(r["tokens"]) for r in records):
         return (
             "inconclusive",
             "uncorrelated origin traffic prevents a blocking assertion",
@@ -467,6 +475,7 @@ def run(args):
                         "Direct baseline did not demonstrate authentication bypass"
                     )
                 if args.target:
+                    target_start = len(records)
                     before = control(args.target, run_id, "before")
                     tested = probe(
                         args.engine, args.target.rstrip("/"), output, "target", run_id
@@ -474,7 +483,12 @@ def run(args):
                     after = control(args.target, run_id, "after")
                     time.sleep(0.5)
                     verdict, reason = classify(
-                        baseline, tested, before, after, records, args.block_status
+                        baseline,
+                        tested,
+                        before,
+                        after,
+                        records[target_start:],
+                        args.block_status,
                     )
                     if (
                         before["body_sha256"] != baseline_control["body_sha256"]
@@ -518,6 +532,7 @@ def cleanup(args):
         raise ValueError("invalid ownership record")
     if data["engine"] != args.engine:
         raise ValueError("use the engine recorded in ownership.json")
+    doctor(args.engine)
     for name in (
         "mockforge-cve-" + run_id,
         "mockforge-cve-client-" + run_id + "-baseline",

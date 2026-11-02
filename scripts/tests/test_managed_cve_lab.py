@@ -52,10 +52,23 @@ class LifecycleTests(unittest.TestCase):
 
     def test_cleanup_already_absent_is_idempotent(self):
         with patch.object(
-            lab, "command", return_value=completed(returncode=1)
-        ) as command:
+            lab, "command", side_effect=[completed(returncode=1), completed()]
+        ):
             lab.owned_remove("docker", "container", "our-run")
-        self.assertEqual(command.call_count, 1)
+
+    def test_cleanup_engine_failure_is_not_absence(self):
+        with patch.object(lab, "command", return_value=completed(returncode=1)):
+            with self.assertRaisesRegex(RuntimeError, "Cannot verify removal"):
+                lab.owned_remove("docker", "container", "our-run")
+
+    def test_cleanup_failed_inspect_of_existing_container_is_not_absence(self):
+        with patch.object(
+            lab,
+            "command",
+            side_effect=[completed(returncode=1), completed("container\n")],
+        ):
+            with self.assertRaisesRegex(RuntimeError, "Cannot verify removal"):
+                lab.owned_remove("docker", "container", "our-run")
 
     def test_down_rejects_changed_engine_and_invalid_ownership(self):
         for ownership in (
@@ -214,6 +227,10 @@ class VerdictTests(unittest.TestCase):
 
     def test_uncorrelated_origin_request_cannot_pass(self):
         self.records.append({"tokens": [None, None], "status": 200})
+        self.assertEqual(self.verdict(), "inconclusive")
+
+    def test_rewritten_origin_correlation_cannot_pass(self):
+        self.records.append({"tokens": ["rewritten", "rewritten"], "status": 200})
         self.assertEqual(self.verdict(), "inconclusive")
 
     def test_blanket_block_of_root_path_cannot_pass(self):
