@@ -58,3 +58,16 @@ mod tests {
         assert_eq!(fs::read_to_string(output_dir.join("README.md")).unwrap(), "user edits");
     }
 }
+
+/// Run the shipped, isolated standard-library runner without a checkout or pip.
+pub fn cve(args: Vec<std::ffi::OsString>) -> anyhow::Result<()> {
+    let files: BTreeMap<String, String> = serde_json::from_str(include_str!("bundled_tools.json"))?;
+    let script = files.get("scripts/cve_lab.py").context("Missing bundled CVE runner")?;
+    let status = std::process::Command::new("python3")
+        .args(["-I", "-c", script])
+        .args(args)
+        .status()
+        .context("Managed CVE labs require Python 3.11+ (python3 on PATH)")?;
+    anyhow::ensure!(status.success(), "CVE command failed ({status}); see diagnostics above");
+    Ok(())
+}
