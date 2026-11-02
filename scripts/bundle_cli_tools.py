@@ -27,6 +27,7 @@ def bundle():
         ROOT / "book/src/user-guide" / name
         for name in (
             "cve-packs.md",
+            "managed-cve-labs.md",
             "issue-79-reference.md",
             "security-rule-test-packs.md",
         )

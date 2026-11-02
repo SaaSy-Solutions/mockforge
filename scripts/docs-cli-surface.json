@@ -1594,6 +1594,62 @@
      "subcommands": {},
      "variadic": false
     },
+    "cve": {
+     "aliases": {},
+     "flags": {
+      "--engine": 1,
+      "--help": 0,
+      "-h": 0
+     },
+     "subcommands": {
+      "doctor": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "-h": 0
+       },
+       "subcommands": {}
+      },
+      "down": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--output-dir": 1,
+        "-h": 0
+       },
+       "subcommands": {}
+      },
+      "list": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "-h": 0
+       },
+       "subcommands": {}
+      },
+      "prepare": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "-h": 0
+       },
+       "subcommands": {}
+      },
+      "run": {
+       "aliases": {},
+       "flags": {
+        "--block-status": 1,
+        "--help": 0,
+        "--listen-address": 1,
+        "--origin-port": 1,
+        "--output-dir": 1,
+        "--target": 1,
+        "-h": 0
+       },
+       "subcommands": {}
+      }
+     }
+    },
     "data": {
      "aliases": {},
      "flags": {

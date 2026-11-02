@@ -56,11 +56,25 @@ def doctor(engine):
         raise RuntimeError("This pack currently requires Linux amd64")
     if not shutil.which(engine):
         raise RuntimeError(f"Install {engine} first, then rerun mockforge cve doctor")
-    version = command([engine, "version", "--format", "{{.Server.Version}}"], timeout=20)
+    version = command(
+        [engine, "version", "--format", "{{.Server.Version}}"], timeout=20
+    )
     # Host networking and loopback publications must refer to this machine.
-    if any(os.environ.get(key) for key in ("DOCKER_HOST", "DOCKER_CONTEXT", "CONTAINER_HOST", "CONTAINER_CONNECTION")):
-        raise RuntimeError("Use the default local engine without remote/context environment overrides")
-    info = json.loads(command([engine, "info", "--format", "json"], timeout=20).stdout)
+    if any(
+        os.environ.get(key)
+        for key in (
+            "DOCKER_HOST",
+            "DOCKER_CONTEXT",
+            "CONTAINER_HOST",
+            "CONTAINER_CONNECTION",
+        )
+    ):
+        raise RuntimeError(
+            "Use the default local engine without remote/context environment overrides"
+        )
+    info = json.loads(
+        command([engine, "info", "--format", "{{json .}}"], timeout=20).stdout
+    )
     is_podman = "host" in info and "version" in info
     if is_podman and info["host"].get("serviceIsRemote", False):
         raise RuntimeError("Remote Podman engines are unsupported")
@@ -75,7 +89,12 @@ def doctor(engine):
             host = contexts[0]["Endpoints"]["docker"]["Host"]
             if not host.startswith("unix://"):
                 raise RuntimeError("Remote container engines are unsupported")
-    return {"python": platform.python_version(), "engine": engine, "server": version.stdout.strip(), "platform": platform.machine()}
+    return {
+        "python": platform.python_version(),
+        "engine": engine,
+        "server": version.stdout.strip(),
+        "platform": platform.machine(),
+    }
 
 
 def prepare(engine):
@@ -90,9 +109,18 @@ def prepare(engine):
 
 def target_url(value):
     url = urlsplit(value)
-    if (url.scheme not in ("http", "https") or not url.hostname or url.username
-            or url.password or url.path not in ("", "/") or url.query or url.fragment):
-        raise ValueError("target must be an HTTP(S) origin without credentials, path or query")
+    if (
+        url.scheme not in ("http", "https")
+        or not url.hostname
+        or url.username
+        or url.password
+        or url.path not in ("", "/")
+        or url.query
+        or url.fragment
+    ):
+        raise ValueError(
+            "target must be an HTTP(S) origin without credentials, path or query"
+        )
     if url.port == 0:
         raise ValueError("target port must be 1..65535")
     return url
@@ -100,7 +128,11 @@ def target_url(value):
 
 def request(base, path, headers=None):
     url = target_url(base)
-    cls = http.client.HTTPSConnection if url.scheme == "https" else http.client.HTTPConnection
+    cls = (
+        http.client.HTTPSConnection
+        if url.scheme == "https"
+        else http.client.HTTPConnection
+    )
     conn = cls(url.hostname, url.port, timeout=5)
     try:
         conn.request("GET", path, headers=headers or {})
@@ -120,18 +152,32 @@ def receiver(port, address, backend):
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
-            token = parse_qs(urlsplit(self.path).query).get("__mockforge_cve", [None])[0]
+            token = parse_qs(urlsplit(self.path).query).get("__mockforge_cve", [None])[
+                0
+            ]
             header = self.headers.get("X-Mockforge-Cve")
-            observation = {"path": self.path, "tokens": [token, header], "signature": self.headers.get("x-middleware-subrequest")}
+            observation = {
+                "path": self.path,
+                "tokens": [token, header],
+                "signature": self.headers.get("x-middleware-subrequest"),
+            }
             with lock:
                 records.append(observation)
             try:
-                headers = {k: v for k, v in self.headers.items() if k.lower() not in ("host", "connection", "accept-encoding")}
+                headers = {
+                    k: v
+                    for k, v in self.headers.items()
+                    if k.lower() not in ("host", "connection", "accept-encoding")
+                }
                 status, response_headers, body = request(backend, self.path, headers)
                 observation["status"] = status
                 self.send_response(status)
                 for name, value in response_headers:
-                    if name.lower() not in ("transfer-encoding", "connection", "content-length"):
+                    if name.lower() not in (
+                        "transfer-encoding",
+                        "connection",
+                        "content-length",
+                    ):
                         self.send_header(name, value)
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
@@ -176,9 +222,26 @@ def owned_remove(engine, name, run_id):
 def lab(engine, run_id, output):
     name = "mockforge-cve-" + run_id
     try:
-        command([engine, "run", "-d", "--name", name, "--label", f"{LABEL}={run_id}",
-                 "--cap-drop=ALL", "--security-opt=no-new-privileges", "--memory=1g", "--pids-limit=256",
-                 "-p", "127.0.0.1::3000", "-e", "NODE_ENV=production", CATALOG["application_image"]])
+        command(
+            [
+                engine,
+                "run",
+                "-d",
+                "--name",
+                name,
+                "--label",
+                f"{LABEL}={run_id}",
+                "--cap-drop=ALL",
+                "--security-opt=no-new-privileges",
+                "--memory=1g",
+                "--pids-limit=256",
+                "-p",
+                "127.0.0.1::3000",
+                "-e",
+                "NODE_ENV=production",
+                CATALOG["application_image"],
+            ]
+        )
         ports = command([engine, "port", name, "3000/tcp"]).stdout.strip().splitlines()
         backend = "http://" + ports[0]
         deadline = time.monotonic() + 90
@@ -204,7 +267,7 @@ def lab(engine, run_id, output):
 def template(token):
     # This template emits a transport observation for any HTTP response. Only
     # classify() decides protection; a Nuclei match here is NOT a vulnerability.
-    return f'''id: mockforge-nextjs-29927-observation
+    return f"""id: mockforge-nextjs-29927-observation
 info:
   name: MockForge Next.js controlled lab observation
   author: mockforge
@@ -221,7 +284,7 @@ http:
       - type: dsl
         dsl:
           - "status_code >= 100 && status_code <= 599"
-'''
+"""
 
 
 def probe(engine, base, output, phase, run_id):
@@ -230,35 +293,87 @@ def probe(engine, base, output, phase, run_id):
     path.write_text(template(token))
     name = "mockforge-cve-client-" + token
     try:
-        result = command([
-            engine, "run", "--rm", "--name", name, "--label", f"{LABEL}={run_id}",
-            "--network=host", "--cap-drop=ALL", "--security-opt=no-new-privileges",
-            "--memory=512m", "--pids-limit=128", "-v", f"{output.resolve()}:/work:ro",
-            CATALOG["runner_image"], "-u", base, "-t", f"/work/{phase}.yaml",
-            "-duc", "-ni", "-no-stdin", "-silent", "-jsonl", "-timeout", "5",
-            "-retries", "0", "-rl", "1", "-c", "1",
-        ], timeout=90)
+        result = command(
+            [
+                engine,
+                "run",
+                "--rm",
+                "--name",
+                name,
+                "--label",
+                f"{LABEL}={run_id}",
+                "--network=host",
+                "--cap-drop=ALL",
+                "--security-opt=no-new-privileges",
+                "--memory=512m",
+                "--pids-limit=128",
+                "-v",
+                f"{output.resolve()}:/work:ro",
+                CATALOG["runner_image"],
+                "-u",
+                base,
+                "-t",
+                f"/work/{phase}.yaml",
+                "-duc",
+                "-ni",
+                "-no-stdin",
+                "-silent",
+                "-jsonl",
+                "-timeout",
+                "5",
+                "-retries",
+                "0",
+                "-rl",
+                "1",
+                "-c",
+                "1",
+            ],
+            timeout=90,
+        )
         (output / f"{phase}.jsonl").write_text(result.stdout)
         (output / f"{phase}.log").write_text(result.stderr)
-        findings = [json.loads(line) for line in result.stdout.splitlines() if line.startswith("{")]
-        if len(findings) != 1 or findings[0].get("template-id") != "mockforge-nextjs-29927-observation":
-            raise RuntimeError(f"{phase}: Nuclei did not produce exactly one HTTP observation")
+        findings = [
+            json.loads(line)
+            for line in result.stdout.splitlines()
+            if line.startswith("{")
+        ]
+        if (
+            len(findings) != 1
+            or findings[0].get("template-id") != "mockforge-nextjs-29927-observation"
+        ):
+            raise RuntimeError(
+                f"{phase}: Nuclei did not produce exactly one HTTP observation"
+            )
         raw = findings[0].get("response", "")
         match = re.match(r"HTTP/\S+ (\d{3})", raw)
         if not match:
             raise RuntimeError(f"{phase}: Nuclei response evidence is missing")
-        return {"token": token, "status": int(match[1]), "dashboard": "Dashboard" in raw, "response_sha256": hashlib.sha256(raw.encode()).hexdigest()}
+        return {
+            "token": token,
+            "status": int(match[1]),
+            "dashboard": "Dashboard" in raw,
+            "response_sha256": hashlib.sha256(raw.encode()).hexdigest(),
+        }
     finally:
         owned_remove(engine, name, run_id)
 
 
 def control(base, run_id, phase):
     token = f"{run_id}-{phase}-{uuid.uuid4().hex}"
-    status, _headers, body = request(base, f"/login?__mockforge_cve={token}", {"X-Mockforge-Cve": token})
+    status, _headers, body = request(
+        base, f"/login?__mockforge_cve={token}", {"X-Mockforge-Cve": token}
+    )
     root_token = token + "-root"
-    root_status = request(base, f"/?__mockforge_cve={root_token}", {"X-Mockforge-Cve": root_token})[0]
-    return {"token": token, "status": status, "body_sha256": hashlib.sha256(body).hexdigest(),
-            "root_token": root_token, "root_status": root_status}
+    root_status = request(
+        base, f"/?__mockforge_cve={root_token}", {"X-Mockforge-Cve": root_token}
+    )[0]
+    return {
+        "token": token,
+        "status": status,
+        "body_sha256": hashlib.sha256(body).hexdigest(),
+        "root_token": root_token,
+        "root_status": root_status,
+    }
 
 
 def observations(records, token):
@@ -268,18 +383,37 @@ def observations(records, token):
 def classify(baseline, target, before, after, records, block_status):
     if baseline["status"] != 200 or not baseline["dashboard"]:
         return "inconclusive", "direct application vulnerability was not reproduced"
-    if not all(c["status"] == 200 and len(observations(records, c["token"])) == 1
-               and observations(records, c["token"])[0].get("status") == 200 for c in (before, after)):
+    if not all(
+        c["status"] == 200
+        and len(observations(records, c["token"])) == 1
+        and observations(records, c["token"])[0].get("status") == 200
+        for c in (before, after)
+    ):
         return "inconclusive", "benign controls did not corroborate origin reachability"
-    if not all(c["root_status"] == 307 and len(observations(records, c["root_token"])) == 1
-               and observations(records, c["root_token"])[0].get("status") == 307 for c in (before, after)):
-        return "inconclusive", "ordinary requests to the protected route did not match the application redirect"
+    if not all(
+        c["root_status"] == 307
+        and len(observations(records, c["root_token"])) == 1
+        and observations(records, c["root_token"])[0].get("status") == 307
+        for c in (before, after)
+    ):
+        return (
+            "inconclusive",
+            "ordinary requests to the protected route did not match the application redirect",
+        )
+    if any(not any(r["tokens"]) for r in records):
+        return (
+            "inconclusive",
+            "uncorrelated origin traffic prevents a blocking assertion",
+        )
     seen = observations(records, target["token"])
     if seen:
         return "fail", "signature request reached the origin; blocking assertion failed"
     if target["status"] != block_status:
         return "inconclusive", "response did not match the configured block status"
-    return "pass", "expected rejection with no correlated origin request and healthy controls"
+    return (
+        "pass",
+        "expected rejection with no correlated origin request and healthy controls",
+    )
 
 
 def run(args):
@@ -290,36 +424,86 @@ def run(args):
     output = Path(args.output_dir).resolve()
     output.mkdir(parents=True, exist_ok=False)
     run_id = uuid.uuid4().hex
-    report = {"schema_version": 1, "run_id": run_id, "pack": CATALOG, "target": args.target,
-              "verdict": "inconclusive", "runtime_patch_evidence": "unverified",
-              "scope": "Selected CVE lab reproduction and request-blocking regression, not comprehensive CVE coverage"}
-    (output / "ownership.json").write_text(json.dumps({"run_id": run_id, "engine": args.engine}))
+    report = {
+        "schema_version": 1,
+        "run_id": run_id,
+        "pack": CATALOG,
+        "target": args.target,
+        "verdict": "inconclusive",
+        "runtime_patch_evidence": "unverified",
+        "scope": "Selected CVE lab reproduction and request-blocking regression, not comprehensive CVE coverage",
+    }
+    (output / "ownership.json").write_text(
+        json.dumps({"run_id": run_id, "engine": args.engine})
+    )
     try:
         prepare(args.engine)
         with lab(args.engine, run_id, output) as backend:
             with receiver(args.origin_port, args.listen_address, backend) as records:
-                direct_host = "127.0.0.1" if args.listen_address == "0.0.0.0" else args.listen_address
+                direct_host = (
+                    "127.0.0.1"
+                    if args.listen_address == "0.0.0.0"
+                    else args.listen_address
+                )
                 origin = f"http://{direct_host}:{args.origin_port}"
-                print(f"Lab ready. LB upstream: {args.listen_address}:{args.origin_port}", flush=True)
+                print(
+                    f"Lab ready. LB upstream: {args.listen_address}:{args.origin_port}",
+                    flush=True,
+                )
                 baseline_control = control(origin, run_id, "baseline-control")
-                ordinary_status = request(origin, "/")[0]
+                ordinary_status = baseline_control["root_status"]
                 baseline = probe(args.engine, origin, output, "baseline", run_id)
-                report.update(baseline=baseline, baseline_control=baseline_control, unauthenticated_status=ordinary_status)
-                if ordinary_status != 307 or baseline["status"] != 200 or not baseline["dashboard"]:
-                    raise RuntimeError("Direct baseline did not demonstrate authentication bypass")
+                report.update(
+                    baseline=baseline,
+                    baseline_control=baseline_control,
+                    unauthenticated_status=ordinary_status,
+                )
+                if (
+                    ordinary_status != 307
+                    or baseline["status"] != 200
+                    or not baseline["dashboard"]
+                ):
+                    raise RuntimeError(
+                        "Direct baseline did not demonstrate authentication bypass"
+                    )
                 if args.target:
                     before = control(args.target, run_id, "before")
-                    tested = probe(args.engine, args.target.rstrip("/"), output, "target", run_id)
+                    tested = probe(
+                        args.engine, args.target.rstrip("/"), output, "target", run_id
+                    )
                     after = control(args.target, run_id, "after")
                     time.sleep(0.5)
-                    verdict, reason = classify(baseline, tested, before, after, records, args.block_status)
-                    if before["body_sha256"] != baseline_control["body_sha256"] or after["body_sha256"] != baseline_control["body_sha256"]:
-                        verdict, reason = "inconclusive", "LB controls did not match this application's login page"
-                    report.update(verdict=verdict, reason=reason, target_probe=tested, control_before=before, control_after=after)
+                    verdict, reason = classify(
+                        baseline, tested, before, after, records, args.block_status
+                    )
+                    if (
+                        before["body_sha256"] != baseline_control["body_sha256"]
+                        or after["body_sha256"] != baseline_control["body_sha256"]
+                    ):
+                        verdict, reason = (
+                            "inconclusive",
+                            "LB controls did not match this application's login page",
+                        )
+                    report.update(
+                        verdict=verdict,
+                        reason=reason,
+                        target_probe=tested,
+                        control_before=before,
+                        control_after=after,
+                    )
                 else:
-                    report.update(verdict="baseline-confirmed", reason="Direct lab reproduction only; no LB tested")
+                    report.update(
+                        verdict="baseline-confirmed",
+                        reason="Direct lab reproduction only; no LB tested",
+                    )
                 report["origin_observations"] = records
-    except (RuntimeError, OSError, ValueError, http.client.HTTPException, subprocess.TimeoutExpired) as exc:
+    except (
+        RuntimeError,
+        OSError,
+        ValueError,
+        http.client.HTTPException,
+        subprocess.TimeoutExpired,
+    ) as exc:
         report.update(verdict="inconclusive", reason=str(exc))
     finally:
         (output / "report.json").write_text(json.dumps(report, indent=2) + "\n")
@@ -334,7 +518,11 @@ def cleanup(args):
         raise ValueError("invalid ownership record")
     if data["engine"] != args.engine:
         raise ValueError("use the engine recorded in ownership.json")
-    for name in ("mockforge-cve-" + run_id, "mockforge-cve-client-" + run_id + "-baseline", "mockforge-cve-client-" + run_id + "-target"):
+    for name in (
+        "mockforge-cve-" + run_id,
+        "mockforge-cve-client-" + run_id + "-baseline",
+        "mockforge-cve-client-" + run_id + "-target",
+    ):
         owned_remove(args.engine, name, run_id)
     print("Owned containers removed; reports and image cache retained")
 
@@ -345,16 +533,32 @@ def main(argv=None):
     commands = parser.add_subparsers(dest="action", required=True)
     commands.add_parser("doctor", help="Check local prerequisites without downloading")
     commands.add_parser("list", help="Show reviewed pack and pinned versions")
-    prepare_parser = commands.add_parser("prepare", help="Download and cache the reviewed images")
+    prepare_parser = commands.add_parser(
+        "prepare", help="Download and cache the reviewed images"
+    )
     prepare_parser.add_argument("cve", choices=(CVE,))
-    runner = commands.add_parser("run", help="Auto-prepare, reproduce directly, optionally compare through your LB, then stop")
+    runner = commands.add_parser(
+        "run",
+        help="Auto-prepare, reproduce directly, optionally compare through your LB, then stop",
+    )
     runner.add_argument("cve", choices=(CVE,))
-    runner.add_argument("--target", help="Your authorized LB HTTP(S) origin, configured to forward to origin-port")
+    runner.add_argument(
+        "--target",
+        help="Your authorized LB HTTP(S) origin, configured to forward to origin-port",
+    )
     runner.add_argument("--origin-port", type=int, default=18082)
-    runner.add_argument("--listen-address", default="127.0.0.1", help="Recorder bind IPv4 address; choose an isolated lab interface for a remote LB")
+    runner.add_argument(
+        "--listen-address",
+        default="127.0.0.1",
+        help="Recorder bind IPv4 address; choose an isolated lab interface for a remote LB",
+    )
     runner.add_argument("--block-status", type=int, default=403)
-    runner.add_argument("--output-dir", required=True, help="New report directory, never overwritten")
-    down = commands.add_parser("down", help="Recover owned containers after an interrupted run")
+    runner.add_argument(
+        "--output-dir", required=True, help="New report directory, never overwritten"
+    )
+    down = commands.add_parser(
+        "down", help="Recover owned containers after an interrupted run"
+    )
     down.add_argument("--output-dir", required=True)
     args = parser.parse_args(argv)
     try:
@@ -364,7 +568,9 @@ def main(argv=None):
             print(json.dumps(CATALOG, indent=2))
         elif args.action == "prepare":
             prepare(args.engine)
-            print("Pinned lab and Nuclei images ready; updates ship with reviewed MockForge packs")
+            print(
+                "Pinned lab and Nuclei images ready; updates ship with reviewed MockForge packs"
+            )
         elif args.action == "run":
             return run(args)
         elif args.action == "down":
