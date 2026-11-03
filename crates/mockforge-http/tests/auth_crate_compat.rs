@@ -11,6 +11,7 @@ use mockforge_auth::{
     auth::{AuthConfig, BasicAuthConfig},
     AuthClaims, AuthState,
 };
+use mockforge_http::auth::{AuthClaims as LegacyAuthClaims, AuthState as LegacyAuthState};
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::RwLock;
 use tower::ServiceExt;
@@ -33,14 +34,14 @@ async fn extracted_state_and_claims_work_through_the_legacy_http_middleware() {
         oauth2_client: None,
         introspection_cache: Arc::new(RwLock::new(HashMap::new())),
     };
-    let legacy: mockforge_http::auth::AuthState = direct;
+    let legacy: LegacyAuthState = direct;
     let app = Router::new()
         .route(
             "/guarded",
             get(|Extension(claims): Extension<AuthClaims>, req: Request<Body>| async move {
                 let legacy = req
                     .extensions()
-                    .get::<Extension<mockforge_http::auth::AuthClaims>>()
+                    .get::<Extension<LegacyAuthClaims>>()
                     .expect("legacy wrapped claims remain available");
                 assert_eq!(legacy.0.username, claims.username);
                 claims.username.unwrap_or_default()
