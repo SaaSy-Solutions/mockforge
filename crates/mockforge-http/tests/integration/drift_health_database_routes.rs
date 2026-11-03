@@ -24,11 +24,11 @@ async fn database_timeline_reads_existing_threat_and_forecast_rows() {
     let pool = database.pool().unwrap();
     // The launcher supplies a fresh disposable database; these are the actual
     // append-only schema migrations, rather than a hand-written test schema.
-    sqlx::raw_sql(include_str!("../migrations/20250128000001_api_change_forecasts.sql"))
+    sqlx::raw_sql(include_str!("../../migrations/20250128000001_api_change_forecasts.sql"))
         .execute(pool)
         .await
         .unwrap();
-    sqlx::raw_sql(include_str!("../migrations/20250128000004_contract_threats.sql"))
+    sqlx::raw_sql(include_str!("../../migrations/20250128000004_contract_threats.sql"))
         .execute(pool)
         .await
         .unwrap();

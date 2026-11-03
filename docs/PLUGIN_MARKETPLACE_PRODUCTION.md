@@ -103,14 +103,14 @@ PROMETHEUS_SCRAPE_TOKEN=...         # require bearer auth on /metrics (issue #64
 ## Testing
 
 End-to-end coverage lives in
-`crates/mockforge-registry-server/tests/marketplace_e2e.rs` (register → create org →
+`crates/mockforge-registry-server/tests/integration/marketplace_e2e.rs` (register → create org →
 publish → search → install → review for plugins, templates, and scenarios). These tests
 are `#[ignore]`d because they require a running registry + Postgres:
 
 ```bash
 # bring up Postgres + registry-server with DATABASE_URL/JWT_SECRET, then:
 REGISTRY_URL=http://localhost:8080 \
-  cargo test -p mockforge-registry-server --test marketplace_e2e -- --ignored
+  cargo test -p mockforge-registry-server --test integration -- --ignored marketplace_e2e::
 ```
 
 > **Known issue:** template/scenario *search* currently does not return a just-published
