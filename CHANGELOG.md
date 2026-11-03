@@ -6,6 +6,7 @@
 
 ### Added
 
+- **[Contracts][DevX]** `mockforge validate-spec <spec> [--format json]` validates one local OpenAPI 2.0 or 3.x document with the validator `generate` uses, without generating, starting, fetching or writing anything. The JSON form is a versioned document (`schema_version` 1) listing each finding's severity, rule, JSON pointer, message and suggestion, for CI and agent hosts such as Aether. Exits 0 when valid, 1 with errors, 2 when the file is not an OpenAPI document it could read.
 - **[Reality]** Add `mockforge cve` managed labs with pinned vulnerable applications and Nuclei containers. The first pack reproduces Next.js CVE-2025-29927, checks direct and load-balancer paths, and reports blocking only when healthy controls and correlated origin evidence support it. (#79)
 - **[DevX]** Automatically fetch managed CVE lab images, export evidence, and clean up run-owned containers. Include environment diagnostics and recovery commands for local Docker or Podman on Linux amd64 with Python 3.11+. (#79)
 
