@@ -16,7 +16,7 @@ use crate::{
     AppState,
 };
 
-use super::{entitlements::resolve_effective_plan, hosted_mocks::CreateDeploymentRequest};
+use super::{entitlements::resolve_org_plan, hosted_mocks::CreateDeploymentRequest};
 
 async fn has_capacity(
     tx: &mut Transaction<'_, Postgres>,
@@ -29,13 +29,11 @@ async fn has_capacity(
             .fetch_one(&mut **tx)
             .await?;
     let subscription = Subscription::find_by_org(&mut **tx, org_id).await?;
-    let plan = resolve_effective_plan(org.plan(), subscription.as_ref(), Utc::now());
-    let mut limits = if plan == org.plan() {
-        org.limits_json
-    } else {
-        plan.default_limits()
-    };
-    if let Some(setting) = OrgSetting::get(&mut **tx, org_id, "quota").await? {
+    let plan = resolve_org_plan(&org, subscription.as_ref(), Utc::now());
+    let mut limits = super::usage::stored_limits_for_plan(&org, plan);
+    if org.billing_exempt {
+        // Quota overrides never re-impose limits on an exempt org.
+    } else if let Some(setting) = OrgSetting::get(&mut **tx, org_id, "quota").await? {
         super::usage::merge_quota_overrides(&mut limits, &setting.setting_value);
     }
     if limits.get("hosted_mocks").and_then(Value::as_bool) == Some(false) {
