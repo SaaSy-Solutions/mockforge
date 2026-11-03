@@ -50,8 +50,8 @@ if ! cargo build -p mockforge-cli --locked --release; then
   exit 1
 fi
 
-if ! ./target/release/mockforge --version; then
-  red "FAIL: target/release/mockforge --version did not exit cleanly."
+if ! "${CARGO_TARGET_DIR:-target}/release/mockforge" --version; then
+  red "FAIL: ${CARGO_TARGET_DIR:-target}/release/mockforge --version did not exit cleanly."
   exit 1
 fi
 green "  default-features build + --version OK"

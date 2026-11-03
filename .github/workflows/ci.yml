@@ -71,6 +71,8 @@ jobs:
           python3 -m unittest discover -s scripts/tests -p test_dev_cargo.py -v
           python3 -m unittest discover -s scripts/tests -p test_rust_build_policy.py -v
           python3 -m unittest discover -s scripts/tests -p test_workload_admission.py -v
+      - name: Verify runner-persistent cargo targets and no GitHub cache storage
+        run: python3 scripts/tests/test_runner_cargo_target.py
       - name: Determine whether non-docs files changed
         id: filter
         env:
@@ -172,11 +174,12 @@ jobs:
     # compile attempts. Self-hosted runners' rustc invocations include
     # absolute paths to /home/actions/actions-runner-{N}/_work/.../target/
     # in --extern args, so cache keys differ across the 9 sibling runners.
-    # Swatinem/rust-cache@v2 below covers the same use case (target/ caching).
-    - name: Cache dependencies
-      uses: Swatinem/rust-cache@v2
-      with:
-        env-vars: "CARGO_HOME"
+    # The step below keeps a per-runner warm target on the runner disk.
+    - name: Use runner-persistent cargo target on Hetzner
+      # Replaces Swatinem/rust-cache: no target or registry tarballs in
+      # GitHub cache storage. See scripts/ci/runner-cargo-target.sh.
+      if: runner.environment == 'self-hosted'
+      run: bash scripts/ci/runner-cargo-target.sh ci-test >> "$GITHUB_ENV"
 
     - name: Check formatting
       run: cargo fmt --all -- --check
@@ -217,7 +220,7 @@ jobs:
     - name: Build mockforge binary with all protocols (for e2e tests)
       run: |
         cargo build --bin mockforge --features all-protocols
-        cp target/debug/mockforge "$RUNNER_TEMP/mockforge-all-protocols"
+        cp "${CARGO_TARGET_DIR:-target}/debug/mockforge" "$RUNNER_TEMP/mockforge-all-protocols"
 
     - name: Run tests
       run: cargo test --workspace --exclude mockforge-desktop --verbose
@@ -234,7 +237,7 @@ jobs:
       if: matrix.rust == '1.96.0' && (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)
 
   # Keep trusted Rust work sequential on the existing pool. No target or
-  # binary artifacts cross jobs; each lane uses its own normal job cache key.
+  # binary artifacts cross jobs; each lane uses its own warm target dir.
   test-extended:
     name: Rust extended checks
     needs: [changes, test]
@@ -284,10 +287,11 @@ jobs:
           exit 1
         }
 
-    - name: Cache dependencies
-      uses: Swatinem/rust-cache@v2
-      with:
-        env-vars: "CARGO_HOME"
+    - name: Use runner-persistent cargo target on Hetzner
+      # Replaces Swatinem/rust-cache: no target or registry tarballs in
+      # GitHub cache storage. See scripts/ci/runner-cargo-target.sh.
+      if: runner.environment == 'self-hosted'
+      run: bash scripts/ci/runner-cargo-target.sh ci-test-extended >> "$GITHUB_ENV"
 
     - name: Run tests with all features
       run: cargo test --workspace --exclude mockforge-desktop --exclude mockforge-tui --all-features --verbose
@@ -470,10 +474,11 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev
 
-    - name: Cache dependencies
-      uses: Swatinem/rust-cache@v2
-      with:
-        env-vars: "CARGO_HOME"
+    - name: Use runner-persistent cargo target on Hetzner
+      # Replaces Swatinem/rust-cache: no target or registry tarballs in
+      # GitHub cache storage. See scripts/ci/runner-cargo-target.sh.
+      if: runner.environment == 'self-hosted'
+      run: bash scripts/ci/runner-cargo-target.sh ci-warning-gate >> "$GITHUB_ENV"
 
     - name: Run warning gate
       run: bash scripts/lint-warning-gate.sh
@@ -528,10 +533,11 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev
 
-    - name: Cache dependencies
-      uses: Swatinem/rust-cache@v2
-      with:
-        env-vars: "CARGO_HOME"
+    - name: Use runner-persistent cargo target on Hetzner
+      # Replaces Swatinem/rust-cache: no target or registry tarballs in
+      # GitHub cache storage. See scripts/ci/runner-cargo-target.sh.
+      if: runner.environment == 'self-hosted'
+      run: bash scripts/ci/runner-cargo-target.sh ci-warning-ratchet >> "$GITHUB_ENV"
 
     - name: Run ratchet preview
       run: bash scripts/lint-warning-ratchet-preview.sh
@@ -673,7 +679,7 @@ jobs:
       # `runner.name` is unavailable in workflow- or job-level `env:` blocks
       # (GH Actions context: `runner.*` is step-scoped). Writing to
       # `$GITHUB_ENV` here exports it to every subsequent step in this job,
-      # including the rust-toolchain composite action and rust-cache.
+      # including the rust-toolchain composite action.
       run: echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
 
     - name: Checkout repository
@@ -689,17 +695,18 @@ jobs:
     - name: Install cargo-llvm-cov
       run: cargo install cargo-llvm-cov
 
-    - name: Cache dependencies
-      uses: Swatinem/rust-cache@v2
-      with:
-        env-vars: "CARGO_HOME"
+    - name: Use runner-persistent cargo target on Hetzner
+      # Replaces Swatinem/rust-cache: no target or registry tarballs in
+      # GitHub cache storage. See scripts/ci/runner-cargo-target.sh.
+      if: runner.environment == 'self-hosted'
+      run: bash scripts/ci/runner-cargo-target.sh ci-coverage >> "$GITHUB_ENV"
 
     # The e2e protocol tests spawn `mockforge` and need the ws/grpc/mqtt
     # features; see the matching step in the Test job.
     - name: Build mockforge binary with all protocols (for e2e tests)
       run: |
         cargo build --bin mockforge --features all-protocols
-        cp target/debug/mockforge "$RUNNER_TEMP/mockforge-all-protocols"
+        cp "${CARGO_TARGET_DIR:-target}/debug/mockforge" "$RUNNER_TEMP/mockforge-all-protocols"
 
     - name: Generate coverage report
       run: cargo llvm-cov --workspace --exclude mockforge-desktop --lcov --output-path lcov.info
@@ -716,7 +723,7 @@ jobs:
     # build (tens of GB) behind for the next job to trip over.
     - name: Remove instrumented build output
       if: always()
-      run: rm -rf target/llvm-cov-target
+      run: rm -rf "${CARGO_TARGET_DIR:-target}/llvm-cov-target"
 
   msrv:
     name: Minimum Supported Rust Version
@@ -781,10 +788,11 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev
 
-    - name: Cache dependencies
-      uses: Swatinem/rust-cache@v2
-      with:
-        env-vars: "CARGO_HOME"
+    - name: Use runner-persistent cargo target on Hetzner
+      # Replaces Swatinem/rust-cache: no target or registry tarballs in
+      # GitHub cache storage. See scripts/ci/runner-cargo-target.sh.
+      if: runner.environment == 'self-hosted'
+      run: bash scripts/ci/runner-cargo-target.sh ci-msrv >> "$GITHUB_ENV"
 
     - name: Check MSRV compatibility
       run: |
