@@ -13,6 +13,10 @@ pub(super) const PUBLIC_MOUNTS: &[(&str, &str)] = &[
     ("consent_router", "mock OAuth2 consent screen"),
     ("mockforge_ws::router", "mock WebSocket endpoints"),
     ("gql_router", "mock GraphQL endpoint"),
+    (
+        "configured_router",
+        "the user's configured mock routes; configured_routes.rs mounts no management API",
+    ),
     ("mockforge_http::llm_mock::router", "mock LLM API"),
     ("mockforge_http::mcp_mock::router", "mock MCP server"),
     (

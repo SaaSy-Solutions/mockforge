@@ -16,6 +16,9 @@ use tokio::sync::RwLock;
 use tower::ServiceExt;
 
 #[tokio::test]
+// The `mockforge_http::auth::` paths are the point of this test: they prove
+// the legacy re-exports still name the extracted types.
+#[allow(unused_qualifications)]
 async fn extracted_state_and_claims_work_through_the_legacy_http_middleware() {
     let direct = AuthState {
         config: AuthConfig {
