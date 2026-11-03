@@ -684,6 +684,12 @@ struct ServeCliArgs {
 #[derive(Subcommand)]
 #[allow(clippy::large_enum_variant)]
 enum Commands {
+    /// Run managed CVE labs (use `mockforge cve --help` for setup and commands)
+    #[command(disable_help_flag = true)]
+    Cve {
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<std::ffi::OsString>,
+    },
     /// Export the bundled discussion exporter and CVE rule tools
     Tools {
         #[command(subcommand)]
@@ -2892,6 +2898,7 @@ fn cli_command_name(cmd: &Commands) -> &'static str {
         Commands::DevSetup { .. } => "dev-setup",
         Commands::Config { .. } => "config",
         Commands::Status(_) => "status",
+        Commands::Cve { .. } => "cve",
         Commands::Tools { .. } => "tools",
         _ => "other",
     }
@@ -2900,6 +2907,9 @@ fn cli_command_name(cmd: &Commands) -> &'static str {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let cli = Cli::parse();
+    if let Commands::Cve { args } = cli.command {
+        return tools_commands::cve(args).map_err(Into::into);
+    }
     if let Commands::Tools { command } = cli.command {
         return tools_commands::handle(command).map_err(Into::into);
     }
@@ -2975,6 +2985,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     .await;
 
     match cli.command {
+        Commands::Cve { .. } => unreachable!("cve handled before service initialization"),
         Commands::Tools { .. } => unreachable!("tools handled before service initialization"),
         Commands::Serve(args) => {
             // Issue #79 round 15 — `--shadow` is a thin alias for the

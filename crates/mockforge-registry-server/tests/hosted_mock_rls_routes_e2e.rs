@@ -273,6 +273,24 @@ async fn redeploy_background_status_write_lands_and_foreign_redeploy_rejected() 
 
     let owner = register(&base_url, "ro").await;
     let stranger = register(&base_url, "rs").await;
+    // This fixture represents an external deployment, which requires an
+    // active paid plan before redeploy can exercise the RLS-bound writes.
+    let owner_org_id = Uuid::parse_str(&owner.org_id).unwrap();
+    let entitlement = sqlx::query(
+        "WITH paid_org AS (UPDATE organizations SET plan = 'pro' WHERE id = $1 RETURNING id) \
+         INSERT INTO subscriptions \
+             (org_id, stripe_subscription_id, stripe_customer_id, price_id, \
+              plan, status, current_period_start, current_period_end) \
+         SELECT id, $2, $3, 'price_hmr_pro', 'pro', 'active', NOW(), \
+                NOW() + INTERVAL '30 days' FROM paid_org",
+    )
+    .bind(owner_org_id)
+    .bind(format!("sub_hmr_{owner_org_id}"))
+    .bind(format!("cus_hmr_{owner_org_id}"))
+    .execute(&pool)
+    .await
+    .expect("seed active paid redeploy entitlement");
+    assert_eq!(entitlement.rows_affected(), 1, "paid fixture owner must exist");
     // `failed` is a redeployable state and makes the transition observable:
     // failed -> deploying (request path) -> active (background task).
     let deployment = insert_deployment(&pool, &owner.org_id, "failed").await;

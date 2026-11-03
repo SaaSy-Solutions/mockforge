@@ -17,10 +17,10 @@ categories = ["authentication", "web-programming"]
 missing_docs = "deny"
 
 [dependencies]
-mockforge-core = { version = "0.3.238", path = "../mockforge-core" }
-mockforge-foundation = { version = "0.3.238", path = "../mockforge-foundation" }
-mockforge-openapi = { version = "0.3.238", path = "../mockforge-openapi" }
-mockforge-intelligence = { version = "0.3.238", path = "../mockforge-intelligence" }
+mockforge-core = { version = "0.3.239", path = "../mockforge-core" }
+mockforge-foundation = { version = "0.3.239", path = "../mockforge-foundation" }
+mockforge-openapi = { version = "0.3.239", path = "../mockforge-openapi" }
+mockforge-intelligence = { version = "0.3.239", path = "../mockforge-intelligence" }
 axum = { workspace = true }
 base64 = { workspace = true }
 chrono = { workspace = true }
