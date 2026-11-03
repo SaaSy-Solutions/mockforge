@@ -1,5 +1,7 @@
 [advisories]
 ignore = [
+    # Export-only Jaeger path; evidence and scope in root audit.toml.
+    "RUSTSEC-2026-0435",
     "RUSTSEC-2023-0071",
     "RUSTSEC-2024-0370",
     "RUSTSEC-2026-0020",

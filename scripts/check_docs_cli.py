@@ -88,6 +88,25 @@ ALIAS_RE = re.compile(r"\[(?:visible )?(?:short )?aliases?: ([^\]]+)\]")
 
 def parse_help(text: str) -> dict:
     """Parse clap help text into {"commands": {name: [aliases]}, "flags": {flag: takes_value}}."""
+    if text.startswith("usage: mockforge cve"):
+        commands = {}
+        flags = {}
+        positional = False
+        for line in text.splitlines():
+            if line == "positional arguments:":
+                positional = True
+            elif line == "options:":
+                positional = False
+            if positional:
+                match = re.match(r"^    ([a-z][a-z-]+)\s{2,}", line)
+                if match:
+                    commands[match.group(1)] = []
+            elif line.startswith("  -"):
+                option = line.strip().split("  ", 1)[0]
+                takes = int(bool(re.search(r" (?:[A-Z][A-Z_]*|\{[^}]+\})$", option)))
+                for name in re.findall(r"--[a-z][a-z-]*|-[a-z]\b", option):
+                    flags[name] = takes
+        return {"commands": commands, "flags": flags}
     commands: dict[str, list[str]] = {}
     flags: dict[str, int] = {}  # 0 = switch, 1 = takes a value, 2 = optional value
     section = None

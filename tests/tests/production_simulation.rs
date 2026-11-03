@@ -7,6 +7,7 @@
 //! - Resource limits
 //! - Concurrent operations
 
+use mockforge_http::management_auth::MANAGEMENT_TOKEN_HEADER;
 use mockforge_test::MockForgeServer;
 use reqwest::Client;
 use serde_json::json;
@@ -14,9 +15,15 @@ use std::time::Duration;
 use tokio::time::timeout;
 
 /// Create a mock on the serving port and return its actual generated ID.
-async fn create_dynamic_mock(client: &Client, http_port: u16, config: serde_json::Value) -> String {
+async fn create_dynamic_mock(
+    client: &Client,
+    server: &MockForgeServer,
+    config: serde_json::Value,
+) -> String {
+    let http_port = server.http_port();
     let response = client
         .post(format!("http://127.0.0.1:{http_port}/__mockforge/api/mocks"))
+        .header(MANAGEMENT_TOKEN_HEADER, server.management_token())
         .json(&config)
         .send()
         .await
@@ -50,7 +57,7 @@ async fn test_production_high_load_http() {
     for i in 0..100 {
         create_dynamic_mock(
             &client,
-            http_port,
+            &server,
             json!({
                 "path": format!("/api/load-test/{i}"),
                 "method": "GET",
@@ -148,7 +155,7 @@ async fn test_production_error_recovery() {
     // Create stub that returns errors
     create_dynamic_mock(
         &client,
-        http_port,
+        &server,
         json!({
             "path": "/api/error-test", "method": "GET", "status_code": 500,
             "response": {"body": {"error": "test error"}}
@@ -199,7 +206,7 @@ async fn test_production_resource_cleanup() {
         ids.push(
             create_dynamic_mock(
                 &client,
-                http_port,
+                &server,
                 json!({
                     "path": format!("/api/resource-test/{i}"), "method": "GET",
                     "response": {"body": {"id": i}}
@@ -211,6 +218,7 @@ async fn test_production_resource_cleanup() {
     for id in ids {
         let response = client
             .delete(format!("http://127.0.0.1:{http_port}/__mockforge/api/mocks/{id}"))
+            .header(MANAGEMENT_TOKEN_HEADER, server.management_token())
             .send()
             .await
             .expect("Delete request must complete");
@@ -218,6 +226,7 @@ async fn test_production_resource_cleanup() {
     }
     let list = client
         .get(format!("http://127.0.0.1:{http_port}/__mockforge/api/mocks"))
+        .header(MANAGEMENT_TOKEN_HEADER, server.management_token())
         .send()
         .await
         .expect("Mock list must be reachable");

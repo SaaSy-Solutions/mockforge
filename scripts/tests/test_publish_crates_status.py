@@ -11,6 +11,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts/publish-crates.sh"
+PUBLISH_CRATES = re.search(r"CRATES=\((.*?)\n\)", SCRIPT.read_text(), re.S).group(1).split()
 
 
 class PublishStatusTests(unittest.TestCase):
@@ -33,8 +34,7 @@ class PublishStatusTests(unittest.TestCase):
             (root / "Cargo.toml").write_text(
                 '[workspace.package]\nversion = "0.3.232"\n'
             )
-            crates = re.search(r"CRATES=\((.*?)\n\)", SCRIPT.read_text(), re.S)
-            for name in crates.group(1).split():
+            for name in PUBLISH_CRATES:
                 crate = root / "crates" / name
                 crate.mkdir(parents=True)
                 (crate / "Cargo.toml").write_text('[package]\nname = "fixture"\n')
@@ -93,18 +93,18 @@ class PublishStatusTests(unittest.TestCase):
     def test_all_published_returns_success(self):
         result = self.run_publisher("published")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("53/53 at 0.3.232", result.stdout)
+        self.assertIn(f"{len(PUBLISH_CRATES)}/{len(PUBLISH_CRATES)} at 0.3.232", result.stdout)
 
     def test_incomplete_publication_returns_failure(self):
         result = self.run_publisher("stale")
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("52/53 at 0.3.232", result.stdout)
+        self.assertIn(f"{len(PUBLISH_CRATES) - 1}/{len(PUBLISH_CRATES)} at 0.3.232", result.stdout)
         self.assertIn("publish failed", result.stdout)
 
     def test_registry_query_failure_returns_failure(self):
         result = self.run_publisher("query-failure")
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("0/53 at 0.3.232", result.stdout)
+        self.assertIn(f"0/{len(PUBLISH_CRATES)} at 0.3.232", result.stdout)
 
     def test_dry_run_does_not_require_public_versions(self):
         result = self.run_publisher("stale", dry_run=True)
