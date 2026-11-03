@@ -333,9 +333,8 @@ async fn test_paid_flow_e2e() {
     // ─────────────────────────────────────────────────────────────────
     // Step 4: Webhook flips org to Pro
     // ─────────────────────────────────────────────────────────────────
-    // `price_test_pro` triggers the handler's heuristic-matching fallback
-    // in `determine_plan_from_price_id` — no STRIPE_PRICE_ID_PRO env var
-    // required.
+    // Prices map by exact id only (#1456); the e2e environment sets
+    // `STRIPE_PRICE_ID_PRO=price_test_pro`.
     println!("Step 4: customer.subscription.created (Pro)");
     let body = h.subscription_event("customer.subscription.created", "active", "price_test_pro");
     h.post_webhook(&body).await;

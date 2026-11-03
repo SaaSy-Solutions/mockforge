@@ -89,7 +89,7 @@ class FixtureIsolationTests(unittest.TestCase):
         }
         # Scope containment must run on both database roles. The baseline also
         # exercises seed-credential neutralization added on main.
-        common = original.union({"token_scope_e2e"})
+        common = original.union({"token_scope_e2e", "stripe_webhook_e2e"})
         base = common.union({
             "hosted_capture_workspaces_e2e", "diff_finding_incident_e2e",
             "seed_credentials_neutralised",

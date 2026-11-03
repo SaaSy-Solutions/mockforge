@@ -91,7 +91,8 @@ impl Subscription {
         SubscriptionStatus::from_string(&self.status)
     }
 
-    /// Create or update subscription from Stripe webhook
+    /// Create or update subscription from Stripe webhook. While past due,
+    /// the subscription-specific trigger preserves updated_at as the grace anchor.
     #[allow(clippy::too_many_arguments)]
     pub async fn upsert_from_stripe(
         executor: impl sqlx::PgExecutor<'_>,
@@ -125,6 +126,8 @@ impl Subscription {
                 cancel_at_period_end = EXCLUDED.cancel_at_period_end,
                 canceled_at = EXCLUDED.canceled_at,
                 updated_at = NOW()
+            WHERE subscriptions.org_id = EXCLUDED.org_id
+              AND subscriptions.stripe_customer_id = EXCLUDED.stripe_customer_id
             RETURNING *
             "#,
         )
@@ -148,7 +151,9 @@ impl Subscription {
         org_id: Uuid,
     ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>(
-            "SELECT * FROM subscriptions WHERE org_id = $1 ORDER BY created_at DESC LIMIT 1",
+            "SELECT * FROM subscriptions WHERE org_id = $1 ORDER BY \
+             CASE WHEN NOT EXISTS (SELECT 1 FROM subscriptions AS legacy WHERE legacy.org_id = $1 AND legacy.stripe_created_at IS NULL) \
+                  THEN stripe_created_at ELSE NULL END DESC NULLS LAST, created_at DESC LIMIT 1",
         )
         .bind(org_id)
         .fetch_optional(executor)

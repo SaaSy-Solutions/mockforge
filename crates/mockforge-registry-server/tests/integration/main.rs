@@ -39,3 +39,5 @@ mod test_generation_quota_gate_e2e;
 mod token_scope_e2e;
 mod usage_limits_e2e;
 mod workspace_content_e2e;
+
+mod stripe_webhook_e2e;

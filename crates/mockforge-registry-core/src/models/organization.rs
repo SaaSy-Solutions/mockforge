@@ -267,7 +267,11 @@ impl Organization {
     }
 
     /// Update organization plan
-    pub async fn update_plan(pool: &sqlx::PgPool, org_id: Uuid, plan: Plan) -> sqlx::Result<()> {
+    pub async fn update_plan(
+        executor: impl sqlx::PgExecutor<'_>,
+        org_id: Uuid,
+        plan: Plan,
+    ) -> sqlx::Result<()> {
         let limits = get_default_limits(plan);
 
         sqlx::query(
@@ -280,7 +284,7 @@ impl Organization {
         .bind(plan.to_string())
         .bind(serde_json::to_value(&limits).map_err(|e| sqlx::Error::Protocol(e.to_string()))?)
         .bind(org_id)
-        .execute(pool)
+        .execute(executor)
         .await?;
 
         Ok(())

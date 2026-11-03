@@ -1,6 +1,11 @@
 //! Billing and subscription handlers
 
-use axum::{extract::State, http::HeaderMap, Json};
+use axum::{
+    extract::State,
+    http::{HeaderMap, StatusCode},
+    response::{IntoResponse, Response},
+    Json,
+};
 use serde::{Deserialize, Serialize};
 use stripe::{
     BillingPortalSession, CheckoutSession, CheckoutSessionMode,
@@ -9,10 +14,14 @@ use stripe::{
     CreateCheckoutSessionSubscriptionDataTrialSettings as CheckoutTrialSettings,
     CreateCheckoutSessionSubscriptionDataTrialSettingsEndBehavior as CheckoutTrialEndBehavior,
     CreateCheckoutSessionSubscriptionDataTrialSettingsEndBehaviorMissingPaymentMethod as MissingTrialPaymentMethod,
-    EventObject, EventType, Invoice, ListInvoices,
+    Invoice, ListInvoices,
 };
 use uuid::Uuid;
 
+use super::stripe_webhook::{
+    self, parse_object, Claim, StripeCheckoutSession, StripeInvoice, StripeRef, StripeSubscription,
+    WebhookError, WebhookEvent,
+};
 use crate::{
     email::EmailService,
     error::{ApiError, ApiResult},
@@ -572,118 +581,217 @@ pub async fn list_invoices(
     }))
 }
 
-/// Stripe webhook handler
-/// This receives events from Stripe and updates subscriptions
+/// Stripe webhook handler (#1456).
+///
+/// Status codes:
+/// - 400: the request is not authenticated (missing or bad signature).
+/// - 200: the event was applied, was already processed (Stripe redelivers),
+///   or cannot be acted on (unknown type or missing `org_id`).
+/// - 503: an attempt is in flight or a prerequisite subscription is missing.
+/// - 422: the event was rejected and alerted, e.g. an unknown price id. Stripe
+///   retries it, so it applies once the operator configures the price.
+/// - 500: a transient failure; Stripe retries.
 pub async fn stripe_webhook(
     State(state): State<AppState>,
     headers: HeaderMap,
     body: axum::body::Bytes,
-) -> ApiResult<Json<serde_json::Value>> {
-    // Get webhook secret
+) -> ApiResult<Response> {
     let webhook_secret = state.config.stripe_webhook_secret.as_ref().ok_or_else(|| {
         ApiError::InvalidRequest("Stripe webhook secret not configured".to_string())
     })?;
 
-    // Get signature from headers
     let signature = headers
         .get("stripe-signature")
         .and_then(|h| h.to_str().ok())
         .ok_or_else(|| ApiError::InvalidRequest("Missing stripe-signature header".to_string()))?;
 
-    // Verify webhook signature
     let body_str = std::str::from_utf8(&body)
         .map_err(|e| ApiError::InvalidRequest(format!("Invalid UTF-8 in webhook body: {}", e)))?;
-    let event =
-        stripe::Webhook::construct_event(body_str, signature, webhook_secret).map_err(|e| {
-            ApiError::InvalidRequest(format!("Webhook signature verification failed: {}", e))
-        })?;
+
+    // Verify the signature ourselves rather than via `stripe::Webhook`, which
+    // also deserializes the whole event into types pinned to one API version.
+    stripe_webhook::verify_signature(
+        body_str,
+        signature,
+        webhook_secret,
+        chrono::Utc::now().timestamp(),
+    )
+    .map_err(|e| ApiError::InvalidRequest(format!("Webhook signature verification failed: {e}")))?;
+
+    let event: WebhookEvent = match serde_json::from_str(body_str) {
+        Ok(event) => event,
+        Err(e) => {
+            tracing::error!("Signed Stripe webhook body is not an event: {e}");
+            return Ok(acknowledge(
+                serde_json::json!({ "received": true, "ignored": "not an event" }),
+            ));
+        }
+    };
 
     let pool = state.db.pool();
+    let claimed_at = match stripe_webhook::claim_event(pool, &event.id, &event.event_type).await? {
+        Claim::Acquired { claimed_at } => claimed_at,
+        Claim::Processed => {
+            return Ok(acknowledge(serde_json::json!({ "received": true, "duplicate": true })));
+        }
+        Claim::InFlight => {
+            return Ok((
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(
+                    serde_json::json!({ "received": false, "retry": "event processing in flight" }),
+                ),
+            )
+                .into_response());
+        }
+    };
 
-    match event.type_ {
-        EventType::CheckoutSessionCompleted => {
-            // Handle checkout completion
-            if let EventObject::CheckoutSession(session) = event.data.object {
-                handle_checkout_completed(pool, &session).await?;
-            }
+    let context = super::subscription_webhook::EventContext {
+        id: event.id.clone(),
+        created: event.created,
+        livemode: event.livemode,
+        account: event.account.clone(),
+    };
+    let event_id = event.id;
+    let event_type = event.event_type;
+    let api_version = event.api_version.unwrap_or_default();
+    match dispatch_event(pool, &state.config, &event_type, event.data.object, &context).await {
+        Ok(()) => {
+            stripe_webhook::finish_event(pool, &event_id, claimed_at, "applied").await?;
+            Ok(acknowledge(serde_json::json!({ "received": true })))
         }
-        EventType::CustomerSubscriptionCreated | EventType::CustomerSubscriptionUpdated => {
-            // Handle subscription creation/update
-            if let EventObject::Subscription(subscription) = event.data.object {
-                handle_subscription_event(pool, &subscription, &state.config).await?;
-            }
+        Err(WebhookError::Ignored(reason)) => {
+            tracing::warn!(
+                event_id = %event_id,
+                event_type = %event_type,
+                api_version = %api_version,
+                "Stripe event not actionable, acknowledged: {reason}"
+            );
+            stripe_webhook::finish_event(
+                pool,
+                &event_id,
+                claimed_at,
+                &format!("ignored: {reason}"),
+            )
+            .await?;
+            Ok(acknowledge(serde_json::json!({ "received": true, "ignored": reason })))
         }
-        EventType::CustomerSubscriptionTrialWillEnd => {
-            // Stripe sends this three days before a trial ends (#714)
-            if let EventObject::Subscription(subscription) = event.data.object {
-                handle_trial_will_end(pool, &subscription).await?;
-            }
+        Err(WebhookError::Rejected(reason)) => {
+            tracing::error!(
+                alert = "billing",
+                event_id = %event_id,
+                event_type = %event_type,
+                "Stripe event rejected: {reason}"
+            );
+            release_claim(pool, &event_id, claimed_at).await;
+            Ok((
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(serde_json::json!({ "received": false, "error": reason })),
+            )
+                .into_response())
         }
-        EventType::CustomerSubscriptionDeleted => {
-            // Handle subscription cancellation
-            if let EventObject::Subscription(subscription) = event.data.object {
-                handle_subscription_deleted(pool, &subscription).await?;
-            }
+        Err(WebhookError::Pending(reason)) => {
+            release_claim(pool, &event_id, claimed_at).await;
+            Ok((
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(serde_json::json!({ "received": false, "retry": reason })),
+            )
+                .into_response())
         }
-        EventType::InvoicePaymentSucceeded => {
-            // Payment succeeded - subscription is active
-            if let EventObject::Invoice(invoice) = event.data.object {
-                handle_payment_succeeded(pool, &invoice).await?;
-            }
-        }
-        EventType::InvoicePaymentFailed => {
-            // Payment failed - mark subscription as past_due
-            if let EventObject::Invoice(invoice) = event.data.object {
-                handle_payment_failed(pool, &invoice).await?;
-            }
-        }
-        _ => {
-            tracing::debug!("Unhandled Stripe event: {:?}", event.type_);
+        Err(WebhookError::Failed(e)) => {
+            tracing::error!(
+                event_id = %event_id,
+                event_type = %event_type,
+                "Stripe event failed, Stripe will retry: {e}"
+            );
+            release_claim(pool, &event_id, claimed_at).await;
+            Err(e)
         }
     }
+}
 
-    Ok(Json(serde_json::json!({ "received": true })))
+fn acknowledge(body: serde_json::Value) -> Response {
+    (StatusCode::OK, Json(body)).into_response()
+}
+
+/// Release a claim after a failed attempt. If this fails too, the claim
+/// expires after five minutes and the retry after that is processed.
+async fn release_claim(
+    pool: &sqlx::PgPool,
+    event_id: &str,
+    claimed_at: chrono::DateTime<chrono::Utc>,
+) {
+    if let Err(e) = stripe_webhook::release_event(pool, event_id, claimed_at).await {
+        tracing::warn!(event_id = %event_id, "Could not release Stripe event claim: {e}");
+    }
+}
+
+async fn dispatch_event(
+    pool: &sqlx::PgPool,
+    config: &crate::config::Config,
+    event_type: &str,
+    object: serde_json::Value,
+    context: &super::subscription_webhook::EventContext,
+) -> Result<(), WebhookError> {
+    match event_type {
+        "checkout.session.completed" => handle_checkout_completed(&parse_object(object)?),
+        "customer.subscription.created" | "customer.subscription.updated" => {
+            handle_subscription_event(pool, parse_object(object)?, config, context).await
+        }
+        // Stripe sends this three days before a trial ends (#714).
+        "customer.subscription.trial_will_end" => {
+            handle_trial_will_end(pool, &parse_object(object)?).await
+        }
+        "customer.subscription.deleted" => {
+            handle_subscription_deleted(pool, parse_object(object)?, config, context).await
+        }
+        "invoice.payment_succeeded" => {
+            handle_payment_succeeded(pool, &parse_object(object)?, config, context).await
+        }
+        "invoice.payment_failed" => {
+            handle_payment_failed(pool, &parse_object(object)?, config, context).await
+        }
+        other => Err(WebhookError::Ignored(format!("unhandled event type {other}"))),
+    }
+}
+
+fn unix_to_utc(ts: i64) -> Option<chrono::DateTime<chrono::Utc>> {
+    chrono::DateTime::<chrono::Utc>::from_timestamp(ts, 0)
+}
+
+/// Turn a failed owner/org lookup into a webhook outcome: a database error is
+/// retried, a missing org or owner can never be fixed by a retry.
+fn lookup_error(e: ApiError) -> WebhookError {
+    match e {
+        ApiError::Database(_) => WebhookError::Failed(e),
+        other => WebhookError::Ignored(other.to_string()),
+    }
+}
+
+async fn find_org(pool: &sqlx::PgPool, org_id: Uuid) -> Result<Organization, WebhookError> {
+    Organization::find_by_id(pool, org_id)
+        .await?
+        .ok_or_else(|| WebhookError::Ignored(format!("organization {org_id} not found")))
 }
 
 /// Handle checkout session completed
-async fn handle_checkout_completed(
-    pool: &sqlx::PgPool,
-    session: &CheckoutSession,
-) -> Result<(), ApiError> {
+fn handle_checkout_completed(session: &StripeCheckoutSession) -> Result<(), WebhookError> {
     // Extract org_id from client_reference_id
-    let org_id_str = session.client_reference_id.as_ref().ok_or_else(|| {
-        ApiError::InvalidRequest("Missing client_reference_id in checkout session".to_string())
+    let org_id_str = session.client_reference_id.as_deref().ok_or_else(|| {
+        WebhookError::Ignored("missing client_reference_id in checkout session".to_string())
     })?;
 
-    let org_id = Uuid::parse_str(org_id_str)
-        .map_err(|_| ApiError::InvalidRequest("Invalid org_id in checkout session".to_string()))?;
+    let org_id = Uuid::parse_str(org_id_str).map_err(|_| {
+        WebhookError::Ignored(format!("invalid org_id {org_id_str:?} in checkout session"))
+    })?;
 
-    // Get subscription ID from session
-    let subscription_id = session
-        .subscription
-        .as_ref()
-        .and_then(|s| match s {
-            stripe::Expandable::Id(id) => Some(id.clone()),
-            stripe::Expandable::Object(_) => None, // Would need to expand
-        })
-        .ok_or_else(|| {
-            ApiError::InvalidRequest("Missing subscription in checkout session".to_string())
-        })?;
+    let subscription_id = session.subscription.as_ref().map(StripeRef::id).ok_or_else(|| {
+        WebhookError::Ignored("missing subscription in checkout session".to_string())
+    })?;
 
     tracing::info!("Checkout completed: org_id={}, subscription_id={}", org_id, subscription_id);
 
-    // The subscription will be handled by the subscription.created/updated webhook
-    // But we can update the org's stripe_customer_id here if needed
-    if let Some(customer_id) = &session.customer {
-        let customer_id_str = match customer_id {
-            stripe::Expandable::Id(id) => id.to_string(),
-            stripe::Expandable::Object(customer) => customer.id.to_string(),
-        };
-
-        Organization::update_stripe_customer_id(pool, org_id, Some(&customer_id_str))
-            .await
-            .map_err(ApiError::Database)?;
-    }
+    // Only ordered subscription reconciliation assigns the current customer.
+    // A delayed checkout completion must not overwrite a newer subscription.
 
     Ok(())
 }
@@ -713,86 +821,21 @@ async fn get_org_owner_email(
 
 async fn handle_subscription_event(
     pool: &sqlx::PgPool,
-    subscription: &stripe::Subscription,
+    subscription: StripeSubscription,
     config: &crate::config::Config,
-) -> Result<(), ApiError> {
-    let stripe_sub_id = subscription.id.to_string();
-
-    let stripe_customer_id = match &subscription.customer {
-        stripe::Expandable::Id(id) => id.to_string(),
-        stripe::Expandable::Object(customer) => customer.id.to_string(),
+    context: &super::subscription_webhook::EventContext,
+) -> Result<(), WebhookError> {
+    let Some(applied) =
+        super::subscription_webhook::apply(pool, config, context, subscription, false).await?
+    else {
+        return Ok(());
     };
-
-    // Get price_id from subscription items
-    let price_id = subscription
-        .items
-        .data
-        .first()
-        .and_then(|item| item.price.as_ref())
-        .map(|price| price.id.to_string())
-        .ok_or_else(|| ApiError::InvalidRequest("Missing price in subscription".to_string()))?;
-
-    // Determine plan from price_id (using config for exact matching)
-    let plan = determine_plan_from_price_id(&price_id, config);
-
-    let status = SubscriptionStatus::from_string(subscription.status.as_ref());
-
-    let current_period_start =
-        chrono::DateTime::<chrono::Utc>::from_timestamp(subscription.current_period_start, 0)
-            .unwrap_or_else(chrono::Utc::now);
-
-    let current_period_end =
-        chrono::DateTime::<chrono::Utc>::from_timestamp(subscription.current_period_end, 0)
-            .unwrap_or_else(|| chrono::Utc::now() + chrono::Duration::days(30));
-
-    let cancel_at_period_end = subscription.cancel_at_period_end;
-
-    let canceled_at = subscription
-        .canceled_at
-        .and_then(|ts| chrono::DateTime::<chrono::Utc>::from_timestamp(ts, 0));
-
-    // Subscription ownership is carried by subscription_data.metadata at checkout.
-    let org_id = subscription
-        .metadata
-        .get("org_id")
-        .and_then(|s| Uuid::parse_str(s).ok())
-        .ok_or_else(|| {
-            ApiError::InvalidRequest("Missing org_id in subscription metadata".to_string())
-        })?;
-
-    // Upsert subscription
-    let _subscription_record = Subscription::upsert_from_stripe(
-        pool,
-        org_id,
-        &stripe_sub_id,
-        &stripe_customer_id,
-        &price_id,
-        plan,
-        status,
-        current_period_start,
-        current_period_end,
-        cancel_at_period_end,
-        canceled_at,
-    )
-    .await
-    .map_err(ApiError::Database)?;
-
-    // Get old plan before updating
-    let old_org = Organization::find_by_id(pool, org_id)
-        .await
-        .map_err(ApiError::Database)?
-        .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
-    let old_plan = old_org.plan();
-
-    // Update organization plan
-    Organization::update_plan(pool, org_id, plan)
-        .await
-        .map_err(ApiError::Database)?;
-
-    // Update stripe_customer_id on org
-    Organization::update_stripe_customer_id(pool, org_id, Some(&stripe_customer_id))
-        .await
-        .map_err(ApiError::Database)?;
+    let org_id = applied.subscription.org_id;
+    let stripe_sub_id = &applied.subscription.stripe_subscription_id;
+    let old_plan = applied.old_plan;
+    let plan = applied.new_plan;
+    let status = applied.subscription.status();
+    let current_period_end = applied.subscription.current_period_end;
 
     tracing::info!("Subscription updated: org_id={}, plan={:?}", org_id, plan);
 
@@ -842,13 +885,8 @@ async fn handle_subscription_event(
     {
         if email_notifications {
             if let Ok(email_service) = EmailService::from_env() {
-                let amount = subscription
-                    .items
-                    .data
-                    .first()
-                    .and_then(|item| item.price.as_ref())
-                    .and_then(|price| price.unit_amount)
-                    .map(|amount| amount as f64 / 100.0); // Convert cents to dollars
+                // Convert cents to dollars
+                let amount = applied.amount;
 
                 let plan_str = plan.to_string();
                 let email_msg = EmailService::generate_subscription_confirmation(
@@ -873,41 +911,18 @@ async fn handle_subscription_event(
 
 async fn handle_subscription_deleted(
     pool: &sqlx::PgPool,
-    subscription: &stripe::Subscription,
-) -> Result<(), ApiError> {
-    let stripe_sub_id = subscription.id.to_string();
-
-    // Find subscription
-    let subscription_record = Subscription::find_by_stripe_subscription_id(pool, &stripe_sub_id)
-        .await
-        .map_err(ApiError::Database)?
-        .ok_or_else(|| {
-            ApiError::InvalidRequest("Subscription not found in database".to_string())
-        })?;
-
-    // Update status to canceled
-    Subscription::update_status(pool, subscription_record.id, SubscriptionStatus::Canceled)
-        .await
-        .map_err(ApiError::Database)?;
-
-    // Get the organization before downgrading to log the old plan
-    let org = Organization::find_by_id(pool, subscription_record.org_id)
-        .await
-        .map_err(ApiError::Database)?
-        .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
-    let old_plan = org.plan();
-
-    // TODO(#870-followup): cancellation fairness. This downgrades the org to
-    // Free immediately on `customer.subscription.deleted`, ignoring
-    // `cancel_at_period_end` / `current_period_end` — a user who cancels
-    // mid-period loses paid features before the period they already paid for
-    // ends. The fix is to keep the paid plan until period end, then downgrade.
-    // Tracked separately from the entitlement-integrity work (#870); out of
-    // scope for the effective-plan gating change.
-    // Downgrade org to free plan
-    Organization::update_plan(pool, subscription_record.org_id, Plan::Free)
-        .await
-        .map_err(ApiError::Database)?;
+    subscription: StripeSubscription,
+    config: &crate::config::Config,
+    context: &super::subscription_webhook::EventContext,
+) -> Result<(), WebhookError> {
+    let Some(applied) =
+        super::subscription_webhook::apply(pool, config, context, subscription, true).await?
+    else {
+        return Ok(());
+    };
+    let subscription_record = applied.subscription;
+    let stripe_sub_id = &subscription_record.stripe_subscription_id;
+    let old_plan = applied.old_plan;
 
     tracing::info!("Subscription canceled: org_id={}", subscription_record.org_id);
 
@@ -919,7 +934,7 @@ async fn handle_subscription_deleted(
         AuditEventType::BillingCanceled,
         format!("Subscription canceled for plan: {:?}", old_plan),
         Some(serde_json::json!({
-            "subscription_id": subscription.id.to_string(),
+            "subscription_id": stripe_sub_id,
             "plan": old_plan.to_string(),
         })),
         None, // Webhook event, no IP
@@ -955,24 +970,23 @@ async fn handle_subscription_deleted(
 
 /// Email the org owner that their trial ends soon (#714).
 ///
-/// A subscription we have no record of is logged and acknowledged rather than
-/// failed: a retry would not create the record, and Stripe would keep
-/// redelivering a reminder nobody can receive.
+/// A missing subscription may be created by an out-of-order prerequisite event;
+/// retain retries until it is available.
 async fn handle_trial_will_end(
     pool: &sqlx::PgPool,
-    subscription: &stripe::Subscription,
-) -> Result<(), ApiError> {
-    let stripe_sub_id = subscription.id.to_string();
-    let Some(record) = Subscription::find_by_stripe_subscription_id(pool, &stripe_sub_id)
-        .await
-        .map_err(ApiError::Database)?
-    else {
-        tracing::warn!("trial_will_end for unknown subscription {}", stripe_sub_id);
-        return Ok(());
-    };
+    subscription: &StripeSubscription,
+) -> Result<(), WebhookError> {
+    let stripe_sub_id = subscription.id.as_str();
+    let record = Subscription::find_by_stripe_subscription_id(pool, stripe_sub_id)
+        .await?
+        .ok_or_else(|| {
+            WebhookError::Pending(format!(
+                "trial_will_end for unknown subscription {stripe_sub_id}"
+            ))
+        })?;
 
     let (email_addr, username, email_notifications) =
-        get_org_owner_email(pool, record.org_id).await?;
+        get_org_owner_email(pool, record.org_id).await.map_err(lookup_error)?;
     tracing::info!("Trial ending soon: org_id={}", record.org_id);
     if !email_notifications {
         return Ok(());
@@ -981,20 +995,9 @@ async fn handle_trial_will_end(
         return Ok(());
     };
 
-    let org = Organization::find_by_id(pool, record.org_id)
-        .await
-        .map_err(ApiError::Database)?
-        .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
-    let amount = subscription
-        .items
-        .data
-        .first()
-        .and_then(|item| item.price.as_ref())
-        .and_then(|price| price.unit_amount)
-        .map(|cents| cents as f64 / 100.0);
-    let trial_end = subscription
-        .trial_end
-        .and_then(|ts| chrono::DateTime::<chrono::Utc>::from_timestamp(ts, 0));
+    let org = find_org(pool, record.org_id).await?;
+    let amount = subscription.unit_amount().map(|cents| cents as f64 / 100.0);
+    let trial_end = subscription.trial_end.and_then(unix_to_utc);
 
     let plan_name = match org.plan() {
         Plan::Free => "Free",
@@ -1013,56 +1016,39 @@ async fn handle_trial_will_end(
 }
 
 /// Handle payment succeeded
-async fn handle_payment_succeeded(pool: &sqlx::PgPool, invoice: &Invoice) -> Result<(), ApiError> {
-    let customer_id = match &invoice.customer {
-        Some(stripe::Expandable::Id(id)) => id.to_string(),
-        Some(stripe::Expandable::Object(customer)) => customer.id.to_string(),
-        None => return Err(ApiError::InvalidRequest("Invoice missing customer".to_string())),
+async fn handle_payment_succeeded(
+    pool: &sqlx::PgPool,
+    invoice: &StripeInvoice,
+    config: &crate::config::Config,
+    context: &super::subscription_webhook::EventContext,
+) -> Result<(), WebhookError> {
+    let Some(applied) =
+        super::subscription_webhook::reconcile_invoice(pool, config, context, invoice).await?
+    else {
+        return Ok(());
     };
-
-    // Find subscription by customer_id
-    let subscription = sqlx::query_as::<_, Subscription>(
-        "SELECT * FROM subscriptions WHERE stripe_customer_id = $1 ORDER BY created_at DESC LIMIT 1"
-    )
-    .bind(&customer_id)
-    .fetch_optional(pool)
-    .await
-    .map_err(ApiError::Database)?
-    .ok_or_else(|| ApiError::InvalidRequest("Subscription not found".to_string()))?;
-
-    // Update status to active if it was past_due
-    if subscription.status() == SubscriptionStatus::PastDue {
-        Subscription::update_status(pool, subscription.id, SubscriptionStatus::Active)
-            .await
-            .map_err(ApiError::Database)?;
-    }
+    let subscription = applied.subscription;
 
     tracing::info!("Payment succeeded: org_id={}", subscription.org_id);
 
     Ok(())
 }
 
-async fn handle_payment_failed(pool: &sqlx::PgPool, invoice: &Invoice) -> Result<(), ApiError> {
-    let customer_id = match &invoice.customer {
-        Some(stripe::Expandable::Id(id)) => id.to_string(),
-        Some(stripe::Expandable::Object(customer)) => customer.id.to_string(),
-        None => return Err(ApiError::InvalidRequest("Invoice missing customer".to_string())),
+async fn handle_payment_failed(
+    pool: &sqlx::PgPool,
+    invoice: &StripeInvoice,
+    config: &crate::config::Config,
+    context: &super::subscription_webhook::EventContext,
+) -> Result<(), WebhookError> {
+    let Some(applied) =
+        super::subscription_webhook::reconcile_invoice(pool, config, context, invoice).await?
+    else {
+        return Ok(());
     };
-
-    // Find subscription by customer_id
-    let subscription = sqlx::query_as::<_, Subscription>(
-        "SELECT * FROM subscriptions WHERE stripe_customer_id = $1 ORDER BY created_at DESC LIMIT 1"
-    )
-    .bind(&customer_id)
-    .fetch_optional(pool)
-    .await
-    .map_err(ApiError::Database)?
-    .ok_or_else(|| ApiError::InvalidRequest("Subscription not found".to_string()))?;
-
-    // Update status to past_due
-    Subscription::update_status(pool, subscription.id, SubscriptionStatus::PastDue)
-        .await
-        .map_err(ApiError::Database)?;
+    let subscription = applied.subscription;
+    if subscription.status() != SubscriptionStatus::PastDue {
+        return Ok(());
+    }
 
     tracing::info!("Payment failed: org_id={}", subscription.org_id);
 
@@ -1077,7 +1063,7 @@ async fn handle_payment_failed(pool: &sqlx::PgPool, invoice: &Invoice) -> Result
         AuditEventType::PaymentFailed,
         format!("Payment failed for subscription: {}", invoice.id),
         Some(serde_json::json!({
-            "invoice_id": invoice.id.to_string(),
+            "invoice_id": invoice.id,
             "amount_due": invoice.amount_due,
             "subscription_id": subscription.stripe_subscription_id,
         })),
@@ -1092,17 +1078,10 @@ async fn handle_payment_failed(pool: &sqlx::PgPool, invoice: &Invoice) -> Result
     {
         if email_notifications {
             if let Ok(email_service) = EmailService::from_env() {
-                let org = Organization::find_by_id(pool, subscription.org_id)
-                    .await
-                    .map_err(ApiError::Database)?
-                    .ok_or_else(|| {
-                        ApiError::InvalidRequest("Organization not found".to_string())
-                    })?;
+                let org = find_org(pool, subscription.org_id).await?;
 
                 let amount = invoice.amount_due.map(|a| a as f64 / 100.0).unwrap_or(0.0);
-                let retry_date = invoice
-                    .next_payment_attempt
-                    .and_then(|ts| chrono::DateTime::<chrono::Utc>::from_timestamp(ts, 0));
+                let retry_date = invoice.next_payment_attempt.and_then(unix_to_utc);
 
                 let plan_str = org.plan().to_string();
                 let email_msg = EmailService::generate_payment_failed(
@@ -1123,50 +1102,6 @@ async fn handle_payment_failed(pool: &sqlx::PgPool, invoice: &Invoice) -> Result
     }
 
     Ok(())
-}
-
-/// Determine plan from Stripe price_id
-/// Maps Stripe price IDs to internal plans using exact matching from config
-fn determine_plan_from_price_id(price_id: &str, config: &crate::config::Config) -> Plan {
-    // Exact match against configured price IDs
-    if let Some(pro_price_id) = &config.stripe_price_id_pro {
-        if price_id == pro_price_id {
-            return Plan::Pro;
-        }
-    }
-
-    if let Some(team_price_id) = &config.stripe_price_id_team {
-        if price_id == team_price_id {
-            return Plan::Team;
-        }
-    }
-
-    // Annual price IDs map to the same plan as their monthly counterpart.
-    if let Some(pro_annual) = &config.stripe_price_id_pro_annual {
-        if price_id == pro_annual {
-            return Plan::Pro;
-        }
-    }
-    if let Some(team_annual) = &config.stripe_price_id_team_annual {
-        if price_id == team_annual {
-            return Plan::Team;
-        }
-    }
-
-    // Fallback: heuristic matching (for development/testing)
-    if price_id.contains("pro") || price_id.contains("Pro") {
-        tracing::warn!("Using heuristic matching for price_id: {} (Pro)", price_id);
-        return Plan::Pro;
-    }
-
-    if price_id.contains("team") || price_id.contains("Team") {
-        tracing::warn!("Using heuristic matching for price_id: {} (Team)", price_id);
-        return Plan::Team;
-    }
-
-    // Default to Free if unknown
-    tracing::warn!("Unknown price_id: {}, defaulting to Free", price_id);
-    Plan::Free
 }
 
 /// Derive the billing cadence label ("month" / "year") of an active
