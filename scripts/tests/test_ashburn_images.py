@@ -41,6 +41,14 @@ class AshburnImagesTest(unittest.TestCase):
             "scripts/verify-image-publisher.sh",
             ".github/workflows/fly-publisher-cleanup.yml",
             ".github/actions/setup-flyctl",
+            # Every MockForge Fly app and bucket was destroyed on 2026-10-31 (#1452).
+            ".github/workflows/fly-legacy-ashburn-cutover.yml",
+            "scripts/ops/fly_legacy_cutover.py",
+            "fly.demo.toml",
+            "fly.registry.toml",
+            "fly.runner.toml",
+            "fly.server.toml",
+            "fly.tunnel.toml",
         ):
             self.assertFalse((ROOT / path).exists(), path)
 
@@ -147,23 +155,15 @@ class AshburnImagesTest(unittest.TestCase):
             },
         )
         guide = (ROOT / "docs/ASHBURN_IMAGE_SUPPLY.md").read_text()
-        fly = (ROOT / "fly.runner.toml").read_text()
         for name in read:
             self.assertIn(f"`{name}`", guide)
-        for name in required:
-            self.assertIn(name, fly)
-        for stale in ("MOCKFORGE_RUNNER_REGISTRY_URL ", "MOCKFORGE_RUNNER_CALLBACK_TOKEN", "#   REDIS_URL"):
-            self.assertNotIn(stale, fly)
         # The registry hardcodes the queue key; the runner default must match it.
         run_queue = (ROOT / "crates/mockforge-registry-server/src/run_queue.rs").read_text()
         self.assertIn('DEFAULT_QUEUE_KEY: &str = "test_runs:queued"', run_queue)
         self.assertIn('"test_runs:queued"', config)
-        self.assertIn("MOCKFORGE_SSRF_ALLOW_LOOPBACK = \"0\"", fly)
 
     def test_demo_command_is_documented_before_repointing_image(self) -> None:
-        fly_config = (ROOT / "fly.demo.toml").read_text()
         guide = (ROOT / "docs/ASHBURN_IMAGE_SUPPLY.md").read_text()
-        self.assertIn("serve --spec", fly_config)
         for path in (
             "ecommerce-store/openapi.json",
             "weather-geo/openapi.json",
