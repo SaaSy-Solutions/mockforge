@@ -1,0 +1,158 @@
+"""Managed CVE lab engine operations."""
+
+import json
+import os
+from pathlib import Path
+import platform
+import shutil
+import subprocess
+import sys
+import time
+import http.client
+from contextlib import contextmanager
+from cve_lab_catalog import CATALOG, LABEL
+from cve_lab_transport import request
+import re
+
+
+def command(args, timeout=120, check=True):
+    result = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
+    if check and result.returncode:
+        raise RuntimeError(f"{args[0]} command failed: {result.stderr[-3000:]}")
+    return result
+
+
+def doctor(engine):
+    if sys.version_info < (3, 11):
+        raise RuntimeError("Install Python 3.11 or newer")
+    if platform.system() != "Linux" or platform.machine() not in ("x86_64", "amd64"):
+        raise RuntimeError("This pack currently requires Linux amd64")
+    if not shutil.which(engine):
+        raise RuntimeError(f"Install {engine} first, then rerun mockforge cve doctor")
+    version = command(
+        [engine, "version", "--format", "{{.Server.Version}}"], timeout=20
+    )
+    # Host networking and loopback publications must refer to this machine.
+    if any(
+        os.environ.get(key)
+        for key in (
+            "DOCKER_HOST",
+            "DOCKER_CONTEXT",
+            "CONTAINER_HOST",
+            "CONTAINER_CONNECTION",
+        )
+    ):
+        raise RuntimeError(
+            "Use the default local engine without remote/context environment overrides"
+        )
+    info = json.loads(
+        command([engine, "info", "--format", "{{json .}}"], timeout=20).stdout
+    )
+    is_podman = "host" in info and "version" in info
+    if is_podman and info["host"].get("serviceIsRemote", False):
+        raise RuntimeError("Remote Podman engines are unsupported")
+    if not is_podman:
+        context = command([engine, "context", "inspect"], check=False, timeout=20)
+        if context.returncode:
+            raise RuntimeError("Cannot verify local Docker context")
+        if context.returncode == 0:
+            contexts = json.loads(context.stdout)
+            if len(contexts) != 1:
+                raise RuntimeError("Cannot identify local Docker context")
+            host = contexts[0]["Endpoints"]["docker"]["Host"]
+            if not host.startswith("unix://"):
+                raise RuntimeError("Remote container engines are unsupported")
+    return {
+        "python": platform.python_version(),
+        "engine": engine,
+        "server": version.stdout.strip(),
+        "platform": platform.machine(),
+    }
+
+
+def prepare(engine):
+    doctor(engine)
+    for image in (CATALOG["application_image"], CATALOG["runner_image"]):
+        if command([engine, "image", "inspect", image], check=False).returncode:
+            print(f"Downloading pinned image {image}", flush=True)
+            command([engine, "pull", image], timeout=900)
+        # An inspect by digest ensures the exact requested image exists locally.
+        command([engine, "image", "inspect", image])
+
+
+def owned_remove(engine, name, run_id):
+    result = command([engine, "inspect", name], check=False)
+    if result.returncode:
+        listing = command([engine, "ps", "-a", "--format", "{{.Names}}"], check=False)
+        if listing.returncode or name in listing.stdout.splitlines():
+            raise RuntimeError(
+                f"Cannot verify removal of {name}: {result.stderr[-1000:]}"
+            )
+        return
+    item = json.loads(result.stdout)[0]
+    if item.get("Config", {}).get("Labels", {}).get(LABEL) != run_id:
+        raise RuntimeError(f"Refusing to remove unowned container {name}")
+    command([engine, "rm", "-f", name])
+
+
+@contextmanager
+def lab(engine, run_id, output):
+    name = "mockforge-cve-" + run_id
+    try:
+        command(
+            [
+                engine,
+                "run",
+                "-d",
+                "--name",
+                name,
+                "--label",
+                f"{LABEL}={run_id}",
+                "--cap-drop=ALL",
+                "--security-opt=no-new-privileges",
+                "--memory=1g",
+                "--pids-limit=256",
+                "-p",
+                "127.0.0.1::3000",
+                "-e",
+                "NODE_ENV=production",
+                CATALOG["application_image"],
+            ]
+        )
+        ports = command([engine, "port", name, "3000/tcp"]).stdout.strip().splitlines()
+        backend = "http://" + ports[0]
+        deadline = time.monotonic() + 90
+        while time.monotonic() < deadline:
+            try:
+                ready = request(backend, "/login")[0] == 200
+            except (OSError, ValueError, http.client.HTTPException):
+                ready = False
+            if ready:
+                break
+            time.sleep(0.5)
+        else:
+            raise RuntimeError("Application did not become ready within 90 seconds")
+        yield backend
+    finally:
+        try:
+            logs = command([engine, "logs", "--tail", "200", name], check=False)
+            (output / "application.log").write_text(logs.stdout + logs.stderr)
+        finally:
+            owned_remove(engine, name, run_id)
+
+
+def cleanup(args):
+    data = json.loads((Path(args.output_dir) / "ownership.json").read_text())
+    run_id = data["run_id"]
+    if not re.fullmatch("[0-9a-f]{32}", run_id):
+        raise ValueError("invalid ownership record")
+    if data["engine"] != args.engine:
+        raise ValueError("use the engine recorded in ownership.json")
+    doctor(args.engine)
+    for name in (
+        "mockforge-cve-" + run_id,
+        "mockforge-cve-client-" + run_id + "-baseline",
+        "mockforge-cve-client-" + run_id + "-target",
+    ):
+        owned_remove(args.engine, name, run_id)
+    print("Owned containers removed; reports and image cache retained")

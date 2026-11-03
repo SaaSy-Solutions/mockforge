@@ -4,9 +4,9 @@
 //! flags are seeded from the deployment environment instead:
 //!
 //! - `MOCKFORGE_SITE_ADMIN_EMAILS`: comma-separated user emails (matched
-//!   case-insensitively) that get `users.is_admin`.
+//!   case-insensitively) whose verified accounts get `users.is_admin`.
 //! - `MOCKFORGE_BILLING_EXEMPT_TENANT_SLUGS`: comma-separated organization
-//!   slugs that get `organizations.billing_exempt`.
+//!   slugs owned by verified site admins that get `organizations.billing_exempt`.
 //!
 //! The bootstrap only ever sets flags: it never clears one, an empty or
 //! missing variable changes nothing, and a second run is a no-op. Clearing an
@@ -69,7 +69,7 @@ pub async fn apply(pool: &PgPool, config: &BootstrapConfig) -> sqlx::Result<Boot
 
     for email in &config.site_admin_emails {
         let granted = sqlx::query(
-            "UPDATE users SET is_admin = TRUE WHERE lower(email) = lower($1) AND NOT is_admin",
+            "UPDATE users SET is_admin = TRUE WHERE lower(email) = lower($1) AND is_verified AND NOT is_admin",
         )
         .bind(email)
         .execute(pool)
@@ -79,11 +79,12 @@ pub async fn apply(pool: &PgPool, config: &BootstrapConfig) -> sqlx::Result<Boot
             report.site_admins_granted.push(email.clone());
             continue;
         }
-        let exists: bool =
-            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE lower(email) = lower($1))")
-                .bind(email)
-                .fetch_one(pool)
-                .await?;
+        let exists: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM users WHERE lower(email) = lower($1) AND is_verified)",
+        )
+        .bind(email)
+        .fetch_one(pool)
+        .await?;
         if !exists {
             report.site_admins_not_found.push(email.clone());
         }
@@ -92,7 +93,8 @@ pub async fn apply(pool: &PgPool, config: &BootstrapConfig) -> sqlx::Result<Boot
     for slug in &config.billing_exempt_slugs {
         let exempted = sqlx::query(
             "UPDATE organizations SET billing_exempt = TRUE, updated_at = NOW() \
-             WHERE slug = $1 AND NOT billing_exempt",
+             WHERE slug = $1 AND NOT billing_exempt AND EXISTS \
+             (SELECT 1 FROM users WHERE users.id = organizations.owner_id AND users.is_verified AND users.is_admin)",
         )
         .bind(slug)
         .execute(pool)
@@ -102,11 +104,13 @@ pub async fn apply(pool: &PgPool, config: &BootstrapConfig) -> sqlx::Result<Boot
             report.orgs_exempted.push(slug.clone());
             continue;
         }
-        let exists: bool =
-            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM organizations WHERE slug = $1)")
-                .bind(slug)
-                .fetch_one(pool)
-                .await?;
+        let exists: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM organizations o JOIN users u ON u.id = o.owner_id \
+             WHERE o.slug = $1 AND u.is_verified AND u.is_admin)",
+        )
+        .bind(slug)
+        .fetch_one(pool)
+        .await?;
         if !exists {
             report.orgs_not_found.push(slug.clone());
         }
@@ -132,13 +136,19 @@ pub async fn run_at_startup(pool: &PgPool) {
         tracing::info!(email = email.as_str(), "bootstrap: granted site admin");
     }
     for email in &report.site_admins_not_found {
-        tracing::warn!(email = email.as_str(), "bootstrap: no user with this site-admin email");
+        tracing::warn!(
+            email = email.as_str(),
+            "bootstrap: no verified user with this site-admin email"
+        );
     }
     for slug in &report.orgs_exempted {
         tracing::info!(slug = slug.as_str(), "bootstrap: organization is now billing-exempt");
     }
     for slug in &report.orgs_not_found {
-        tracing::warn!(slug = slug.as_str(), "bootstrap: no organization with this slug");
+        tracing::warn!(
+            slug = slug.as_str(),
+            "bootstrap: no organization with this slug owned by a verified site admin"
+        );
     }
     if report.changed_nothing() {
         tracing::info!("bootstrap: site admins and billing-exempt orgs already up to date");

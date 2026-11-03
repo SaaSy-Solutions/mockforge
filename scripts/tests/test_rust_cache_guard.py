@@ -165,6 +165,28 @@ class CacheGuardTest(unittest.TestCase):
         self.assertTrue(GUARD.inspect(self.root)["errors"])
         self.assertTrue((directory / "pipe").exists())
 
+    def test_external_runner_target_is_inspected_in_place(self):
+        workspace = self.root / "workspace"
+        workspace.mkdir()
+        external = self.root / "cargo-mockforge-target-integration-runner"
+        self.assertEqual(GUARD.inspect(workspace, target=external)["errors"], [])
+        deps = external / "debug/deps"
+        deps.mkdir(parents=True)
+        fingerprint = external / "debug/.fingerprint" / ("example-" + "a" * 16)
+        fingerprint.mkdir(parents=True)
+        (fingerprint / "lib-example").write_text("fingerprint")
+        artifact = deps / ("libexample-" + "a" * 16 + ".rlib")
+        artifact.write_bytes(b"owned artifact")
+        result = GUARD.inspect(workspace, target=external)
+        self.assertEqual(result["errors"], [])
+        self.assertEqual(result["library_fingerprints"], 1)
+        artifact.write_bytes(b"")
+        self.assertTrue(GUARD.inspect(workspace, target=external)["errors"])
+        link = self.root / "linked-target"
+        link.symlink_to(external, target_is_directory=True)
+        self.assertTrue(GUARD.inspect(workspace, target=link)["errors"])
+        self.assertTrue(artifact.exists())
+
     def test_socket_is_reported_and_preserved(self):
         directory = self.root / "target/tmp"
         directory.mkdir(parents=True)

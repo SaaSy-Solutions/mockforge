@@ -161,6 +161,49 @@ mod bootstrap {
         apply, parse_list, BootstrapConfig, BootstrapReport,
     };
 
+    async fn verified_user(state: &AppState) -> User {
+        let owner = super::user(state).await;
+        sqlx::query("UPDATE users SET is_verified = TRUE WHERE id = $1")
+            .bind(owner.id)
+            .execute(state.db.pool())
+            .await
+            .unwrap();
+        User::find_by_id(state.db.pool(), owner.id).await.unwrap().unwrap()
+    }
+
+    #[tokio::test]
+    #[ignore = "requires isolated Postgres"]
+    async fn bootstrap_refuses_unverified_email_and_claimed_slug() {
+        let state = state().await;
+        let owner = super::user(&state).await;
+        let org = free_org(&state, &owner).await;
+        let config = BootstrapConfig {
+            site_admin_emails: vec![owner.email.clone()],
+            billing_exempt_slugs: vec![org.slug.clone()],
+        };
+        let report = apply(state.db.pool(), &config).await.unwrap();
+        assert!(report.changed_nothing());
+        assert_eq!(flags(&state, &owner, &org).await, (false, false));
+        assert_eq!(report.site_admins_not_found, vec![owner.email.clone()]);
+        assert_eq!(report.orgs_not_found, vec![org.slug.clone()]);
+    }
+
+    #[tokio::test]
+    #[ignore = "requires isolated Postgres"]
+    async fn bootstrap_refuses_slug_owned_by_verified_non_admin() {
+        let state = state().await;
+        let owner = verified_user(&state).await;
+        let org = free_org(&state, &owner).await;
+        let config = BootstrapConfig {
+            site_admin_emails: Vec::new(),
+            billing_exempt_slugs: vec![org.slug.clone()],
+        };
+        let report = apply(state.db.pool(), &config).await.unwrap();
+        assert!(report.changed_nothing());
+        assert_eq!(flags(&state, &owner, &org).await, (false, false));
+        assert_eq!(report.orgs_not_found, vec![org.slug.clone()]);
+    }
+
     async fn flags(state: &AppState, owner: &User, org: &Organization) -> (bool, bool) {
         let admin: bool = sqlx::query_scalar("SELECT is_admin FROM users WHERE id = $1")
             .bind(owner.id)
@@ -174,7 +217,7 @@ mod bootstrap {
     #[ignore = "requires isolated Postgres"]
     async fn bootstrap_sets_listed_user_and_org() {
         let state = state().await;
-        let owner = user(&state).await;
+        let owner = verified_user(&state).await;
         let org = free_org(&state, &owner).await;
         let config = BootstrapConfig {
             // Emails match case-insensitively.
@@ -191,7 +234,7 @@ mod bootstrap {
     #[ignore = "requires isolated Postgres"]
     async fn bootstrap_second_run_changes_nothing() {
         let state = state().await;
-        let owner = user(&state).await;
+        let owner = verified_user(&state).await;
         let org = free_org(&state, &owner).await;
         let config = BootstrapConfig {
             site_admin_emails: vec![owner.email.clone()],
@@ -206,7 +249,7 @@ mod bootstrap {
     #[ignore = "requires isolated Postgres"]
     async fn bootstrap_empty_and_missing_values_change_nothing() {
         let state = state().await;
-        let owner = user(&state).await;
+        let owner = verified_user(&state).await;
         let org = free_org(&state, &owner).await;
         for value in [None, Some(""), Some(" , ")] {
             let config = BootstrapConfig {
@@ -222,7 +265,7 @@ mod bootstrap {
     #[ignore = "requires isolated Postgres"]
     async fn bootstrap_unknown_email_and_slug_are_skipped() {
         let state = state().await;
-        let owner = user(&state).await;
+        let owner = verified_user(&state).await;
         let org = free_org(&state, &owner).await;
         let config = BootstrapConfig {
             site_admin_emails: vec!["nobody@example.invalid".into(), owner.email.clone()],

@@ -9,7 +9,7 @@ use std::error::Error;
 
 #[test]
 fn legacy_json_and_yaml_import_into_serializable_mock_routes() -> Result<(), Box<dyn Error>> {
-    let source = include_str!("../../../examples/swagger2-legacy.json");
+    let source = include_str!("../../../../examples/swagger2-legacy.json");
     let json: Value = serde_json::from_str(source)?;
     for content in [source.to_string(), serde_yaml::to_string(&json)?] {
         let imported = import_openapi_spec(&content, None)?;

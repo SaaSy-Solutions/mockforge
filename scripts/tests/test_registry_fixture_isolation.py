@@ -94,9 +94,18 @@ class FixtureIsolationTests(unittest.TestCase):
             "hosted_capture_workspaces_e2e", "diff_finding_incident_e2e",
             "seed_credentials_neutralised",
         })
-        self.assertEqual(set(re.findall(r"--test ([a-z0-9_]+)", step_script("Run E2E tests"))), base)
+        # Every target is a module of the single tests/integration binary
+        # (#1451), selected by a `module::` libtest filter. A filter that names
+        # no module would silently match nothing, so each must be declared.
+        modules = set(re.findall(r"(?m)^mod ([a-z0-9_]+);$", (ROOT / "crates/mockforge-registry-server/tests/integration/main.rs").read_text()))
+        step = step_script("Run E2E tests")
+        self.assertIn("cargo test -p mockforge-registry-server --test integration", step)
+        self.assertNotRegex(step, r"--test (?!integration)")
+        self.assertEqual(set(re.findall(r"(?m)^\s*([a-z0-9_]+)::", step)), base)
         array = RLS.split("E2E_TESTS=(", 1)[1].split(")", 1)[0]
-        self.assertEqual(set(re.findall(r"--test ([a-z0-9_]+)", array)), common)
+        self.assertEqual(set(re.findall(r"(?m)^\s*([a-z0-9_]+)::$", array)), common)
+        self.assertIn('-p mockforge-registry-server --test integration', RLS)
+        self.assertLessEqual(base, modules)
         self.assertIn("workers::contract_probe::postgres_tests::due_claims_serialize_and_failed_timestamp_rolls_back_run", WORKFLOW)
         self.assertIn("-- --ignored --nocapture --test-threads=1", WORKFLOW)
         self.assertIn("--no-fail-fast", RLS)
