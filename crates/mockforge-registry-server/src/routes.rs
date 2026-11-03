@@ -1170,6 +1170,10 @@ pub fn create_router(state: AppState) -> Router<AppState> {
             "/api/v1/admin/organizations/{org_id}/ai-reservations/{reservation_id}/reconcile",
             post(handlers::ai_credit_reconciliation::reconcile),
         )
+        .route(
+            "/api/v1/admin/organizations/{org_id}/billing-exempt",
+            put(handlers::admin::set_org_billing_exempt),
+        )
         .route("/api/v1/admin/plugins/{name}/verify", post(handlers::admin::verify_plugin))
         .route("/api/v1/admin/plugins/{name}/takedown", post(handlers::admin::takedown_plugin))
         .route("/api/v1/admin/plugins/{name}/restore", post(handlers::admin::restore_plugin))

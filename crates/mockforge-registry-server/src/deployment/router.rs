@@ -582,7 +582,7 @@ pub(crate) async fn quota_ceiling_reached(pool: &sqlx::PgPool, org_id: Uuid) -> 
     };
 
     // Unlimited plan (Team), or a multiplier that yields no cutoff.
-    let cutoff = overage_cutoff(monthly_request_limit(&org.limits_json)?, mult)?;
+    let cutoff = overage_cutoff(monthly_request_limit(&org.limits())?, mult)?;
 
     let used = match UsageCounter::get_or_create_current(pool, org_id).await {
         Ok(counter) => counter.requests,
@@ -703,7 +703,7 @@ fn proxy_limits_from_json(limits_json: &serde_json::Value) -> ProxyLimits {
 /// so an unavailable database shouldn't open the floodgates.
 pub(crate) async fn resolve_proxy_limits(pool: &sqlx::PgPool, org_id: Uuid) -> ProxyLimits {
     let limits_json = match Organization::find_by_id(pool, org_id).await {
-        Ok(Some(org)) => org.limits_json,
+        Ok(Some(org)) => org.limits(),
         Ok(None) => {
             tracing::warn!("Org {} not found while resolving proxy limits", org_id);
             serde_json::Value::Null
@@ -855,6 +855,21 @@ mod tests {
         assert_eq!(overage_cutoff(10_000, 10), Some(100_000));
         assert_eq!(overage_cutoff(250_000, 2), Some(500_000));
         assert_eq!(overage_cutoff(1_000_000, 1), Some(1_000_000));
+    }
+
+    #[test]
+    fn billing_exempt_org_has_no_monthly_limit_or_overage_cutoff() {
+        let free = Plan::Free.default_limits();
+        let exempt = mockforge_registry_core::models::organization::billing_exempt_limits();
+        // Free has a finite monthly limit, so a positive ceiling cuts it off.
+        let free_limit = monthly_request_limit(&free).expect("Free is metered");
+        assert_eq!(overage_cutoff(free_limit, 2), Some(20_000));
+        // Exempt has none, so no ceiling multiplier can produce a cutoff.
+        assert_eq!(monthly_request_limit(&exempt), None);
+        // The body and RPS caps stay at Team's values for exempt orgs.
+        let caps = proxy_limits_from_json(&exempt);
+        assert_eq!(caps.max_body_bytes, 50 * 1024 * 1024);
+        assert_eq!(caps.rps, 1000);
     }
 
     #[test]

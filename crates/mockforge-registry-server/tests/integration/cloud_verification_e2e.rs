@@ -27,8 +27,7 @@ use serde_json::{json, Value};
 use sqlx::postgres::PgPoolOptions;
 use uuid::Uuid;
 
-#[path = "support/cloud_verification_fixture.rs"]
-mod fixture;
+use crate::fixture;
 use fixture::{register_and_setup, E2e};
 
 /// Insert a single capture row, returning its `occurred_at` for sequencing.

@@ -42,16 +42,32 @@ pub(crate) async fn limits_for_plan(
     org: &Organization,
     plan: crate::models::Plan,
 ) -> ApiResult<serde_json::Value> {
-    let mut limits = if plan == org.plan() {
-        org.limits_json.clone()
-    } else {
-        plan.default_limits()
-    };
+    let mut limits = stored_limits_for_plan(org, plan);
+    if org.billing_exempt {
+        // Quota overrides never re-impose limits on an exempt org.
+        return Ok(limits);
+    }
     let setting = state.store.get_org_setting(org.id, "quota").await?;
     if let Some(setting) = setting {
         merge_quota_overrides(&mut limits, &setting.setting_value);
     }
     Ok(limits)
+}
+
+/// Plan limits before quota overrides: the exempt profile for a
+/// billing-exempt org, the stored limits when `plan` is the stored plan, and
+/// otherwise that plan's defaults.
+pub(crate) fn stored_limits_for_plan(
+    org: &Organization,
+    plan: crate::models::Plan,
+) -> serde_json::Value {
+    if org.billing_exempt {
+        org.limits()
+    } else if plan == org.plan() {
+        org.limits_json.clone()
+    } else {
+        plan.default_limits()
+    }
 }
 
 /// Shallow-merge `overrides` into `limits` in-place. Both must be JSON objects

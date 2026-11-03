@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::{
     error::{ApiError, ApiResult},
-    models::{AuditEventType, Plugin},
+    models::{AuditEventType, Organization, Plugin},
     AppState,
 };
 
@@ -466,5 +466,73 @@ pub async fn get_admin_stats(
         total_users: user_count.0,
         total_reviews: review_stats.0,
         average_rating: review_stats.1,
+    }))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetBillingExemptRequest {
+    pub billing_exempt: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetBillingExemptResponse {
+    pub success: bool,
+    pub org_id: Uuid,
+    pub billing_exempt: bool,
+}
+
+/// Set or clear an organization's internal billing exemption. An exempt org
+/// needs no Stripe subscription and gets no plan limits, no hosted-mock
+/// overage cutoff and no metered AI-credit drawdown. Site admins only: the
+/// org's own owner role is not enough.
+pub async fn set_org_billing_exempt(
+    State(state): State<AppState>,
+    Path(org_id): Path<Uuid>,
+    Extension(user_id): Extension<String>,
+    Json(request): Json<SetBillingExemptRequest>,
+) -> ApiResult<Json<SetBillingExemptResponse>> {
+    let pool = state.db.pool();
+
+    let user_uuid = Uuid::parse_str(&user_id)
+        .map_err(|_| ApiError::InvalidRequest("Invalid user ID".to_string()))?;
+
+    let is_admin: Option<bool> = sqlx::query_scalar("SELECT is_admin FROM users WHERE id = $1")
+        .bind(user_uuid)
+        .fetch_optional(pool)
+        .await
+        .map_err(ApiError::Database)?;
+    if is_admin != Some(true) {
+        return Err(ApiError::PermissionDenied);
+    }
+
+    let org = Organization::set_billing_exempt(pool, org_id, request.billing_exempt)
+        .await
+        .map_err(ApiError::Database)?
+        .ok_or(ApiError::OrganizationNotFound)?;
+
+    let message = if org.billing_exempt {
+        format!("Organization '{}' is now billing-exempt", org.slug)
+    } else {
+        format!("Organization '{}' is no longer billing-exempt", org.slug)
+    };
+    state
+        .store
+        .record_audit_event(
+            org.id,
+            Some(user_uuid),
+            AuditEventType::OrgUpdated,
+            message,
+            Some(serde_json::json!({ "billing_exempt": org.billing_exempt })),
+            None,
+            None,
+        )
+        .await;
+
+    Ok(Json(SetBillingExemptResponse {
+        success: true,
+        org_id: org.id,
+        billing_exempt: org.billing_exempt,
     }))
 }

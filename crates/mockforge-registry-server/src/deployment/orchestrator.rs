@@ -202,8 +202,8 @@ impl DeploymentOrchestrator {
             .await?
             .ok_or_else(|| anyhow::anyhow!("Organization not found"))?;
         let subscription = crate::models::Subscription::find_by_org(pool, current.org_id).await?;
-        if crate::handlers::entitlements::resolve_effective_plan(
-            org.plan(),
+        if crate::handlers::entitlements::resolve_org_plan(
+            &org,
             subscription.as_ref(),
             chrono::Utc::now(),
         ) != crate::models::Plan::Free
@@ -353,8 +353,8 @@ impl DeploymentOrchestrator {
             .ok_or_else(|| anyhow::anyhow!("Organization not found"))?;
         let subscription =
             crate::models::Subscription::find_by_org(pool, deployment.org_id).await?;
-        let plan = crate::handlers::entitlements::resolve_effective_plan(
-            org.plan(),
+        let plan = crate::handlers::entitlements::resolve_org_plan(
+            &org,
             subscription.as_ref(),
             chrono::Utc::now(),
         );

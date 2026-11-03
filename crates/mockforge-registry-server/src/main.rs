@@ -75,6 +75,11 @@ async fn main() -> Result<()> {
     // and ERROR logs if they cannot support the RLS backstop (#1087).
     db.check_rls_roles().await;
 
+    // Seed site admins and billing-exempt orgs from the deployment env
+    // (MOCKFORGE_SITE_ADMIN_EMAILS, MOCKFORGE_BILLING_EXEMPT_TENANT_SLUGS).
+    // Only ever sets flags, logs what it changed, and never fails startup.
+    mockforge_registry_server::billing_exempt_bootstrap::run_at_startup(db.pool()).await;
+
     // Initialize storage
     let storage = PluginStorage::new(&config).await?;
     tracing::info!("Storage initialized");

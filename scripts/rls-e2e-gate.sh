@@ -128,24 +128,25 @@ SERVER_PID_FILE="${SERVER_PID_FILE:-$REPO_ROOT/rls-gate-registry-server.json}"
 TARGET_DIR="${CARGO_TARGET_DIR:-$REPO_ROOT/target}"
 SERVER_BIN="$TARGET_DIR/debug/mockforge-registry-server"
 
-# The E2E targets the required "Registry E2E (Postgres + MinIO)" check runs.
+# libtest filters (one module each in the single tests/integration binary,
+# #1451) for the E2E targets the required "Registry E2E (Postgres + MinIO)" check runs.
 # Kept in sync with the `Run E2E tests` step in .github/workflows/registry-e2e.yml.
 E2E_TESTS=(
-  --test workspace_content_e2e
-  --test signup_flow_e2e
-  --test marketplace_e2e
-  --test cloud_verification_e2e
-  --test cloud_ai_contract_diff_e2e
-  --test cloud_conformance_e2e
-  --test paid_flow_e2e
-  --test hosted_mock_overrides_e2e
-  --test audit_integrity_e2e
-  --test rls_coverage_e2e
-  --test hosted_mock_rls_routes_e2e
-  --test rls_join_coverage_e2e
-  --test query_token_e2e
-  --test cross_tenant_chaos_capture_e2e
-  --test token_scope_e2e
+  workspace_content_e2e::
+  signup_flow_e2e::
+  marketplace_e2e::
+  cloud_verification_e2e::
+  cloud_ai_contract_diff_e2e::
+  cloud_conformance_e2e::
+  paid_flow_e2e::
+  hosted_mock_overrides_e2e::
+  audit_integrity_e2e::
+  rls_coverage_e2e::
+  hosted_mock_rls_routes_e2e::
+  rls_join_coverage_e2e::
+  query_token_e2e::
+  cross_tenant_chaos_capture_e2e::
+  token_scope_e2e::
 )
 
 # Server + test env. Values are literals from registry-e2e.yml; none are secret.
@@ -461,7 +462,7 @@ Stack is up with RLS ACTIVE on the request path.
   log:       $SERVER_LOG
 
 Next: scripts/rls-e2e-gate.sh test          (run the full suite)
-      scripts/rls-e2e-gate.sh test --test marketplace_e2e   (one target)
+      scripts/rls-e2e-gate.sh test marketplace_e2e::   (one module)
       scripts/rls-e2e-gate.sh down
 EOF
 }
@@ -506,11 +507,11 @@ cmd_test() {
     warn "server log has no 'APP_DATABASE_URL set' line — the running server may not be RLS-active"
   fi
 
-  local targets=()
+  local filters=()
   if [ "$#" -gt 0 ]; then
-    targets=("$@")
+    filters=("$@")
   else
-    targets=("${E2E_TESTS[@]}")
+    filters=("${E2E_TESTS[@]}")
   fi
 
   log "Running E2E suite against the RLS-active server"
@@ -521,8 +522,8 @@ cmd_test() {
   # cargo stops at the first failing test target, so one uncovered query hides
   # every other one behind it and you discover the gaps one slow run at a time.
   # We want the complete list in a single pass.
-  cargo test --no-fail-fast -p mockforge-registry-server "${targets[@]}" \
-    -- --ignored --nocapture --test-threads=1
+  cargo test --no-fail-fast -p mockforge-registry-server --test integration \
+    -- --ignored --nocapture --test-threads=1 "${filters[@]}"
 }
 
 start_evidence() {

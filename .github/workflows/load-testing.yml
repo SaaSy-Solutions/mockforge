@@ -114,7 +114,7 @@ jobs:
           path: |
             tests/load/load-test-results.json
             mockforge-server.log
-          retention-days: 7
+          retention-days: 1
 
       - name: Check performance thresholds
         run: |
@@ -192,7 +192,7 @@ jobs:
           path: |
             tests/load/load-test-results-extended.json
             mockforge-server.log
-          retention-days: 7
+          retention-days: 1
 
       - name: Check performance thresholds
         run: |
@@ -219,16 +219,10 @@ jobs:
         with:
           components: rustfmt, clippy
 
-      - name: Cache cargo registry
-        uses: actions/cache@v6
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
+      # Replaces actions/cache (billed GitHub storage) with a warm target on
+      # the runner disk; see scripts/ci/runner-cargo-target.sh.
+      - name: Use runner-persistent cargo target
+        run: bash scripts/ci/runner-cargo-target.sh load-bench >> "$GITHUB_ENV"
 
       - name: Run benchmarks
         # criterion 0.5 has no `json` output format (only `criterion` and
@@ -244,7 +238,7 @@ jobs:
         with:
           name: benchmark-results
           path: benchmark-results.txt
-          retention-days: 7
+          retention-days: 1
 
       - name: Check for performance regressions
         if: false  # Script doesn't exist yet, skip for now

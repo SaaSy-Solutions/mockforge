@@ -157,12 +157,8 @@ pub async fn create_workspace(
     }
 
     // Enforce max_projects from plan limits. -1 means unlimited.
-    let max_projects = org_ctx
-        .org
-        .limits_json
-        .get("max_projects")
-        .and_then(|v| v.as_i64())
-        .unwrap_or(1);
+    let max_projects =
+        org_ctx.org.limits().get("max_projects").and_then(|v| v.as_i64()).unwrap_or(1);
     if max_projects >= 0 {
         let existing = state.store.list_cloud_workspaces_by_org(org_ctx.org_id).await?;
         if existing.len() as i64 >= max_projects {
