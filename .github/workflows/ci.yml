@@ -115,8 +115,7 @@ jobs:
     timeout-minutes: 60
     env:
       CARGO_INCREMENTAL: "0"
-      # 4 matches integration-tests.yml on the same 8 vCPU host; this repo has
-      # two runners there, and #1450 removed two of the parallel Rust jobs.
+      # Preserve the two-job bound for runners sharing this host.
       CARGO_BUILD_JOBS: "2"
       # Full debuginfo for the whole workspace plus its test binaries filled
       # the hosted runner's disk and the linker died with "Bus error".
