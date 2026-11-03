@@ -1,4 +1,4 @@
-## [0.3.239] - 2026-11-02
+## [0.3.240] - 2026-11-03
 
 ### Changed
 
@@ -16,6 +16,8 @@
 - **[Reality]** `verify-mocks --mock-spec` compares the OpenAPI definition used by a mock with its current source specification. Structured reports include added, removed and changed endpoints, field-level JSON-pointer deltas, and per-route fidelity status. Definition checks can run alone or alongside captured upstream traffic and use the existing `--fail-on-drift` CI gate. (#849)
 
 ### Fixed
+
+- **[DevX]** Identify configured mock-response routes in the control-plane mount audit. Keep generic router mounts rejected and management authentication checks intact. The unpublished 0.3.239 candidate failed this audit.
 
 - **[DevX]** Update the locked Markdown parser to pulldown-cmark 0.13.6 for RUSTSEC-2026-0433. Document the unreachable network-input path underlying the narrowly scoped Thrift RUSTSEC-2026-0435 audit exception.
 
