@@ -58,7 +58,7 @@ fn validate_spec_does_not_initialize_configured_analytics() {
     let spec = dir.path().join("api.json");
     std::fs::write(
         &spec,
-        r#"{"openapi":"3.0.3","info":{"title":"Test","version":"1"},"paths":{}}"#,
+        r#"{"openapi":"3.0.3","info":{"title":"Test","version":"1"},"paths":{"/users":{"get":{"responses":{"200":{"description":"ok"}}}}}}"#,
     )
     .unwrap();
     let analytics = dir.path().join("analytics.sqlite");
