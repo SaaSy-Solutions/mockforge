@@ -37,7 +37,7 @@ pub async fn check_org_limits(
     org: &Organization,
     _user_id: Uuid,
 ) -> Result<(), ApiError> {
-    let limits = &org.limits_json;
+    let limits = org.limits();
 
     // Get current month period
     let period = current_month_period();
@@ -198,7 +198,7 @@ pub async fn org_rate_limit_middleware(
     .await
     .ok();
 
-    let limits = &org_ctx.org.limits_json;
+    let limits = org_ctx.org.limits();
     let requests_limit = limits.get("requests_per_30d").and_then(|v| v.as_i64()).unwrap_or(10000);
 
     let requests_remaining = usage

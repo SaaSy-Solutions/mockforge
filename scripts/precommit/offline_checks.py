@@ -191,7 +191,7 @@ def main() -> int:
     parser.add_argument("mode")
     parser.add_argument("--maxkb", type=int, default=500)
     parser.add_argument("files", nargs="*")
-    args = parser.parse_args()
+    args = parser.parse_intermixed_args()
 
     files = tracked_existing(args.files)
 

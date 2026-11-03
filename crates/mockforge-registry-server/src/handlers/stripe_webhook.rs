@@ -90,6 +90,12 @@ pub struct WebhookEvent {
     pub event_type: String,
     #[serde(default)]
     pub api_version: Option<String>,
+    #[serde(default)]
+    pub created: Option<i64>,
+    #[serde(default)]
+    pub livemode: Option<bool>,
+    #[serde(default)]
+    pub account: Option<String>,
     pub data: WebhookEventData,
 }
 
@@ -117,6 +123,10 @@ impl StripeRef {
 #[derive(Debug, Deserialize)]
 pub struct StripeSubscription {
     pub id: String,
+    #[serde(default)]
+    pub created: Option<i64>,
+    #[serde(default)]
+    pub livemode: Option<bool>,
     pub customer: StripeRef,
     pub status: String,
     #[serde(default)]
@@ -201,6 +211,39 @@ pub struct StripeInvoice {
     pub amount_due: Option<i64>,
     #[serde(default)]
     pub next_payment_attempt: Option<i64>,
+    #[serde(default)]
+    pub subscription: Option<StripeRef>,
+    #[serde(default)]
+    pub parent: Option<StripeInvoiceParent>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct StripeInvoiceParent {
+    #[serde(default)]
+    pub subscription_details: Option<StripeInvoiceSubscriptionDetails>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct StripeInvoiceSubscriptionDetails {
+    pub subscription: StripeRef,
+}
+
+impl StripeInvoice {
+    pub fn subscription_id(&self) -> Result<&str, WebhookError> {
+        let legacy = self.subscription.as_ref().map(StripeRef::id);
+        let current = self
+            .parent
+            .as_ref()
+            .and_then(|parent| parent.subscription_details.as_ref())
+            .map(|details| details.subscription.id());
+        match (legacy, current) {
+            (Some(a), Some(b)) if a != b => {
+                Err(WebhookError::Rejected("conflicting invoice subscription identities".into()))
+            }
+            (Some(id), _) | (_, Some(id)) => Ok(id),
+            _ => Err(WebhookError::Ignored("invoice has no subscription identity".into())),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -225,14 +268,16 @@ pub fn parse_object<T: serde::de::DeserializeOwned>(
 /// Why an event was not applied.
 #[derive(Debug)]
 pub enum WebhookError {
-    /// Nothing can ever be done with it (missing `org_id` metadata, an unknown
-    /// subscription, an unparsable object). Acknowledged with 200 and logged,
+    /// Nothing can be done with it (missing `org_id` metadata or an
+    /// unparsable object). Acknowledged with 200 and logged,
     /// so Stripe does not retry it for days.
     Ignored(String),
     /// Refused on purpose and alerted, e.g. a price id this deployment does not
     /// know. Answered non-2xx so Stripe retries: once the operator configures
     /// the price, a retry applies the event.
     Rejected(String),
+    /// A prerequisite event has not arrived yet. Answered 503 so Stripe retries.
+    Pending(String),
     /// A transient failure (database). Answered 500 so Stripe retries.
     Failed(ApiError),
 }
@@ -287,33 +332,48 @@ impl<'a> PriceIds<'a> {
 #[derive(Debug, PartialEq, Eq)]
 pub enum Claim {
     /// This request owns the event and must finish or release it.
-    Acquired,
-    /// Already processed, or another delivery is processing it right now.
-    Duplicate,
+    Acquired {
+        claimed_at: chrono::DateTime<chrono::Utc>,
+    },
+    /// A prior delivery completed processing.
+    Processed,
+    /// Another delivery owns an unfinished attempt; this must not be acknowledged.
+    InFlight,
 }
 
 /// Claim `event_id`. A claim older than five minutes that never finished
-/// (crashed process) can be retaken.
+/// (crashed process) can be retaken. The persisted timestamp fences completion
+/// and release; handlers remain at-least-once across crashes or lease expiry.
+/// In particular, notification delivery is not made exactly-once by this claim.
 pub async fn claim_event(
     pool: &sqlx::PgPool,
     event_id: &str,
     event_type: &str,
 ) -> Result<Claim, sqlx::Error> {
-    let claimed: Option<String> = sqlx::query_scalar(
+    let claimed: Option<chrono::DateTime<chrono::Utc>> = sqlx::query_scalar(
         "INSERT INTO stripe_webhook_events (event_id, event_type) VALUES ($1, $2) \
          ON CONFLICT (event_id) DO UPDATE SET claimed_at = NOW() \
          WHERE stripe_webhook_events.processed_at IS NULL \
            AND stripe_webhook_events.claimed_at < NOW() - INTERVAL '5 minutes' \
-         RETURNING event_id",
+         RETURNING claimed_at",
     )
     .bind(event_id)
     .bind(event_type)
     .fetch_optional(pool)
     .await?;
-    Ok(if claimed.is_some() {
-        Claim::Acquired
+    if let Some(claimed_at) = claimed {
+        return Ok(Claim::Acquired { claimed_at });
+    }
+    let processed: Option<bool> = sqlx::query_scalar(
+        "SELECT processed_at IS NOT NULL FROM stripe_webhook_events WHERE event_id = $1",
+    )
+    .bind(event_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(if processed == Some(true) {
+        Claim::Processed
     } else {
-        Claim::Duplicate
+        Claim::InFlight
     })
 }
 
@@ -321,23 +381,33 @@ pub async fn claim_event(
 pub async fn finish_event(
     pool: &sqlx::PgPool,
     event_id: &str,
+    claimed_at: chrono::DateTime<chrono::Utc>,
     outcome: &str,
 ) -> Result<(), sqlx::Error> {
-    sqlx::query(
+    let updated = sqlx::query(
         "UPDATE stripe_webhook_events SET processed_at = NOW(), outcome = $2 \
-         WHERE event_id = $1",
+         WHERE event_id = $1 AND claimed_at = $3 AND processed_at IS NULL",
     )
     .bind(event_id)
     .bind(outcome)
+    .bind(claimed_at)
     .execute(pool)
     .await?;
+    if updated.rows_affected() == 0 {
+        return Err(sqlx::Error::RowNotFound);
+    }
     Ok(())
 }
 
 /// Drop an unfinished claim so Stripe's retry processes the event again.
-pub async fn release_event(pool: &sqlx::PgPool, event_id: &str) -> Result<(), sqlx::Error> {
-    sqlx::query("DELETE FROM stripe_webhook_events WHERE event_id = $1 AND processed_at IS NULL")
+pub async fn release_event(
+    pool: &sqlx::PgPool,
+    event_id: &str,
+    claimed_at: chrono::DateTime<chrono::Utc>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("DELETE FROM stripe_webhook_events WHERE event_id = $1 AND claimed_at = $2 AND processed_at IS NULL")
         .bind(event_id)
+        .bind(claimed_at)
         .execute(pool)
         .await?;
     Ok(())
@@ -347,6 +417,26 @@ pub async fn release_event(pool: &sqlx::PgPool, event_id: &str) -> Result<(), sq
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn invoice_subscription_identity_accepts_versions_and_rejects_conflicts() {
+        for reference in [json!("sub_exact"), json!({"id":"sub_exact"})] {
+            for object in [
+                json!({"id":"in_a","subscription":reference}),
+                json!({"id":"in_a","parent":{"subscription_details":{"subscription":reference}}}),
+            ] {
+                let invoice: StripeInvoice = serde_json::from_value(object).unwrap();
+                assert_eq!(invoice.subscription_id().unwrap(), "sub_exact");
+            }
+        }
+        let conflict: StripeInvoice = serde_json::from_value(json!({"id":"in_a",
+            "subscription":"sub_a","parent":{"subscription_details":{"subscription":"sub_b"}}}))
+        .unwrap();
+        assert!(matches!(conflict.subscription_id(), Err(WebhookError::Rejected(_))));
+        let missing: StripeInvoice =
+            serde_json::from_value(json!({"id":"in_a","customer":"cus_a"})).unwrap();
+        assert!(missing.subscription_id().is_err());
+    }
 
     const SECRET: &str = "whsec_unit_test";
 

@@ -355,7 +355,7 @@ pub async fn publish_scenario(
         .map_err(|_| ApiError::OrganizationNotFound)?;
 
     // Check publishing limits
-    let limits = &org_ctx.org.limits_json;
+    let limits = org_ctx.org.limits();
     let max_scenarios = limits.get("max_scenarios_published").and_then(|v| v.as_i64()).unwrap_or(1);
 
     if max_scenarios >= 0 {

@@ -335,7 +335,7 @@ pub async fn add_organization_member(
     // Enforce max_collaborators from plan limits. -1 means unlimited. The owner
     // is counted as the first seat; members beyond that draw from the quota.
     let max_collaborators =
-        org.limits_json.get("max_collaborators").and_then(|v| v.as_i64()).unwrap_or(1);
+        org.limits().get("max_collaborators").and_then(|v| v.as_i64()).unwrap_or(1);
     if max_collaborators >= 0 {
         let current_members = state.store.list_org_members(org_id).await?;
         // current_members includes everyone in org_members. Owner may or may not

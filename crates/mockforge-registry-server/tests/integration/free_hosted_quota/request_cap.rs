@@ -183,7 +183,7 @@ async fn free_defaults_and_migration_preserve_custom_grants_and_paid_limits() {
             .await
             .unwrap();
     }
-    sqlx::raw_sql(include_str!("../../migrations/20250101000090_free_hosted_tier.sql"))
+    sqlx::raw_sql(include_str!("../../../migrations/20250101000090_free_hosted_tier.sql"))
         .execute(state.db.pool())
         .await
         .unwrap();

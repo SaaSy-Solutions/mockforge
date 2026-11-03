@@ -15,10 +15,10 @@ use std::{collections::HashMap, sync::Arc};
 use tokio::sync::RwLock;
 use tower::ServiceExt;
 
-#[tokio::test]
-// The `mockforge_http::auth::` paths are the point of this test: they prove
-// the legacy re-exports still name the extracted types.
+// The `mockforge_http::auth::` paths are the point: they prove the legacy
+// re-exports name the same types as the extracted crate.
 #[allow(unused_qualifications)]
+#[tokio::test]
 async fn extracted_state_and_claims_work_through_the_legacy_http_middleware() {
     let direct = AuthState {
         config: AuthConfig {

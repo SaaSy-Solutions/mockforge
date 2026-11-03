@@ -58,6 +58,7 @@ pub mod sso;
 pub mod stats;
 pub mod status;
 pub mod stripe_webhook;
+mod subscription_webhook;
 pub mod support;
 pub mod test_generation;
 pub mod test_runs;

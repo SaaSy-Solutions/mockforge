@@ -1,4 +1,4 @@
-## [0.3.239] - 2026-11-02
+## [0.3.240] - 2026-11-03
 
 ### Changed
 
@@ -6,6 +6,7 @@
 
 ### Added
 
+- **[Contracts][DevX]** `mockforge validate-spec <spec> [--format json]` validates one local OpenAPI 2.0 or 3.x document with the validator `generate` uses, without generating, starting, fetching or writing anything. The JSON form is a versioned document (`schema_version` 1) listing each finding's severity, rule, JSON pointer, message and suggestion, for CI and agent hosts such as Aether. Exits 0 when valid, 1 with errors, 2 when the file is not an OpenAPI document it could read.
 - **[Reality]** Add `mockforge cve` managed labs with pinned vulnerable applications and Nuclei containers. The first pack reproduces Next.js CVE-2025-29927, checks direct and load-balancer paths, and reports blocking only when healthy controls and correlated origin evidence support it. (#79)
 - **[DevX]** Automatically fetch managed CVE lab images, export evidence, and clean up run-owned containers. Include environment diagnostics and recovery commands for local Docker or Podman on Linux amd64 with Python 3.11+. (#79)
 
@@ -16,6 +17,8 @@
 - **[Reality]** `verify-mocks --mock-spec` compares the OpenAPI definition used by a mock with its current source specification. Structured reports include added, removed and changed endpoints, field-level JSON-pointer deltas, and per-route fidelity status. Definition checks can run alone or alongside captured upstream traffic and use the existing `--fail-on-drift` CI gate. (#849)
 
 ### Fixed
+
+- **[DevX]** Identify configured mock-response routes in the control-plane mount audit. Keep generic router mounts rejected and management authentication checks intact. The unpublished 0.3.239 candidate failed this audit.
 
 - **[DevX]** Update the locked Markdown parser to pulldown-cmark 0.13.6 for RUSTSEC-2026-0433. Document the unreachable network-input path underlying the narrowly scoped Thrift RUSTSEC-2026-0435 audit exception.
 

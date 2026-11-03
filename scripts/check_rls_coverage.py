@@ -238,11 +238,11 @@ ELEVATED_ALLOWLIST = {
     "handlers/hosted_mocks.rs::ingest_runtime_captures": "data-plane recorder sync, per-deployment ingest token, no user org",
     "handlers/otlp.rs::persist_span_rows": "OTLP span ingest (HTTP + gRPC), per-deployment token, no user org",
     # Stripe webhooks: no user; the org comes from the signed payload.
+    "handlers/subscription_webhook.rs::reconcile_invoice": "signed platform Stripe invoice; exact subscription/customer lookup before shared org-locked authoritative reconciliation",
+    "handlers/subscription_webhook.rs::apply_inner": "signed platform Stripe event; validated immutable subscription owner and org-locked transaction",
     "handlers/billing.rs::handle_subscription_event": "Stripe webhook: no user, org resolved from the signed payload",
     "handlers/billing.rs::handle_subscription_deleted": "Stripe webhook: no user, org resolved from the signed payload",
-    "handlers/billing.rs::handle_payment_succeeded": "Stripe webhook: no user, org resolved from the signed payload",
     "handlers/billing.rs::handle_payment_failed": "Stripe webhook: no user, org resolved from the signed payload",
-    "handlers/billing.rs::subscription_for_invoice": "Stripe webhook: no user, org resolved from the signed payload",
     "handlers/billing.rs::handle_trial_will_end": "Stripe webhook: no user, org resolved from the signed payload",
 }
 

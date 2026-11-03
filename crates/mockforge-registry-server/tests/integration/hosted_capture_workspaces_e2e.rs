@@ -1,14 +1,13 @@
 //! Real authenticated API and deployment-JWT capture attribution regression.
 //! Run against a disposable migrated PostgreSQL registry with JWT_SECRET set
 //! and deployment providers disabled. Never use a production account.
+use crate::fixture;
 use chrono::Utc;
+use fixture::{register_and_setup, E2e};
 use reqwest::StatusCode;
 use serde_json::{json, Value};
 use sqlx::{postgres::PgPoolOptions, PgPool};
 use uuid::Uuid;
-#[path = "support/cloud_verification_fixture.rs"]
-mod fixture;
-use fixture::{register_and_setup, E2e};
 
 fn patch(e: &E2e, id: Uuid, body: Value) -> reqwest::RequestBuilder {
     e.client
