@@ -35,6 +35,33 @@ pub fn handle(command: ToolsCommands) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Run the shipped, isolated standard-library runner without a checkout or pip.
+pub fn cve(args: Vec<std::ffi::OsString>) -> anyhow::Result<()> {
+    let files: BTreeMap<String, String> = serde_json::from_str(include_str!("bundled_tools.json"))?;
+    let modules: BTreeMap<_, _> = files
+        .into_iter()
+        .filter(|(name, _)| name.starts_with("scripts/cve_lab") && name.ends_with(".py"))
+        .collect();
+    anyhow::ensure!(modules.contains_key("scripts/cve_lab.py"), "Missing bundled CVE runner");
+    let source = serde_json::to_string(&modules)?;
+    let bootstrap = r#"import json, pathlib, runpy, sys, tempfile
+files = json.loads(sys.argv.pop(1))
+with tempfile.TemporaryDirectory(prefix="mockforge-cve-") as directory:
+    root = pathlib.Path(directory)
+    for name, source in files.items():
+        (root / pathlib.PurePosixPath(name).name).write_text(source, encoding="utf-8")
+    sys.path.insert(0, str(root))
+    runpy.run_path(str(root / "cve_lab.py"), run_name="__main__")
+"#;
+    let status = std::process::Command::new("python3")
+        .args(["-I", "-c", bootstrap, &source])
+        .args(args)
+        .status()
+        .context("Managed CVE labs require Python 3.11+ (python3 on PATH)")?;
+    anyhow::ensure!(status.success(), "CVE command failed ({status}); see diagnostics above");
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

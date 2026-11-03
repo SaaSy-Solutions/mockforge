@@ -26,7 +26,6 @@ def load(name):
 
 
 SCOPE = load("rust_scope")
-TARGET = load("persistent_target")
 
 
 def package(name, directory, deps=(), kinds=("lib",)):
@@ -188,13 +187,12 @@ class WorkflowWiringTest(unittest.TestCase):
             with self.subTest(job=job):
                 step = content.split("name: Use the runner's persistent Cargo target dir on Hetzner", 1)[1].split("- name:", 1)[0]
                 self.assertIn("if: runner.environment == 'self-hosted'", step)
-                self.assertIn("run: python3 scripts/ci/persistent_target.py", step)
-                release = content.split("name: Release the persistent target dir if the shared disk is short", 1)[1].split("- name:", 1)[0]
-                self.assertIn("if: always() && runner.environment == 'self-hosted'", release)
-                self.assertIn("run: python3 scripts/ci/persistent_target.py release", release)
+                self.assertIn('run: bash scripts/ci/runner-cargo-target.sh ci-' + job + ' >> "$GITHUB_ENV"', step)
+                self.assertNotIn("persistent_target.py", content)
+                self.assertNotIn("Release the persistent target", content)
                 self.assertIn("uses: rui314/setup-mold@v1", content)
                 self.assertIn("run: bash scripts/ci/setup_mold.sh", content)
-                for flag in ('CARGO_INCREMENTAL: "0"', 'CARGO_BUILD_JOBS: "4"',
+                for flag in ('CARGO_INCREMENTAL: "0"', 'CARGO_BUILD_JOBS: "2"',
                              'CARGO_PROFILE_DEV_DEBUG: "0"', 'CARGO_PROFILE_TEST_DEBUG: "0"'):
                     self.assertIn(flag, content)
 
@@ -210,6 +208,8 @@ class WorkflowWiringTest(unittest.TestCase):
         self.assertIn("runs-on: [self-hosted, linux, x64, rust]", NIGHTLY)
         self.assertNotIn("ubuntu-latest", NIGHTLY)
         self.assertNotIn("pull_request", NIGHTLY)
+        self.assertIn('bash scripts/ci/runner-cargo-target.sh nightly-full >> "$GITHUB_ENV"', NIGHTLY)
+        self.assertNotIn("persistent_target.py", NIGHTLY)
         self.assertIn("cron: '23 7 * * *'", NIGHTLY)
         self.assertIn("github.ref == 'refs/heads/main'", NIGHTLY)
         self.assertIn("cancel-in-progress: false", NIGHTLY)
@@ -218,52 +218,6 @@ class WorkflowWiringTest(unittest.TestCase):
         self.assertIn("MOCKFORGE_TEST_BINARY: ${{ runner.temp }}/mockforge-all-protocols", NIGHTLY)
         for forbidden in ("sudo ", "apt-get", "rustup default", "secrets."):
             self.assertNotIn(forbidden, NIGHTLY)
-
-
-class PersistentTargetTest(unittest.TestCase):
-    def test_runner_name_is_validated(self):
-        self.assertEqual(TARGET.target_for("saasy-ci-runner-01"), Path("/tmp/mockforge-target-saasy-ci-runner-01"))
-        for bad in ("", "../x", "a/b", "a b", "-x"):
-            with self.subTest(bad=bad), self.assertRaises(ValueError):
-                TARGET.target_for(bad)
-
-    def test_reuses_within_budget_and_resets_only_its_own_dir(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            sibling = root / "mockforge-target-other"
-            sibling.mkdir()
-            (sibling / "keep").write_bytes(b"x" * 8192)
-            target = TARGET.target_for("runner-1", root)
-            self.assertEqual(TARGET.prepare(target, 10 * TARGET.GIB, 0), "reused")
-            (target / "artifact").write_bytes(b"x" * 8192)
-            self.assertEqual(TARGET.prepare(target, 10 * TARGET.GIB, 0), "reused")
-            self.assertTrue((target / "artifact").exists())
-            self.assertIn("budget", TARGET.prepare(target, 1024, 0))
-            self.assertTrue(target.is_dir())
-            self.assertFalse((target / "artifact").exists())
-            self.assertTrue((sibling / "keep").exists())
-
-    def test_release_drops_only_its_dir_when_disk_is_short(self):
-        with tempfile.TemporaryDirectory() as directory:
-            target = TARGET.target_for("runner-1", Path(directory))
-            target.mkdir()
-            self.assertEqual(TARGET.release(target, 0), "kept")
-            self.assertTrue(target.is_dir())
-            self.assertEqual(TARGET.release(target, 1 << 62), "released")
-            self.assertFalse(target.exists())
-            self.assertEqual(TARGET.release(target, 1 << 62), "absent")
-
-    def test_refuses_symlinked_target(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            elsewhere = root / "elsewhere"
-            elsewhere.mkdir()
-            (elsewhere / "precious").write_text("x")
-            target = TARGET.target_for("runner-1", root)
-            target.symlink_to(elsewhere, target_is_directory=True)
-            with self.assertRaises(ValueError):
-                TARGET.prepare(target, 0, 0)
-            self.assertTrue((elsewhere / "precious").exists())
 
 
 class MoldSetupTest(unittest.TestCase):

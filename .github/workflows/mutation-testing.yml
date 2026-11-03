@@ -50,11 +50,9 @@ jobs:
       - name: Install cargo-mutants
         run: cargo install cargo-mutants
 
-      - name: Cache cargo dependencies
-        uses: Swatinem/rust-cache@v2
-        with:
-          env-vars: "CARGO_HOME"
-          key: mutation-${{ matrix.crate }}
+      # No Swatinem/rust-cache: it wrote target tarballs to the org's billed
+      # GitHub storage. No shared CARGO_TARGET_DIR either: cargo-mutants
+      # builds each mutant in its own copied tree with its own target.
 
       - name: Run mutation testing on ${{ matrix.crate }}
         if: github.event.inputs.crate == 'all' || github.event.inputs.crate == matrix.crate || github.event.inputs.crate == ''
@@ -108,7 +106,8 @@ jobs:
             crates/${{ matrix.crate }}/mutation-results/
             crates/${{ matrix.crate }}/mutation-report.json
             crates/${{ matrix.crate }}/mutation-output.log
-          retention-days: 7
+          # Handoff to aggregate-results in this run only.
+          retention-days: 1
 
   aggregate-results:
     name: Aggregate Mutation Results

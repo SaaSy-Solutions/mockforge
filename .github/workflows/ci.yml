@@ -14,7 +14,7 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
-  CARGO_BUILD_JOBS: "4"
+  CARGO_BUILD_JOBS: "2"
   RUSTUP_TOOLCHAIN: "1.96.0"
   # Reality level for mock testing (1-5, default: 3)
   # 1 = Static Stubs, 2 = Light Simulation, 3 = Moderate Realism,
@@ -79,6 +79,8 @@ jobs:
           python3 -m unittest discover -s scripts/tests -p test_rust_build_policy.py -v
           python3 -m unittest discover -s scripts/tests -p test_workload_admission.py -v
           python3 -m unittest discover -s scripts/tests -p test_rust_ci_scope.py -v
+          python3 scripts/tests/test_runner_cargo_target.py
+          python3 scripts/tests/test_rust_cache_guard.py
       - name: Determine whether non-docs files changed
         id: filter
         env:
@@ -115,7 +117,7 @@ jobs:
       CARGO_INCREMENTAL: "0"
       # 4 matches integration-tests.yml on the same 8 vCPU host; this repo has
       # two runners there, and #1450 removed two of the parallel Rust jobs.
-      CARGO_BUILD_JOBS: "4"
+      CARGO_BUILD_JOBS: "2"
       # Full debuginfo for the whole workspace plus its test binaries filled
       # the hosted runner's disk and the linker died with "Bus error".
       CARGO_PROFILE_DEV_DEBUG: "0"
@@ -186,7 +188,7 @@ jobs:
     # one job at a time, so no two Cargo processes share it.
     - name: Use the runner's persistent Cargo target dir on Hetzner
       if: runner.environment == 'self-hosted'
-      run: python3 scripts/ci/persistent_target.py
+      run: bash scripts/ci/runner-cargo-target.sh ci-test >> "$GITHUB_ENV"
 
     - name: Install mold
       if: runner.environment == 'github-hosted'
@@ -242,9 +244,6 @@ jobs:
       env:
         MOCKFORGE_TEST_BINARY: ${{ runner.temp }}/mockforge-all-protocols
 
-    - name: Release the persistent target dir if the shared disk is short
-      if: always() && runner.environment == 'self-hosted'
-      run: python3 scripts/ci/persistent_target.py release
 
     # The all-features test run (continue-on-error, so it could never fail a
     # PR) and `cargo doc` moved to nightly-rust.yml on main (#1450).
@@ -382,8 +381,8 @@ jobs:
     timeout-minutes: 40
     env:
       CARGO_INCREMENTAL: "0"
-      CARGO_BUILD_JOBS: "4"
-      # Same profile as the test job so both reuse one persistent target dir.
+      CARGO_BUILD_JOBS: "2"
+      # Same profile as the test job; each lane keeps its own target class.
       CARGO_PROFILE_DEV_DEBUG: "0"
       CARGO_PROFILE_TEST_DEBUG: "0"
     steps:
@@ -432,7 +431,7 @@ jobs:
     # one job at a time, so no two Cargo processes share it.
     - name: Use the runner's persistent Cargo target dir on Hetzner
       if: runner.environment == 'self-hosted'
-      run: python3 scripts/ci/persistent_target.py
+      run: bash scripts/ci/runner-cargo-target.sh ci-warning-gate >> "$GITHUB_ENV"
 
     - name: Install mold
       if: runner.environment == 'github-hosted'
@@ -444,9 +443,6 @@ jobs:
     - name: Run warning gate
       run: bash scripts/lint-warning-gate.sh
 
-    - name: Release the persistent target dir if the shared disk is short
-      if: always() && runner.environment == 'self-hosted'
-      run: python3 scripts/ci/persistent_target.py release
   security-audit:
     name: Security Audit
     needs: changes
@@ -597,6 +593,10 @@ jobs:
 
     - name: Install protoc (protobuf compiler)
       run: 'dpkg -s protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev > /dev/null 2>&1 || { echo "::error::Required system deps missing on self-hosted runner. Run on the runner host: sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev"; exit 1; }'
+    - name: Use runner-persistent cargo target on Hetzner
+      if: runner.environment == 'self-hosted'
+      run: bash scripts/ci/runner-cargo-target.sh ci-coverage >> "$GITHUB_ENV"
+
     - name: Install cargo-llvm-cov
       run: cargo install cargo-llvm-cov
 
@@ -634,7 +634,7 @@ jobs:
       # Override the workflow-wide stable pin for every command in this job.
       RUSTUP_TOOLCHAIN: "1.96.0"
       CARGO_INCREMENTAL: "0"
-      CARGO_BUILD_JOBS: "4"
+      CARGO_BUILD_JOBS: "2"
       CARGO_PROFILE_DEV_DEBUG: "0"
       CARGO_PROFILE_TEST_DEBUG: "0"
     steps:
@@ -695,7 +695,7 @@ jobs:
     # one job at a time, so no two Cargo processes share it.
     - name: Use the runner's persistent Cargo target dir on Hetzner
       if: runner.environment == 'self-hosted'
-      run: python3 scripts/ci/persistent_target.py
+      run: bash scripts/ci/runner-cargo-target.sh ci-msrv >> "$GITHUB_ENV"
 
     - name: Install mold
       if: runner.environment == 'github-hosted'
@@ -709,9 +709,6 @@ jobs:
         # Use the declared minimum, including the desktop workspace member.
         cargo check --workspace --locked
 
-    - name: Release the persistent target dir if the shared disk is short
-      if: always() && runner.environment == 'self-hosted'
-      run: python3 scripts/ci/persistent_target.py release
 
   typos:
     name: Spell Check

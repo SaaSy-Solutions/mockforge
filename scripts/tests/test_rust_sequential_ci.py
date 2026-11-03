@@ -209,6 +209,7 @@ class SequentialRustTest(unittest.TestCase):
         self.assertIn('cp "${CARGO_TARGET_DIR:-target}/debug/mockforge" "$RUNNER_TEMP/mockforge-all-protocols"', default)
         self.assertIn("MOCKFORGE_TEST_BINARY: ${{ runner.temp }}/mockforge-all-protocols", default)
         self.assertIn("CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}", default)
+        self.assertIn('bash scripts/ci/runner-cargo-target.sh ci-test >> "$GITHUB_ENV"', default)
         for forbidden in ("Swatinem/rust-cache", "download-artifact", "upload-artifact"):
             self.assertNotIn(forbidden, default)
 

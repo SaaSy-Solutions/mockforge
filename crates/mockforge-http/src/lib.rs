@@ -1900,7 +1900,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
 
     if let Some(routes) = route_configs {
         match configured_routes::build_configured_routes_router(routes, template_expand) {
-            Ok(router) => app = app.merge(router),
+            Ok(configured_mock_router) => app = app.merge(configured_mock_router),
             Err(error) => warn!("Invalid configured HTTP routes: {}", error),
         }
     }

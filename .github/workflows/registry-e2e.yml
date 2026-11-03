@@ -183,19 +183,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y protobuf-compiler
 
-      # Same target/ guard as integration-tests.yml — keeps the shared NVMe from
-      # filling up across sibling runners.
-      - name: Guard target/ size
-        run: |
-          if [ -d target ] && [ "$(du -sb target | awk '{print $1}')" -gt 32212254720 ]; then
-            echo "target/ exceeds 30GB — wiping"
-            rm -rf target
-          fi
-
-      - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2
-        with:
-          env-vars: "CARGO_HOME"
+      - name: Use runner-persistent cargo target on Hetzner
+        # Replaces Swatinem/rust-cache: no target or registry tarballs in
+        # GitHub cache storage. See scripts/ci/runner-cargo-target.sh.
+        if: runner.environment == 'self-hosted'
+        run: bash scripts/ci/runner-cargo-target.sh registry-e2e >> "$GITHUB_ENV"
 
       - name: Build registry-server
         # Debug build (not --release): this is a behavioral E2E lane, not a perf
@@ -325,7 +317,7 @@ jobs:
           SERVER_PID="$(PORT="$REGISTRY_PORT" HOST="127.0.0.1" \
             python3 scripts/ci-owned-process.py start \
               --receipt "$FIXTURE_ROOT/server.json" --log registry-server.log \
-              -- ./target/debug/mockforge-registry-server)"
+              -- "${CARGO_TARGET_DIR:-target}/debug/mockforge-registry-server")"
           echo "Waiting for registry-server (pid $SERVER_PID) on :${REGISTRY_PORT}..."
           for _ in {1..60}; do
             # If OUR process died (e.g. lost a bind race to a stale server),
@@ -441,8 +433,9 @@ jobs:
               --project "$COMPOSE_PROJECT_NAME" --output "$FIXTURE_ROOT/evidence.jsonl"
           fi
 
+      # Debug evidence only: failure-only and short-lived (GitHub storage).
       - name: Upload server log
-        if: always()
+        if: failure()
         uses: actions/upload-artifact@v7.0.2
         with:
           name: registry-server-log
@@ -451,6 +444,7 @@ jobs:
             ${{ env.FIXTURE_ROOT }}/evidence.jsonl
             ${{ env.FIXTURE_ROOT }}/monitor.log
           if-no-files-found: ignore
+          retention-days: 1
 
   # ---------------------------------------------------------------------------
   # RLS coverage gate (#832 / #960).
@@ -571,10 +565,11 @@ jobs:
         # provisions the NOBYPASSRLS role through it.
         run: command -v psql > /dev/null 2>&1 || sudo apt-get install -y postgresql-client
 
-      - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2
-        with:
-          env-vars: "CARGO_HOME"
+      - name: Use runner-persistent cargo target on Hetzner
+        # Replaces Swatinem/rust-cache: no target or registry tarballs in
+        # GitHub cache storage. See scripts/ci/runner-cargo-target.sh.
+        if: runner.environment == 'self-hosted'
+        run: bash scripts/ci/runner-cargo-target.sh registry-rls >> "$GITHUB_ENV"
 
       # Static half of the gate: every statement on a FORCE-RLS table must run
       # GUC-bound on the runtime pool or be a reviewed ELEVATED owner-pool path.
@@ -590,8 +585,9 @@ jobs:
           EVIDENCE_OUTPUT: "${{ runner.temp }}/mf-rls-evidence-${{ github.run_id }}-${{ github.run_attempt }}.jsonl"
         run: scripts/rls-e2e-gate.sh all
 
+      # Debug evidence only: failure-only and short-lived (GitHub storage).
       - name: Upload server log
-        if: always()
+        if: failure()
         uses: actions/upload-artifact@v7.0.2
         with:
           name: registry-server-log-rls
@@ -600,3 +596,4 @@ jobs:
             ${{ runner.temp }}/mf-rls-evidence-${{ github.run_id }}-${{ github.run_attempt }}.jsonl
             ${{ runner.temp }}/mf-rls-gate-server-${{ github.run_id }}-${{ github.run_attempt }}.json.monitor.log
           if-no-files-found: ignore
+          retention-days: 1

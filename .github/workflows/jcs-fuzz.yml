@@ -57,11 +57,11 @@ jobs:
       - name: Install Rust toolchain
         uses: ./.github/actions/rust-toolchain
 
-      - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2
-        with:
-          env-vars: "CARGO_HOME"
-          key: jcs-fuzz
+      - name: Use runner-persistent cargo target on Hetzner
+        # Replaces Swatinem/rust-cache: no target or registry tarballs in
+        # GitHub cache storage. See scripts/ci/runner-cargo-target.sh.
+        if: runner.environment == 'self-hosted'
+        run: bash scripts/ci/runner-cargo-target.sh jcs-fuzz >> "$GITHUB_ENV"
 
       # Compile separately so that infrastructure failures (linker
       # SIGBUS from runner-side disk pressure, OOM during compile,
@@ -105,6 +105,7 @@ jobs:
           # from the artifact.
           path: crates/mockforge-registry-core/**/proptest-regressions/**
           if-no-files-found: ignore
+          retention-days: 7
 
       # Scope the auto-commit surface to *only* proptest regression
       # seed files, so a compromised or misbehaving workflow can't

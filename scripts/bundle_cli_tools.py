@@ -12,9 +12,11 @@ OUTPUT = ROOT / "crates/mockforge-cli/src/bundled_tools.json"
 def bundle():
     paths = [
         ROOT / "scripts/export_github_issue.py",
+        ROOT / "scripts/cve_lab.py",
         ROOT / "scripts/security_rule_test_pack.py",
     ]
     paths += sorted((ROOT / "scripts").glob("cve_pack*.py"))
+    paths += sorted((ROOT / "scripts").glob("cve_lab_*.py"))
     paths += sorted((ROOT / "scripts").glob("security_rule_pack_*.py"))
     for directory in ("cve-packs", "cve-lab", "security-rule-packs"):
         paths += sorted(
@@ -26,6 +28,7 @@ def bundle():
         ROOT / "book/src/user-guide" / name
         for name in (
             "cve-packs.md",
+            "managed-cve-labs.md",
             "issue-79-reference.md",
             "security-rule-test-packs.md",
         )

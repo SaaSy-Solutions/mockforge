@@ -34,13 +34,16 @@ jobs:
       - name: Install cargo-fuzz
         run: cargo install cargo-fuzz
 
-      - name: Cache fuzz corpus
-        uses: actions/cache@v6
-        with:
-          path: crates/mockforge-core/fuzz/corpus
-          key: fuzz-corpus-${{ github.sha }}
-          restore-keys: |
-            fuzz-corpus-
+      # The corpus used to live in actions/cache, which is billed GitHub
+      # storage. Keep it on this runner's disk instead. It is small (inputs,
+      # not build output) and per-runner, so concurrent runs never share it.
+      - name: Restore fuzz corpus from the runner disk
+        run: |
+          store="/tmp/mockforge-fuzz-corpus-${RUNNER_NAME:?}"
+          mkdir -p crates/mockforge-core/fuzz/corpus
+          if [ -d "$store" ] && [ ! -L "$store" ]; then
+            cp -a "$store/." crates/mockforge-core/fuzz/corpus/
+          fi
 
       - name: Run OpenAPI parser fuzzer
         working-directory: crates/mockforge-core
@@ -63,6 +66,16 @@ jobs:
           cargo +nightly fuzz run fuzz_json_validator -- -max_total_time=${{ github.event.inputs.duration || 300 }} \
           || [ $? -eq 124 ]
 
+      - name: Save fuzz corpus to the runner disk
+        if: always()
+        run: |
+          store="/tmp/mockforge-fuzz-corpus-${RUNNER_NAME:?}"
+          [ ! -L "$store" ] || { echo "::warning::$store is a symlink; not saving corpus"; exit 0; }
+          mkdir -p "$store"
+          if [ -d crates/mockforge-core/fuzz/corpus ]; then
+            cp -a crates/mockforge-core/fuzz/corpus/. "$store/"
+          fi
+
       - name: Check for crashes
         id: check_crashes
         run: |
@@ -82,6 +95,8 @@ jobs:
         with:
           name: fuzz-crash-artifacts
           path: crates/mockforge-core/fuzz/artifacts/
+          # Crash reproducers are tiny and needed for triage of the issue below.
+          retention-days: 7
 
       - name: Create issue on crash
         if: steps.check_crashes.outputs.crashes != '0'
