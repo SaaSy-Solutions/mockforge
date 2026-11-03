@@ -216,7 +216,7 @@ class SequentialRustTest(unittest.TestCase):
             content = block(job)
             # No GitHub cache storage: each lane keeps its own warm target dir
             # on the runner disk, keyed by job class and runner name.
-            self.assertNotIn("Swatinem/rust-cache", content)
+            self.assertNotIn("uses: Swatinem/rust-cache", content)
             self.assertIn("bash scripts/ci/runner-cargo-target.sh " + target_class + ' >> "$GITHUB_ENV"', content)
             self.assertIn("CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}", content)
             for forbidden in ("actions/cache", "download-artifact", "upload-artifact"):

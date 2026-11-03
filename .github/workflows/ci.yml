@@ -237,7 +237,7 @@ jobs:
       if: matrix.rust == '1.96.0' && (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)
 
   # Keep trusted Rust work sequential on the existing pool. No target or
-  # binary artifacts cross jobs; each lane uses its own normal job cache key.
+  # binary artifacts cross jobs; each lane uses its own warm target dir.
   test-extended:
     name: Rust extended checks
     needs: [changes, test]
