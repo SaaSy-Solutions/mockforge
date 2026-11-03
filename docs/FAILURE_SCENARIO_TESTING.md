@@ -9,7 +9,7 @@ Following the principle that **systems should fail gracefully**, we've added ext
 ## Test Files Created
 
 ### 1. HTTP Server Failure Scenarios
-**File**: `crates/mockforge-http/tests/failure_scenarios_test.rs`
+**File**: `crates/mockforge-http/tests/integration/failure_scenarios_test.rs`
 
 Tests server behavior when given malformed or invalid OpenAPI specifications.
 
@@ -226,7 +226,7 @@ All tests verify that:
 All 10 HTTP failure scenario tests are **passing**:
 
 ```bash
-$ cargo test -p mockforge-http --test failure_scenarios_test
+$ cargo test -p mockforge-http --test integration failure_scenarios_test::
 
 running 10 tests
 test test_server_handles_spec_with_circular_refs ... ok

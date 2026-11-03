@@ -397,10 +397,12 @@ async fn legacy_status_flags_do_not_clear_unverified_provider_reservations() {
     .execute(&mut *tx)
     .await
     .unwrap();
-    sqlx::raw_sql(include_str!("../../migrations/20250101000091_hosted_capacity_reservations.sql"))
-        .execute(&mut *tx)
-        .await
-        .unwrap();
+    sqlx::raw_sql(include_str!(
+        "../../../migrations/20250101000091_hosted_capacity_reservations.sql"
+    ))
+    .execute(&mut *tx)
+    .await
+    .unwrap();
     for id in ids {
         let (reserved, requested, deleted): (bool, bool, bool) =
             sqlx::query_as("SELECT capacity_reserved, deletion_requested_at IS NOT NULL, deleted_at IS NOT NULL FROM hosted_mocks WHERE id = $1")

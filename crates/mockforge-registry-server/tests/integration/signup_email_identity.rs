@@ -176,7 +176,7 @@ async fn legacy_collisions_fail_closed_without_merging_accounts() {
         .await
         .unwrap();
     let rejected =
-        sqlx::raw_sql(include_str!("../migrations/20250101000101_canonical_email_identity.sql"))
+        sqlx::raw_sql(include_str!("../../migrations/20250101000101_canonical_email_identity.sql"))
             .execute(&mut *tx)
             .await;
     assert!(rejected.is_err());

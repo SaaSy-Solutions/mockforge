@@ -19,11 +19,11 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 const NEUTRALISE_SQL: &str =
-    include_str!("../migrations/20250101000102_neutralise_seed_credentials.sql");
+    include_str!("../../migrations/20250101000102_neutralise_seed_credentials.sql");
 const SEED_SQL: &[&str] = &[
-    include_str!("../migrations/20250101000002_seed_data.sql"),
-    include_str!("../migrations/20250101000027_fix_seed_password_hashes.sql"),
-    include_str!("../migrations/20250101000028_fix_seed_password_hashes_v2.sql"),
+    include_str!("../../migrations/20250101000002_seed_data.sql"),
+    include_str!("../../migrations/20250101000027_fix_seed_password_hashes.sql"),
+    include_str!("../../migrations/20250101000028_fix_seed_password_hashes_v2.sql"),
 ];
 const SEED_ADMIN_ID: &str = "00000000-0000-0000-0000-000000000001";
 const SEED_TEST_ID: &str = "00000000-0000-0000-0000-000000000002";
