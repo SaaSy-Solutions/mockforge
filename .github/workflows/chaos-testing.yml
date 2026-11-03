@@ -60,13 +60,17 @@ jobs:
         id: build
         run: |
           cargo build --release --bin mockforge
-          echo "binary_path=target/release/mockforge" >> $GITHUB_OUTPUT
+          echo "binary_path=${CARGO_TARGET_DIR:-target}/release/mockforge" >> $GITHUB_OUTPUT
 
+      # Producer -> consumer handoff within this run. The consumers can land
+      # on any runner with these labels, so a host-local dir is not
+      # guaranteed to be visible; keep the artifact but only for one day.
       - name: Upload binary
         uses: actions/upload-artifact@v7.0.2
         with:
           name: mockforge-binary
-          path: target/release/mockforge
+          path: ${{ steps.build.outputs.binary_path }}
+          retention-days: 1
 
   network-partition:
     name: Network Partition Test
@@ -390,6 +394,7 @@ jobs:
         with:
           name: connection-storm-results
           path: storm-results.txt
+          retention-days: 1
 
   summary:
     name: Chaos Test Summary

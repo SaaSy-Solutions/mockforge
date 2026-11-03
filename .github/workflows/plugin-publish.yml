@@ -204,6 +204,8 @@ jobs:
         with:
           name: plugin-${{ matrix.os }}
           path: artifacts/
+          # Cross-OS handoff to the publish job in this run only.
+          retention-days: 1
 
   publish:
     name: Publish to Registry

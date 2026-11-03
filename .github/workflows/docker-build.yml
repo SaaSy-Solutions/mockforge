@@ -161,6 +161,9 @@ jobs:
           image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build-and-push.outputs.digest }}
           format: cyclonedx-json
           output-file: sbom.json
+          # sbom-action uploads its own workflow artifact by default; the step
+          # below already uploads this file once.
+          upload-artifact: false
 
       - name: Upload SBOM artifact
         if: github.event_name != 'pull_request'
@@ -171,7 +174,7 @@ jobs:
           # Human-facing report: no job downloads it and it can be
           # regenerated from the pushed digest. Keep it short; the org
           # Actions storage quota is full.
-          retention-days: 7
+          retention-days: 1
 
       - name: Install Cosign
         if: github.event_name != 'pull_request'

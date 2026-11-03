@@ -105,6 +105,7 @@ jobs:
           # from the artifact.
           path: crates/mockforge-registry-core/**/proptest-regressions/**
           if-no-files-found: ignore
+          retention-days: 7
 
       # Scope the auto-commit surface to *only* proptest regression
       # seed files, so a compromised or misbehaving workflow can't

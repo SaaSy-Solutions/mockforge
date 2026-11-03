@@ -211,14 +211,17 @@ class SequentialRustTest(unittest.TestCase):
         self.assertNotIn("all-features tests passed", block("test-complete"))
 
     def test_cache_namespaces_and_artifacts_are_not_shared_between_jobs(self):
-        for job in ("test", "test-extended"):
+        targets = {"test": "ci-test", "test-extended": "ci-test-extended"}
+        for job, target_class in targets.items():
             content = block(job)
-            self.assertIn("uses: Swatinem/rust-cache@v2", content)
-            self.assertIn('env-vars: "CARGO_HOME"', content)
+            # No GitHub cache storage: each lane keeps its own warm target dir
+            # on the runner disk, keyed by job class and runner name.
+            self.assertNotIn("Swatinem/rust-cache", content)
+            self.assertIn("bash scripts/ci/runner-cargo-target.sh " + target_class + ' >> "$GITHUB_ENV"', content)
             self.assertIn("CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}", content)
-            for forbidden in ("shared-key:", "cache-on-failure:", "cache-workspace-crates:", "download-artifact", "upload-artifact"):
+            for forbidden in ("actions/cache", "download-artifact", "upload-artifact"):
                 self.assertNotIn(forbidden, content)
-        self.assertIn('cp target/debug/mockforge "$RUNNER_TEMP/mockforge-all-protocols"', block("test"))
+        self.assertIn('cp "${CARGO_TARGET_DIR:-target}/debug/mockforge" "$RUNNER_TEMP/mockforge-all-protocols"', block("test"))
         self.assertIn("MOCKFORGE_TEST_BINARY: ${{ runner.temp }}/mockforge-all-protocols", block("test"))
         self.assertNotIn("mockforge-all-protocols", block("test-extended"))
 
