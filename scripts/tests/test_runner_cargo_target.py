@@ -40,14 +40,14 @@ class RunnerCargoTargetTest(unittest.TestCase):
     def test_prints_one_env_line_for_a_per_class_per_runner_dir(self):
         result = run(self.root, "ci-test")
         self.assertEqual(result.returncode, 0, result.stderr)
-        expected = self.root / "cargo-mockforge-target-ci-test-runner-a"
+        expected = self.root / "cargo-mockforge-target-runner-a/ci-test"
         self.assertEqual(result.stdout, f"CARGO_TARGET_DIR={expected}\n")
         self.assertTrue(expected.is_dir())
         other = run(self.root, "ci-test", runner="runner-b")
-        self.assertIn("cargo-mockforge-target-ci-test-runner-b", other.stdout)
+        self.assertIn("cargo-mockforge-target-runner-b/ci-test", other.stdout)
 
     def test_rejects_bad_class_and_runner_names(self):
-        for args, runner in ((("",), "runner-a"), (("../x",), "runner-a"), (("a b",), "runner-a"),
+        for args, runner in ((("",), "runner-a"), (("../x",), "runner-a"), (("a b",), "runner-a"), (("..",), "runner-a"), ((".",), "runner-a"),
                              (("ok",), None), (("ok",), "bad/runner")):
             with self.subTest(args=args, runner=runner):
                 result = run(self.root, *args, runner=runner)
@@ -58,26 +58,27 @@ class RunnerCargoTargetTest(unittest.TestCase):
     def test_refuses_symlink_and_preserves_its_destination(self):
         foreign = self.root / "foreign"
         self.fill(foreign)
-        (self.root / "cargo-mockforge-target-ci-test-runner-a").symlink_to(foreign)
+        (self.root / "cargo-mockforge-target-runner-a").mkdir()
+        (self.root / "cargo-mockforge-target-runner-a/ci-test").symlink_to(foreign)
         result = run(self.root, "ci-test")
         self.assertEqual(result.returncode, 1)
         self.assertEqual(result.stdout, "")
         self.assertTrue((foreign / "blob").exists())
 
-    def test_oversized_own_dir_starts_cold(self):
-        own = self.root / "cargo-mockforge-target-ci-test-runner-a"
+    def test_oversized_own_dir_is_not_deleted(self):
+        own = self.root / "cargo-mockforge-target-runner-a/ci-test"
         self.fill(own, 64 * 1024)
         result = run(self.root, "ci-test", MOCKFORGE_RUNNER_TARGET_MAX_KB="8")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue(own.is_dir())
-        self.assertFalse((own / "blob").exists())
+        self.assertTrue((own / "blob").exists())
         warm = run(self.root, "ci-test")
         self.assertEqual(warm.returncode, 0)
 
-    def test_pressure_drops_only_this_runners_other_classes(self):
-        own = self.root / "cargo-mockforge-target-ci-test-runner-a"
-        sibling = self.root / "cargo-mockforge-target-ci-msrv-runner-a"
-        other_runner = self.root / "cargo-mockforge-target-ci-msrv-runner-b"
+    def test_pressure_preserves_all_existing_caches(self):
+        own = self.root / "cargo-mockforge-target-runner-a/ci-test"
+        sibling = self.root / "cargo-mockforge-target-runner-a/ci-msrv"
+        other_runner = self.root / "cargo-mockforge-target-runner-b/ci-msrv"
         cargo_home = self.root / "cargo-mockforge-runner-a"
         unrelated = self.root / "cargo-rust-compile-gate-runner-a"
         for path in (own, sibling, other_runner, cargo_home, unrelated):
@@ -85,12 +86,34 @@ class RunnerCargoTargetTest(unittest.TestCase):
         result = run(self.root, "ci-test", MOCKFORGE_RUNNER_TARGET_USED_PCT="95")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue((own / "blob").exists())
-        self.assertFalse(sibling.exists())
+        self.assertTrue((sibling / "blob").exists())
         for kept in (other_runner, cargo_home, unrelated):
             self.assertTrue((kept / "blob").exists(), kept)
 
+    def test_pressure_preserves_runner_name_suffix_collision(self):
+        foreign = self.root / "cargo-mockforge-target-ci-test-other-runner-a"
+        self.fill(foreign)
+        result = run(self.root, "ci-test", MOCKFORGE_RUNNER_TARGET_USED_PCT="95")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((foreign / "blob").exists())
+
+    def test_class_runner_pairs_have_distinct_targets(self):
+        first = run(self.root, "ci", runner="other-runner-a")
+        second = run(self.root, "ci-other", runner="runner-a")
+        self.assertEqual(first.returncode, 0, first.stderr)
+        self.assertEqual(second.returncode, 0, second.stderr)
+        self.assertNotEqual(first.stdout, second.stdout)
+
+    def test_refuses_symlinked_runner_namespace(self):
+        foreign = self.root / "foreign"
+        self.fill(foreign)
+        (self.root / "cargo-mockforge-target-runner-a").symlink_to(foreign)
+        result = run(self.root, "ci-test")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(list(foreign.iterdir()), [foreign / "blob"])
+
     def test_no_pressure_keeps_siblings(self):
-        sibling = self.root / "cargo-mockforge-target-ci-msrv-runner-a"
+        sibling = self.root / "cargo-mockforge-target-runner-a/ci-msrv"
         self.fill(sibling)
         self.assertEqual(run(self.root, "ci-test").returncode, 0)
         self.assertTrue((sibling / "blob").exists())
