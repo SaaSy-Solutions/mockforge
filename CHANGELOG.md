@@ -1,10 +1,13 @@
-## [Unreleased]
+## [0.3.239] - 2026-11-02
 
 ### Changed
 
 - **[DevX]** Extract authentication middleware, token lifecycle and OAuth2/OIDC endpoints into `mockforge-auth`. Preserve HTTP authentication and OAuth2 handler import paths and shared state types; keep the risk-simulation implementation with its engine. (#635)
 
 ### Added
+
+- **[Reality]** Add `mockforge cve` managed labs with pinned vulnerable applications and Nuclei containers. The first pack reproduces Next.js CVE-2025-29927, checks direct and load-balancer paths, and reports blocking only when healthy controls and correlated origin evidence support it. (#79)
+- **[DevX]** Automatically fetch managed CVE lab images, export evidence, and clean up run-owned containers. Include environment diagnostics and recovery commands for local Docker or Podman on Linux amd64 with Python 3.11+. (#79)
 
 - **[Cloud]** Share Free hosted capacity, monthly request limits and platform AI credits across a verified owner’s organizations. Preserve spent allowances through account recreation, bound deleted identity retention, retain uncertain provider budgets, and require audited usage evidence plus execution fences for stopped-call recovery. Keep provider execution connections separate from API requests. (#834, #868) The Privacy Policy and DPA disclose OpenAI as the platform AI sub-processor, with processing beginning no earlier than November 14, 2026.
 - **[Reality]** AsyncAPI 2/3 fidelity compares channel and directional operation contracts, including payload/header schemas, bindings, server/security references and traits. CLI and authenticated admin comparisons can check recorder message samples; the CLI also checks complete recorder-JSON fixture sets. Recorded MQTT, Kafka, AMQP and WebSocket messages use protocol-aware direction, exact JSON/text schema validation and explicit unverified outcomes when capture or format support is incomplete. Capture reads remain read-only and filter message events before the limit. (#849)
