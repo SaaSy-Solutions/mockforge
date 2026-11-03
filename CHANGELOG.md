@@ -17,6 +17,8 @@
 
 ### Fixed
 
+- **[DevX]** Update the locked Markdown parser to pulldown-cmark 0.13.6 for RUSTSEC-2026-0433. Document the unreachable network-input path underlying the narrowly scoped Thrift RUSTSEC-2026-0435 audit exception.
+
 - **[Auth]** Authenticated handlers can extract `AuthClaims` with Axum’s standard extractor; middleware stores raw claims and the legacy wrapper while preserving credential-safe security events. (#635)
 - **[Security]** Admin database upgrades preserve the shipped SQLx migration checksum and remove only unchanged built-in accounts in a new migration. Operator credentials and unrelated sessions are retained. (#1016)
 - **[AI]** Use the selected provider/model for direct and chat debugging instead of a default cloud client. Apply workspace validation and seed overrides to the debug endpoints, including when runtime MockAI is disabled.
