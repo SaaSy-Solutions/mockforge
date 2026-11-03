@@ -18,6 +18,7 @@
 ### Fixed
 
 - **[DevX]** Identify configured mock-response routes in the control-plane mount audit. Keep generic router mounts rejected and management authentication checks intact. The unpublished 0.3.239 candidate failed this audit.
+- **[DevX]** Preserve legacy HTTP authentication type coverage in compatibility tests while satisfying the workspace qualification lint.
 
 - **[DevX]** Update the locked Markdown parser to pulldown-cmark 0.13.6 for RUSTSEC-2026-0433. Document the unreachable network-input path underlying the narrowly scoped Thrift RUSTSEC-2026-0435 audit exception.
 
