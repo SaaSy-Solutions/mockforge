@@ -5,6 +5,10 @@ use std::path::{Path, PathBuf};
 pub(super) const PUBLIC_MOUNTS: &[(&str, &str)] = &[
     ("openapi_router", "the user's OpenAPI mocks"),
     ("spec_router", "the user's OpenAPI mocks"),
+    (
+        "configured_mock_router",
+        "the user's configured mock responses; no management APIs",
+    ),
     ("sse::sse_router", "mock server-sent events"),
     ("file_server::file_serving_router", "mock file downloads"),
     ("health::health_router_with_exclusions", "liveness and readiness; no config"),
@@ -13,10 +17,6 @@ pub(super) const PUBLIC_MOUNTS: &[(&str, &str)] = &[
     ("consent_router", "mock OAuth2 consent screen"),
     ("mockforge_ws::router", "mock WebSocket endpoints"),
     ("gql_router", "mock GraphQL endpoint"),
-    (
-        "configured_router",
-        "the user's configured mock routes; configured_routes.rs mounts no management API",
-    ),
     ("mockforge_http::llm_mock::router", "mock LLM API"),
     ("mockforge_http::mcp_mock::router", "mock MCP server"),
     (
