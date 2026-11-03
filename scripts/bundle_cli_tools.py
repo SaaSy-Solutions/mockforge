@@ -16,6 +16,7 @@ def bundle():
         ROOT / "scripts/security_rule_test_pack.py",
     ]
     paths += sorted((ROOT / "scripts").glob("cve_pack*.py"))
+    paths += sorted((ROOT / "scripts").glob("cve_lab_*.py"))
     paths += sorted((ROOT / "scripts").glob("security_rule_pack_*.py"))
     for directory in ("cve-packs", "cve-lab", "security-rule-packs"):
         paths += sorted(

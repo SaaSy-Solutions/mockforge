@@ -6,9 +6,16 @@ import io
 import json
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import cve_lab_catalog as catalog
+import cve_lab_engine as engine
+import cve_lab_evidence as evidence
+import cve_lab_transport as transport
 
 SPEC = importlib.util.spec_from_file_location(
     "managed_cve_lab", Path(__file__).resolve().parents[1] / "cve_lab.py"
@@ -23,52 +30,52 @@ def completed(stdout="", returncode=0):
 
 class LifecycleTests(unittest.TestCase):
     def test_cleanup_refuses_unowned_container(self):
-        for labels in ({}, {lab.LABEL: "another-run"}):
+        for labels in ({}, {catalog.LABEL: "another-run"}):
             with self.subTest(labels=labels):
                 with patch.object(
-                    lab,
+                    engine,
                     "command",
                     return_value=completed(
                         json.dumps([{"Config": {"Labels": labels}}])
                     ),
                 ) as command:
                     with self.assertRaisesRegex(RuntimeError, "unowned"):
-                        lab.owned_remove("docker", "container", "our-run")
+                        engine.owned_remove("docker", "container", "our-run")
                     command.assert_called_once_with(
                         ["docker", "inspect", "container"], check=False
                     )
 
     def test_cleanup_removes_owned_container_only(self):
         with patch.object(
-            lab,
+            engine,
             "command",
             side_effect=[
-                completed(json.dumps([{"Config": {"Labels": {lab.LABEL: "our-run"}}}])),
+                completed(json.dumps([{"Config": {"Labels": {catalog.LABEL: "our-run"}}}])),
                 completed(),
             ],
         ) as command:
-            lab.owned_remove("docker", "container", "our-run")
+            engine.owned_remove("docker", "container", "our-run")
         self.assertEqual(command.call_args.args[0], ["docker", "rm", "-f", "container"])
 
     def test_cleanup_already_absent_is_idempotent(self):
         with patch.object(
-            lab, "command", side_effect=[completed(returncode=1), completed()]
+            engine, "command", side_effect=[completed(returncode=1), completed()]
         ):
-            lab.owned_remove("docker", "container", "our-run")
+            engine.owned_remove("docker", "container", "our-run")
 
     def test_cleanup_engine_failure_is_not_absence(self):
-        with patch.object(lab, "command", return_value=completed(returncode=1)):
+        with patch.object(engine, "command", return_value=completed(returncode=1)):
             with self.assertRaisesRegex(RuntimeError, "Cannot verify removal"):
-                lab.owned_remove("docker", "container", "our-run")
+                engine.owned_remove("docker", "container", "our-run")
 
     def test_cleanup_failed_inspect_of_existing_container_is_not_absence(self):
         with patch.object(
-            lab,
+            engine,
             "command",
             side_effect=[completed(returncode=1), completed("container\n")],
         ):
             with self.assertRaisesRegex(RuntimeError, "Cannot verify removal"):
-                lab.owned_remove("docker", "container", "our-run")
+                engine.owned_remove("docker", "container", "our-run")
 
     def test_down_rejects_changed_engine_and_invalid_ownership(self):
         for ownership in (
@@ -80,7 +87,7 @@ class LifecycleTests(unittest.TestCase):
             ), tempfile.TemporaryDirectory() as directory:
                 (Path(directory) / "ownership.json").write_text(json.dumps(ownership))
                 with patch.object(
-                    lab, "owned_remove"
+                    engine, "owned_remove"
                 ) as remove, contextlib.redirect_stderr(io.StringIO()):
                     self.assertEqual(lab.main(["down", "--output-dir", directory]), 1)
                 remove.assert_not_called()
@@ -102,7 +109,7 @@ class LifecycleTests(unittest.TestCase):
     def test_lab_cleans_up_on_client_failure(self):
         with tempfile.TemporaryDirectory() as directory:
             with patch.object(
-                lab,
+                engine,
                 "command",
                 side_effect=[
                     completed(),
@@ -110,12 +117,12 @@ class LifecycleTests(unittest.TestCase):
                     completed("application log"),
                 ],
             ), patch.object(
-                lab, "request", return_value=(200, [], b"login")
+                engine, "request", return_value=(200, [], b"login")
             ), patch.object(
-                lab, "owned_remove"
+                engine, "owned_remove"
             ) as remove:
                 with self.assertRaisesRegex(RuntimeError, "client failed"):
-                    with lab.lab("docker", "our-run", Path(directory)):
+                    with engine.lab("docker", "our-run", Path(directory)):
                         raise RuntimeError("client failed")
             remove.assert_called_once_with("docker", "mockforge-cve-our-run", "our-run")
             self.assertEqual(
@@ -148,7 +155,7 @@ class InputTests(unittest.TestCase):
             "http://[::1]:8080",
         ):
             with self.subTest(url=url):
-                self.assertIsNotNone(lab.target_url(url).hostname)
+                self.assertIsNotNone(transport.target_url(url).hostname)
 
     def test_rejects_non_origin_targets(self):
         for url in (
@@ -163,7 +170,7 @@ class InputTests(unittest.TestCase):
             "http://host:abc",
         ):
             with self.subTest(url=url), self.assertRaises(ValueError):
-                lab.target_url(url)
+                transport.target_url(url)
 
 
 class VerdictTests(unittest.TestCase):
@@ -189,7 +196,7 @@ class VerdictTests(unittest.TestCase):
         ]
 
     def verdict(self):
-        return lab.classify(
+        return evidence.classify(
             self.baseline, self.target, self.before, self.after, self.records, 403
         )[0]
 
