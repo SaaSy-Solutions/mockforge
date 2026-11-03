@@ -17,7 +17,8 @@ intellij {
     type.set("IC") // IntelliJ IDEA Community Edition
 
     // Plugin name and description
-    plugins.set(listOf("yaml", "com.intellij.toml"))
+    // TOML is a Marketplace plugin (org.toml.lang), not bundled with IC 2023.3.
+    plugins.set(listOf("yaml", "org.toml.lang:233.11799.172"))
 }
 
 dependencies {

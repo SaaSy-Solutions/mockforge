@@ -24,6 +24,18 @@ impl RecorderDatabase {
         Ok(db)
     }
 
+    /// Open an existing capture database for validation without creating it,
+    /// applying migrations, or modifying captured evidence.
+    pub async fn open_read_only<P: AsRef<Path>>(path: P) -> Result<Self> {
+        let options = sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(path)
+            .read_only(true)
+            .create_if_missing(false);
+        Ok(Self {
+            pool: SqlitePool::connect_with(options).await?,
+        })
+    }
+
     /// Create an in-memory database (for testing)
     pub async fn new_in_memory() -> Result<Self> {
         let pool = SqlitePool::connect("sqlite::memory:").await?;
@@ -445,6 +457,34 @@ impl RecorderDatabase {
         .await?;
 
         Ok(requests)
+    }
+
+    /// List the most recent requests for one protocol, filtering in SQL before
+    /// limiting. Other protocols cannot hide older matching traffic. Nonpositive
+    /// limits return no requests.
+    pub async fn list_recent_for_protocol(
+        &self,
+        protocol: Protocol,
+        limit: i32,
+    ) -> Result<Vec<RecordedRequest>> {
+        if limit <= 0 {
+            return Ok(Vec::new());
+        }
+        Ok(sqlx::query_as::<_, RecordedRequest>(
+            "SELECT id, protocol, timestamp, method, path, query_params, headers, body, body_encoding, client_ip, trace_id, span_id, duration_ms, status_code, tags FROM requests WHERE protocol = ? ORDER BY timestamp DESC, id DESC LIMIT ?"
+        ).bind(protocol.as_str()).bind(limit).fetch_all(&self.pool).await?)
+    }
+
+    /// Read recent broker/WebSocket message events, filtering protocol and
+    /// operation in SQL before applying the requested limit. Connection/control
+    /// records and unrelated HTTP traffic cannot displace message samples.
+    pub async fn list_recent_async_messages(&self, limit: i32) -> Result<Vec<RecordedRequest>> {
+        if limit <= 0 {
+            return Ok(Vec::new());
+        }
+        Ok(sqlx::query_as::<_, RecordedRequest>(
+            "SELECT id, protocol, timestamp, method, path, query_params, headers, body, body_encoding, client_ip, trace_id, span_id, duration_ms, status_code, tags FROM requests WHERE (protocol IN ('mqtt','amqp') AND LOWER(method) IN ('publish','deliver')) OR (protocol='kafka' AND LOWER(method) IN ('produce','consume')) OR (protocol='websocket' AND LOWER(method) IN ('inbound','outbound')) ORDER BY timestamp DESC, id DESC LIMIT ?"
+        ).bind(limit).fetch_all(&self.pool).await?)
     }
 
     /// Delete old requests
@@ -1508,3 +1548,6 @@ mod tests {
         assert_eq!(retrieved.unwrap().path, "/api/test");
     }
 }
+
+#[cfg(test)]
+mod validation_read_tests;

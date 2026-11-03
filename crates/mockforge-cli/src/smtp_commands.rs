@@ -195,7 +195,7 @@ async fn handle_mailbox_list() -> Result<(), Box<dyn std::error::Error + Send + 
     println!("📧 Listing emails in mailbox...");
 
     // Try to connect to MockForge management API
-    let client = reqwest::Client::new();
+    let client = crate::management_auth::management_client_from_env()?;
     let management_url = std::env::var("MOCKFORGE_MANAGEMENT_URL")
         .unwrap_or_else(|_| "http://localhost:8080/__mockforge/api".to_string());
 
@@ -234,6 +234,7 @@ async fn handle_mailbox_list() -> Result<(), Box<dyn std::error::Error + Send + 
                 }
             } else {
                 println!("❌ Failed to access mailbox: HTTP {}", response.status());
+                crate::management_auth::print_unauthorized_hint(response.status());
                 println!("💡 Make sure MockForge server is running with SMTP enabled");
             }
         }
@@ -253,7 +254,7 @@ async fn handle_mailbox_show(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("📧 Showing email {}...", email_id);
 
-    let client = reqwest::Client::new();
+    let client = crate::management_auth::management_client_from_env()?;
     let management_url = std::env::var("MOCKFORGE_MANAGEMENT_URL")
         .unwrap_or_else(|_| "http://localhost:8080/__mockforge/api".to_string());
 
@@ -291,6 +292,7 @@ async fn handle_mailbox_show(
                 println!("❌ Email with ID '{}' not found", email_id);
             } else {
                 println!("❌ Failed to retrieve email: HTTP {}", response.status());
+                crate::management_auth::print_unauthorized_hint(response.status());
             }
         }
         Err(e) => {
@@ -306,7 +308,7 @@ async fn handle_mailbox_show(
 async fn handle_mailbox_clear() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("🗑️  Clearing mailbox...");
 
-    let client = reqwest::Client::new();
+    let client = crate::management_auth::management_client_from_env()?;
     let management_url = std::env::var("MOCKFORGE_MANAGEMENT_URL")
         .unwrap_or_else(|_| "http://localhost:8080/__mockforge/api".to_string());
 
@@ -316,6 +318,7 @@ async fn handle_mailbox_clear() -> Result<(), Box<dyn std::error::Error + Send +
                 println!("✅ Mailbox cleared successfully");
             } else {
                 println!("❌ Failed to clear mailbox: HTTP {}", response.status());
+                crate::management_auth::print_unauthorized_hint(response.status());
             }
         }
         Err(e) => {
@@ -334,7 +337,7 @@ async fn handle_mailbox_export(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("📤 Exporting mailbox to {} in {} format...", output.display(), format);
 
-    let client = reqwest::Client::new();
+    let client = crate::management_auth::management_client_from_env()?;
     let management_url = std::env::var("MOCKFORGE_MANAGEMENT_URL")
         .unwrap_or_else(|_| "http://localhost:8080/__mockforge/api".to_string());
 
@@ -350,6 +353,7 @@ async fn handle_mailbox_export(
                 println!("✅ Mailbox exported to {}", output.display());
             } else {
                 println!("❌ Failed to export mailbox: HTTP {}", response.status());
+                crate::management_auth::print_unauthorized_hint(response.status());
             }
         }
         Err(e) => {
@@ -407,7 +411,7 @@ async fn handle_mailbox_search(
         format!("?{}", query_params.join("&"))
     };
 
-    let client = reqwest::Client::new();
+    let client = crate::management_auth::management_client_from_env()?;
     let management_url = std::env::var("MOCKFORGE_MANAGEMENT_URL")
         .unwrap_or_else(|_| "http://localhost:8080/__mockforge/api".to_string());
 
@@ -449,6 +453,7 @@ async fn handle_mailbox_search(
                 }
             } else {
                 println!("❌ Failed to search mailbox: HTTP {}", response.status());
+                crate::management_auth::print_unauthorized_hint(response.status());
             }
         }
         Err(e) => {
@@ -598,7 +603,7 @@ async fn handle_send_command(
 async fn handle_fixtures_reload() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("🔄 Reloading SMTP fixtures from disk...");
 
-    let client = reqwest::Client::new();
+    let client = crate::management_auth::management_client_from_env()?;
     let management_url = std::env::var("MOCKFORGE_MANAGEMENT_URL")
         .unwrap_or_else(|_| "http://localhost:8080/__mockforge/api".to_string());
 
@@ -610,6 +615,7 @@ async fn handle_fixtures_reload() -> Result<(), Box<dyn std::error::Error + Send
                 println!("✅ Successfully reloaded {} fixtures", count);
             } else {
                 println!("❌ Failed to reload fixtures: HTTP {}", response.status());
+                crate::management_auth::print_unauthorized_hint(response.status());
             }
         }
         Err(e) => {
@@ -672,7 +678,7 @@ async fn handle_fixtures_validate(
     }
 
     // Also try to validate via management API if server is running
-    let client = reqwest::Client::new();
+    let client = crate::management_auth::management_client_from_env()?;
     let management_url = std::env::var("MOCKFORGE_MANAGEMENT_URL")
         .unwrap_or_else(|_| "http://localhost:8080/__mockforge/api".to_string());
 
@@ -687,9 +693,11 @@ async fn handle_fixtures_validate(
             if response.status().is_success() {
                 println!("✅ Server validation passed");
             } else {
+                let status = response.status();
                 let error_msg =
                     response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
                 println!("⚠️  Server validation failed: {}", error_msg);
+                crate::management_auth::print_unauthorized_hint(status);
             }
         }
         Err(_) => {
@@ -706,7 +714,7 @@ async fn handle_fixtures_list() -> Result<(), Box<dyn std::error::Error + Send +
     println!("📋 Listing loaded SMTP fixtures...");
 
     // Try to connect to MockForge management API
-    let client = reqwest::Client::new();
+    let client = crate::management_auth::management_client_from_env()?;
     let management_url = std::env::var("MOCKFORGE_MANAGEMENT_URL")
         .unwrap_or_else(|_| "http://localhost:8080/__mockforge/api".to_string());
 
@@ -743,6 +751,7 @@ async fn handle_fixtures_list() -> Result<(), Box<dyn std::error::Error + Send +
                 }
             } else {
                 println!("❌ Failed to access fixtures: HTTP {}", response.status());
+                crate::management_auth::print_unauthorized_hint(response.status());
                 println!("💡 Make sure MockForge server is running with SMTP enabled");
             }
         }

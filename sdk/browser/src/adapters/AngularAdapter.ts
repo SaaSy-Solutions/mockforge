@@ -185,14 +185,15 @@ export class ForgeConnectService extends AngularForgeConnectService {
             this._liveReloadEnabled$ = new BS(true);
         } catch {
             // Fallback if RxJS not available
-            this._connected$ = this.createBehaviorSubjectFallback()(false);
-            this._mocks$ = this.createBehaviorSubjectFallback()([]);
-            this._environments$ = this.createBehaviorSubjectFallback()([]);
-            this._activeEnvironment$ = this.createBehaviorSubjectFallback()(null);
-            this._offline$ = this.createBehaviorSubjectFallback()(false);
-            this._loading$ = this.createBehaviorSubjectFallback()(false);
-            this._error$ = this.createBehaviorSubjectFallback()(null);
-            this._liveReloadEnabled$ = this.createBehaviorSubjectFallback()(true);
+            const Fallback = this.createBehaviorSubjectFallback();
+            this._connected$ = new Fallback(false);
+            this._mocks$ = new Fallback([]);
+            this._environments$ = new Fallback([]);
+            this._activeEnvironment$ = new Fallback(null);
+            this._offline$ = new Fallback(false);
+            this._loading$ = new Fallback(false);
+            this._error$ = new Fallback(null);
+            this._liveReloadEnabled$ = new Fallback(true);
         }
 
         // Create observables

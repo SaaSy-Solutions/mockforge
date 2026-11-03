@@ -1,0 +1,30 @@
+{
+  "cases": [
+    {
+      "case": "unavailable executor",
+      "status": "errored",
+      "runner_seconds": 0
+    },
+    {
+      "case": "missing execution config",
+      "status": "errored",
+      "runner_seconds": 0
+    },
+    {
+      "case": "empty replay",
+      "status": "errored",
+      "runner_seconds": 0
+    },
+    {
+      "case": "empty smoke",
+      "status": "errored",
+      "runner_seconds": 0
+    },
+    {
+      "case": "real smoke control",
+      "status": "passed",
+      "runner_seconds": 1
+    }
+  ],
+  "actual_probe_requests": 1
+}

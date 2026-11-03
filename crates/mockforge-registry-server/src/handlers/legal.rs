@@ -198,7 +198,7 @@ We implement industry-standard security measures:
 - **Account Data**: Retained while your account is active
 - **Usage Data**: Retained for up to 90 days
 - **Billing Records**: Retained as required by law (typically 7 years)
-- **Deleted Accounts**: Data is deleted within 30 days of account deletion
+- **Deleted Accounts**: Account data is deleted within 30 days of account deletion. A private salted digest of verified email identities and quota accounting is retained to prevent resetting a spent Free monthly allowance. Deleted-account identity bindings expire after 35 days and a daily cleanup normally removes them within 36 days. Verified email aliases remain bound while the account is active.
 
 ## 7. Your Rights
 

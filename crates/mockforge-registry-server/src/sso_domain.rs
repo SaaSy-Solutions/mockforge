@@ -1,7 +1,7 @@
 //! SSO domain-ownership verification and issuer SSRF guard (Issue #833, #746, #778).
 //!
-//! Before an organization's SSO can JIT-provision a new user, or absorb an
-//! already-existing account, for a given email, the org must prove it controls
+//! Before an organization's SSO can authenticate or provision an account,
+//! including an existing member, the org must prove it controls
 //! that email's DNS domain. Without this gate, a malicious org owner who
 //! configures SSO against an IdP they control can mint a (validly signed)
 //! assertion for `victim@othercompany.com` and have MockForge either create a

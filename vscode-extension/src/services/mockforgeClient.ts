@@ -8,6 +8,16 @@ import { MockConfig, MockResponse, ServerStats, ServerConfig, ConnectionState } 
 // Re-export types for convenience
 export type { MockConfig, ServerStats, ServerConfig, ConnectionState } from '../types/mock';
 
+/** Header carrying the management credential on control-plane requests. */
+export const MANAGEMENT_TOKEN_HEADER = 'X-MockForge-Management-Token';
+
+/**
+ * Read the management token from the `mockforge.managementToken` setting.
+ */
+export function getManagementToken(): string {
+    return vscode.workspace.getConfiguration('mockforge').get<string>('managementToken', '').trim();
+}
+
 /**
  * Client for interacting with MockForge server API and WebSocket
  */
@@ -41,6 +51,7 @@ export class MockForgeClient {
             baseURL: `${serverUrl}/__mockforge/api`,
             timeout: httpTimeout
         });
+        this.applyManagementToken();
 
         // Add HTTP retry interceptor
         this.setupHttpRetry();
@@ -52,8 +63,21 @@ export class MockForgeClient {
                 // Update HTTP timeout if changed
                 const newTimeout = config.get<number>('http.timeout', 5000);
                 this.http.defaults.timeout = newTimeout;
+                this.applyManagementToken();
             }
         });
+    }
+
+    /**
+     * Send the configured management token on every control-plane request.
+     */
+    private applyManagementToken(): void {
+        const token = getManagementToken();
+        if (token) {
+            this.http.defaults.headers.common[MANAGEMENT_TOKEN_HEADER] = token;
+        } else {
+            delete this.http.defaults.headers.common[MANAGEMENT_TOKEN_HEADER];
+        }
     }
 
     /**
@@ -187,7 +211,10 @@ export class MockForgeClient {
         this.setConnectionState('connecting');
 
         const wsUrl = this.serverUrl.replace('http', 'ws') + '/__mockforge/ws';
-        this.ws = new WebSocket(wsUrl);
+        const token = getManagementToken();
+        this.ws = token
+            ? new WebSocket(wsUrl, { headers: { [MANAGEMENT_TOKEN_HEADER]: token } })
+            : new WebSocket(wsUrl);
 
         this.ws.on('open', () => {
             Logger.info('WebSocket connected');

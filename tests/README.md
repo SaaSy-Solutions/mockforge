@@ -2,32 +2,68 @@
 
 This directory contains the organized test infrastructure for MockForge.
 
+## Cargo integration tests
+
+The integration package uses `src/lib.rs` as its library. Cargo discovers test
+binaries under `tests/`; `tests/e2e.rs` mounts the protocol modules under
+`tests/e2e/`. These paths are relative to this directory. The former root
+`lib.rs` and `e2e/` copies were unreachable and have been removed.
+
+The shared fixtures can start HTTP, WebSocket and gRPC services on isolated
+ports. From the repository root, build their protocol features and select the
+current CLI explicitly:
+
+```bash
+cargo build --locked -p mockforge-cli --bin mockforge --features all-protocols
+MOCKFORGE_TEST_BINARY="$PWD/target/debug/mockforge" cargo test --locked -p mockforge-integration-tests --test e2e -- protocols::http_e2e_tests
+MOCKFORGE_TEST_BINARY="$PWD/target/debug/mockforge" cargo test --locked -p mockforge-integration-tests --test production_simulation
+```
+
+When using a custom Cargo target directory, point `MOCKFORGE_TEST_BINARY` at
+that directory's binary instead. Dynamic mock CRUD uses the HTTP serving port
+under `/__mockforge/api/mocks`, independently of the admin UI port.
+
+## SDK runtime checks
+
+With Python 3.12+, Node 22, Go and JDK 17 available, run the same SDK checks as CI:
+
+```bash
+python3 scripts/ci/test_sdk_runtime.py --binary "$PWD/target/debug/mockforge" --report "$PWD/target/sdk-runtime-report.json"
+```
+
+The binary must match the workspace version. The driver runs Python, Go, Java
+and browser tests, builds the browser bundles, and exercises the built browser
+client against a live server. It gives CLI subprocesses an isolated working
+directory and temporary credentials. Maven is used from PATH or downloaded into
+the owned temporary fixture with a pinned SHA-512 checksum; `--maven` can select
+an existing installation. `--temp-root` chooses a filesystem with enough space
+for temporary dependencies. These controls test SDK transport and runtime
+behavior independently of project-specific server configuration files.
+
 ## Directory Structure
 
 ```
 tests/
-├── fixtures/          # Test data and configuration files
-│   ├── configs/      # Test configuration files
-│   └── data/         # Test data files (JSON, HAR, etc.)
-├── smoke_tests.rs    # Quick smoke tests for basic functionality
-└── README.md         # This file
-
-benches/
-├── core_benchmarks.rs # Performance benchmarks
-└── lib.rs            # Benchmark library placeholder
+├── Cargo.toml                 # mockforge-integration-tests package
+├── src/                       # Compiled library and shared utilities
+├── tests/
+│   ├── e2e.rs                 # Protocol test entrypoint
+│   ├── e2e/                   # Compiled protocol modules and helpers
+│   ├── production_simulation.rs
+│   └── ...                    # Other Cargo integration-test binaries
+├── fixtures/                  # Test data
+└── README.md
 ```
 
 ## Running Tests
 
-### Quick Smoke Tests
+### Component Integration Checks
 
-Smoke tests verify basic functionality across all major components:
+Run the compiled component test binary from the repository root:
 
 ```bash
-cargo test --test smoke_tests
+cargo test -p mockforge-integration-tests --test component_integration
 ```
-
-These tests run quickly (< 30 seconds) and catch critical failures early.
 
 ### Full Test Suite
 

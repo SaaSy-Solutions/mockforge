@@ -23,14 +23,13 @@ This document outlines the implementation plan for establishing a **Plugin Marke
    - Authentication via API tokens
    - Checksum verification
 
-3. **CLI Commands** (`crates/mockforge-cli/src/registry_commands.rs`)
+3. **CLI Commands** (`crates/mockforge-cli/src/plugin_commands.rs`, `crates/mockforge-plugin-cli`)
    ```bash
-   mockforge plugin registry search <query>
-   mockforge plugin registry install <plugin>[@version]
-   mockforge plugin registry publish [--dry-run]
-   mockforge plugin registry yank <name> <version>
-   mockforge plugin registry login [--token]
+   mockforge plugin install <source>     # also: uninstall, list, info, update, validate
+   mockforge plugin search <query>       # searches installed plugins, not the registry
+   mockforge-plugin publish [--dry-run]  # token from --token or MOCKFORGE_REGISTRY_TOKEN
    ```
+   There is no CLI command to yank a version.
 
 4. **Example Plugins**
    - `auth-jwt`: JWT authentication

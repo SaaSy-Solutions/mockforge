@@ -65,7 +65,7 @@ jobs:
         # `runner.name` is unavailable in workflow- or job-level `env:` blocks
         # (GH Actions context: `runner.*` is step-scoped). Writing to
         # `$GITHUB_ENV` here exports it to every subsequent step in this job,
-        # including the rust-toolchain composite action and rust-cache.
+        # including the rust-toolchain composite action.
         run: echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
 
       - name: Checkout code
@@ -103,23 +103,11 @@ jobs:
       - name: Install protoc
         run: 'dpkg -s protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev > /dev/null 2>&1 || { echo "::error::Required system deps missing on self-hosted runner. Run on the runner host: sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev"; exit 1; }'
 
-      - name: Cache cargo registry
-        uses: actions/cache@v6
-        with:
-          path: ~/.cargo/registry
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Cache cargo index
-        uses: actions/cache@v6
-        with:
-          path: ~/.cargo/git
-          key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Cache target directory
-        uses: actions/cache@v6
-        with:
-          path: target
-          key: ${{ runner.os }}-target-contract-diff-${{ hashFiles('**/Cargo.lock') }}
+      # Replaces three actions/cache entries (billed GitHub storage). The
+      # registry persists in CARGO_HOME above; see runner-cargo-target.sh.
+      - name: Use runner-persistent cargo target
+        if: steps.detect-specs.outputs.specs != ''
+        run: bash scripts/ci/runner-cargo-target.sh contract-diff >> "$GITHUB_ENV"
 
       - name: Build MockForge CLI
         if: steps.detect-specs.outputs.specs != ''
@@ -157,7 +145,7 @@ jobs:
             if [ "$EVENT_NAME" = "pull_request" ]; then
               if git cat-file -e "$BASE_SHA:$SPEC" 2>/dev/null; then
                 git show "$BASE_SHA:$SPEC" > "/tmp/base-$NAME"
-                ./target/release/mockforge contract-diff compare \
+                "${CARGO_TARGET_DIR:-target}/release/mockforge" contract-diff compare \
                   --old-spec "/tmp/base-$NAME" --new-spec "$SPEC" --output "$REPORT"
                 rc=$?
                 if [ $rc -eq 0 ]; then
@@ -176,7 +164,7 @@ jobs:
                 FAILED=$((FAILED + 1))
                 continue
               fi
-              ./target/release/mockforge contract-diff analyze \
+              "${CARGO_TARGET_DIR:-target}/release/mockforge" contract-diff analyze \
                 --spec "$SPEC" --request-path "$REQUEST_PATH" \
                 --output "$RESULTS_DIR/${NAME}.json" --llm-provider "$LLM_PROVIDER" \
                 || FAILED=$((FAILED + 1))
@@ -197,7 +185,7 @@ jobs:
         with:
           name: contract-diff-results
           path: contract-diff-results/
-          retention-days: 7
+          retention-days: 1
 
       - name: Comment PR with results
         # Fork PRs get a read-only token; skip rather than fail on the comment.

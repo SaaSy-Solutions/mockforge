@@ -1,15 +1,44 @@
 //! Provider routing for cloud AI calls.
 //!
 //! `pick_provider` is a pure function so routing logic is unit-testable
-//! without database fixtures. It encodes the rules from
-//! `docs/cloud/CLOUD_AI_STUDIO_DESIGN.md`:
-//!
-//! - Free + BYOK         → Byok    (free + own key is allowed; rate-cap applies)
-//! - Free + no BYOK      → Disabled (must upgrade or add BYOK)
-//! - Paid + BYOK         → Byok    (paid prefers BYOK; tokens not metered)
-//! - Paid + no BYOK      → Platform (falls back to platform key, metered)
+//! without database fixtures. Enabled BYOK takes precedence; otherwise a
+//! positive or unlimited platform allowance enables metered platform calls.
+//! The Free plan includes a small allowance and retains BYOK support.
 
-use mockforge_registry_core::models::BYOKConfig;
+use mockforge_registry_core::models::{BYOKConfig, Organization};
+
+use crate::{error::ApiResult, handlers::usage::effective_limits, AppState};
+
+/// Resolve provider availability from subscription-aware token entitlements.
+/// Every caller still checks quota before invoking or enqueuing platform AI.
+pub async fn resolve_provider(
+    state: &AppState,
+    org: &Organization,
+    byok: Option<BYOKConfig>,
+) -> ApiResult<Provider> {
+    let limits = effective_limits(state, org).await?;
+    let credits = limits.get("ai_tokens_per_month").and_then(|v| v.as_i64()).unwrap_or(0);
+    Ok(pick_provider(platform_enabled() && credits != 0, byok))
+}
+
+/// Operator activation is separate from credentials and plan allowances.
+pub(crate) fn platform_enabled() -> bool {
+    activation_enabled(std::env::var("MOCKFORGE_PLATFORM_LLM_ENABLED").ok().as_deref())
+}
+
+fn activation_enabled(value: Option<&str>) -> bool {
+    matches!(value, Some("true"))
+}
+
+pub(crate) fn require_platform_enabled() -> ApiResult<()> {
+    if platform_enabled() {
+        Ok(())
+    } else {
+        Err(crate::error::ApiError::ResourceLimitExceeded(
+            "Platform AI is not enabled; configure your own provider key to use AI".into(),
+        ))
+    }
+}
 
 /// Selected provider for a single AI request.
 #[derive(Debug, Clone)]
@@ -46,17 +75,17 @@ impl Provider {
 }
 
 /// Pure routing decision. Inputs:
-/// - `is_paid_plan`: true for Pro/Team/Enterprise, false for Free.
+/// - `has_platform_credits`: true for a positive or unlimited platform allowance.
 /// - `byok`: the org's BYOK setting if configured (already decrypted is
 ///   not required here — we just need to know whether one exists and is
 ///   `enabled`). Pass `None` if missing or `enabled = false`.
-pub fn pick_provider(is_paid_plan: bool, byok: Option<BYOKConfig>) -> Provider {
-    match (is_paid_plan, byok) {
+pub fn pick_provider(has_platform_credits: bool, byok: Option<BYOKConfig>) -> Provider {
+    match (has_platform_credits, byok) {
         // BYOK takes precedence on every plan when enabled.
         (_, Some(cfg)) if cfg.enabled => Provider::Byok(cfg),
-        // Paid plan without BYOK falls through to platform credits.
+        // Any plan with a platform allowance uses metered credits.
         (true, _) => Provider::Platform,
-        // Free plan with no usable BYOK is locked.
+        // Plans without platform credits need a usable BYOK key.
         (false, _) => Provider::Disabled,
     }
 }
@@ -64,6 +93,14 @@ pub fn pick_provider(is_paid_plan: bool, byok: Option<BYOKConfig>) -> Provider {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn activation_requires_explicit_true() {
+        for value in [None, Some(""), Some("false"), Some("1"), Some("TRUE")] {
+            assert!(!activation_enabled(value));
+        }
+        assert!(activation_enabled(Some("true")));
+    }
 
     fn enabled_byok() -> BYOKConfig {
         BYOKConfig {
@@ -90,14 +127,14 @@ mod tests {
     }
 
     #[test]
-    fn free_without_byok_is_disabled() {
+    fn zero_credit_without_byok_is_disabled() {
         let p = pick_provider(false, None);
         assert!(matches!(p, Provider::Disabled));
     }
 
     #[test]
-    fn free_with_disabled_byok_is_disabled() {
-        // BYOK row exists but enabled=false should not unlock Free tier.
+    fn zero_credit_with_disabled_byok_is_disabled() {
+        // A disabled BYOK row does not enable calls without a platform allowance.
         let p = pick_provider(false, Some(disabled_byok()));
         assert!(matches!(p, Provider::Disabled));
     }

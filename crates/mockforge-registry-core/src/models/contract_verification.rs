@@ -143,6 +143,21 @@ impl MonitoredService {
         Self::VALID_TRAFFIC_SOURCES.contains(&s)
     }
 
+    /// Return the non-empty remote spec URL, if one is configured.
+    pub fn openapi_spec_url(&self) -> Option<&str> {
+        self.openapi_spec_url.as_deref().map(str::trim).filter(|url| !url.is_empty())
+    }
+
+    /// Return whether the service has a usable URL or inline OpenAPI spec.
+    pub fn has_openapi_spec(&self) -> bool {
+        self.openapi_spec_url().is_some()
+            || self.openapi_spec_inline.as_ref().is_some_and(|spec| match spec {
+                serde_json::Value::Null => false,
+                serde_json::Value::String(value) => !value.trim().is_empty(),
+                _ => true,
+            })
+    }
+
     pub async fn list_by_workspace(
         executor: impl sqlx::PgExecutor<'_>,
         workspace_id: Uuid,
@@ -155,19 +170,18 @@ impl MonitoredService {
         .await
     }
 
-    /// Return every enabled monitored service with a non-empty
-    /// `openapi_spec_url`. Used by the contract probe worker (#671) to
-    /// pick services that can actually be fetched from a network URL;
-    /// services with only `openapi_spec_inline` or no spec are skipped
-    /// because the probe is "go fetch the live spec and diff it."
+    /// Return every enabled monitored service with a URL or inline spec.
     pub async fn list_probeable(executor: impl sqlx::PgExecutor<'_>) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
             r#"
             SELECT *
             FROM monitored_services
             WHERE enabled = TRUE
-              AND openapi_spec_url IS NOT NULL
-              AND openapi_spec_url <> ''
+              AND (
+                    NULLIF(BTRIM(openapi_spec_url), '') IS NOT NULL
+                    OR (openapi_spec_inline IS NOT NULL
+                        AND openapi_spec_inline <> 'null'::jsonb)
+                  )
             ORDER BY workspace_id, name
             "#,
         )
@@ -192,8 +206,11 @@ impl MonitoredService {
             SELECT *
             FROM monitored_services
             WHERE enabled = TRUE
-              AND openapi_spec_url IS NOT NULL
-              AND openapi_spec_url <> ''
+              AND (
+                    NULLIF(BTRIM(openapi_spec_url), '') IS NOT NULL
+                    OR (openapi_spec_inline IS NOT NULL
+                        AND openapi_spec_inline <> 'null'::jsonb)
+                  )
               AND (
                     probe_cron IS NOT NULL
                     OR (probe_cron IS NULL AND (last_probed_at IS NULL

@@ -6,6 +6,9 @@ exploited, exploitation probability), and the authoritative remediation action.
 Nothing here sends traffic; it only reads public feeds.
 """
 
+import http.client
+import urllib.error
+
 from cve_pack_feeds import (
     epss,
     kev_catalog,
@@ -52,13 +55,50 @@ def _kev_tip(entry):
     }
 
 
+class FeedResults:
+    """Record failed reads, including optional OSV aliases, without losing other feeds."""
+
+    def __init__(self, fetcher):
+        self.fetcher = fetcher
+        self.errors = []
+
+    def get_json(self, url):
+        try:
+            return self.fetcher.get_json(url)
+        except (OSError, ValueError, http.client.HTTPException) as error:
+            # OSV uses 404 for an identifier absent from its catalog.
+            if (
+                isinstance(error, urllib.error.HTTPError)
+                and error.code == 404
+                and url.startswith("https://api.osv.dev/v1/vulns/")
+            ):
+                return {}
+            self.errors.append(
+                {
+                    "url": url,
+                    "error": type(error).__name__,
+                    "http_status": getattr(error, "code", None),
+                }
+            )
+            raise OSError(f"Feed unavailable: {url}") from error
+
+
 def tips(cve, *, fetcher, kev=None):
     """Aggregate tips for one CVE. `kev` is an optional (index, meta) from
     kev_index(); pass it when enriching many CVEs to avoid refetching KEV."""
+    fetcher = FeedResults(fetcher)
+    if kev is None:
+        try:
+            kev = kev_index(fetcher)
+        except (OSError, ValueError):
+            kev = None
     kev_entry = (kev[0] if kev else {}).get(cve)
     kev_tip = _kev_tip(kev_entry)
 
-    cve_obj = nvd_cve(fetcher, cve)
+    try:
+        cve_obj = nvd_cve(fetcher, cve)
+    except (OSError, ValueError):
+        cve_obj = None
     cwes = nvd_cwes(cve_obj)
     osv_entries, osv_refs = osv_fixed_versions(fetcher, cve)
     osv_entries = _dedupe(
@@ -85,8 +125,12 @@ def tips(cve, *, fetcher, kev=None):
 
     return {
         "cve": cve,
-        "actively_exploited": bool(kev_tip),
-        "known_ransomware": bool(kev_tip and kev_tip["known_ransomware"]),
+        "complete": not fetcher.errors,
+        "feed_errors": fetcher.errors,
+        "actively_exploited": bool(kev_tip) if kev is not None else None,
+        "known_ransomware": bool(kev_tip and kev_tip["known_ransomware"])
+        if kev is not None
+        else None,
         "epss": None if score is None else {"score": score, "percentile": percentile},
         "cwes": cwes,
         "fixed_versions": fixed,
@@ -113,6 +157,6 @@ def _advice(kev_tip, fixed, score):
         bits.append(f"upgrade to {where}")
     else:
         bits.append(
-            "no fixed version published; rely on the rule and the vendor advisory"
+            "no fixed version found in available feed data; consult the vendor advisory"
         )
     return "; ".join(bits)

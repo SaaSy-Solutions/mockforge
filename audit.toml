@@ -10,6 +10,8 @@
 
 [advisories]
 ignore = [
+    # See docs/security/thrift-advisory-2026-0435.md for the reviewed call path.
+    { id = "RUSTSEC-2026-0435", reason = "thrift binary input allocation is unreachable: the sole consumer, opentelemetry-jaeger 0.21 agent exporter, sends one-way compact UDP messages and uses TNoopChannel for input; reassess on exporter/dependency changes" },
     # quinn-proto (HTTP/3 / QUIC) — transitive via reqwest/hyper; no fix
     # version published yet as of 2026-04.
     { id = "RUSTSEC-2026-0037", reason = "quinn-proto DoS — transitive dep, no patched version available" },

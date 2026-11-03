@@ -99,14 +99,14 @@ mod tests {
             run_id: Uuid::new_v4(),
             org_id: Uuid::new_v4(),
             source_id: Uuid::new_v4(),
-            kind: "snapshot_capture".into(),
-            payload: json!({ "name": "pre-chaos" }),
+            kind: "integration".into(),
+            payload: json!({ "steps": [{"request": {"method": "GET", "path": "/"}}] }),
         };
         let raw = serde_json::to_string(&d).unwrap();
         let back: QueuedJobDescriptor = serde_json::from_str(&raw).unwrap();
         assert_eq!(back.run_id, d.run_id);
-        assert_eq!(back.kind, "snapshot_capture");
-        assert_eq!(back.payload, json!({ "name": "pre-chaos" }));
+        assert_eq!(back.kind, "integration");
+        assert_eq!(back.payload, json!({ "steps": [{"request": {"method": "GET", "path": "/"}}] }));
     }
 
     #[test]
@@ -132,7 +132,7 @@ mod tests {
             "run_id": "00000000-0000-0000-0000-000000000001",
             "org_id": "00000000-0000-0000-0000-000000000002",
             "source_id": "00000000-0000-0000-0000-000000000003",
-            "kind": "unit",
+            "kind": "chain",
             "payload": null,
             "future_field": "ignore me"
         }"#;

@@ -49,6 +49,7 @@ compile_error!(
 pub use mockforge_registry_core::auth;
 pub mod ai;
 pub mod audit_entries;
+pub mod billing_exempt_bootstrap;
 pub mod cache;
 pub mod circuit_breaker;
 pub mod config;

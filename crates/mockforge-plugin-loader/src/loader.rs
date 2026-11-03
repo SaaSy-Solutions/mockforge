@@ -105,6 +105,21 @@ impl PluginLoader {
         self.load_plugin_from_discovery(&discovery).await
     }
 
+    /// Load the exact directory selected by an installer, without rediscovering
+    /// a possibly different plugin with the same ID in configured search paths.
+    /// Callers must enforce their signature policy before calling this method.
+    pub async fn load_plugin_from_path(&self, plugin_path: &Path) -> LoaderResult<PluginId> {
+        let manifest = self.validate_plugin(plugin_path).await?;
+        let plugin_id = manifest.info.id.clone();
+        let discovery = PluginDiscovery::success(
+            plugin_id.clone(),
+            manifest,
+            plugin_path.display().to_string(),
+        );
+        self.load_plugin_from_discovery(&discovery).await?;
+        Ok(plugin_id)
+    }
+
     /// Unload a plugin
     pub async fn unload_plugin(&self, plugin_id: &PluginId) -> LoaderResult<()> {
         let mut registry = self.registry.write().await;

@@ -653,10 +653,19 @@ async fn handle_test_run(
                 return Ok(());
             }
             "failed" | "cancelled" | "errored" => {
-                anyhow::bail!("Run {}", status);
+                anyhow::bail!("{}", run_failure_message(&status, &row));
             }
             _ => continue,
         }
+    }
+}
+
+/// Message for a run that finished without passing, with the runner's
+/// `summary.error` when it reported one.
+fn run_failure_message(status: &str, row: &serde_json::Value) -> String {
+    match row.pointer("/summary/error").and_then(|v| v.as_str()).filter(|e| !e.is_empty()) {
+        Some(error) => format!("Run {status}: {error}"),
+        None => format!("Run {status}"),
     }
 }
 
@@ -2545,5 +2554,15 @@ mod tests {
             local_dir: None,
             service_url: "https://api.mockforge.dev".to_string(),
         };
+    }
+
+    #[test]
+    fn run_failure_message_includes_runner_error() {
+        let row = serde_json::json!({
+            "status": "errored",
+            "summary": { "error": "replay needs a target_url" },
+        });
+        assert_eq!(run_failure_message("errored", &row), "Run errored: replay needs a target_url");
+        assert_eq!(run_failure_message("failed", &serde_json::json!({})), "Run failed");
     }
 }

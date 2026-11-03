@@ -16,15 +16,37 @@ pub struct AutoGenerator {
     config: RuntimeDaemonConfig,
     /// Base URL for the MockForge management API
     management_api_url: String,
+    /// Management token sent as `X-MockForge-Management-Token` on control calls
+    management_token: Option<String>,
+}
+
+/// Environment variable carrying the data-port management token.
+pub const MANAGEMENT_TOKEN_ENV: &str = "MOCKFORGE_MANAGEMENT_TOKEN";
+
+/// Header the HTTP data port checks for the management token.
+pub const MANAGEMENT_TOKEN_HEADER: &str = "X-MockForge-Management-Token";
+
+fn non_blank(token: Option<String>) -> Option<String> {
+    token.map(|t| t.trim().to_string()).filter(|t| !t.is_empty())
 }
 
 impl AutoGenerator {
     /// Create a new auto-generator
+    ///
+    /// The management token is read from `MOCKFORGE_MANAGEMENT_TOKEN` when set;
+    /// override it with [`AutoGenerator::with_management_token`].
     pub fn new(config: RuntimeDaemonConfig, management_api_url: String) -> Self {
         Self {
             config,
             management_api_url,
+            management_token: non_blank(std::env::var(MANAGEMENT_TOKEN_ENV).ok()),
         }
+    }
+
+    /// Set (or clear) the management token sent on control-plane requests.
+    pub fn with_management_token(mut self, token: Option<String>) -> Self {
+        self.management_token = non_blank(token);
+        self
     }
 
     /// Generate a mock from a 404 response
@@ -94,12 +116,20 @@ impl AutoGenerator {
         let client = reqwest::Client::new();
         let url = format!("{}/__mockforge/api/mocks", self.management_api_url);
 
-        let response = client
-            .post(&url)
-            .json(&mock_config)
-            .send()
-            .await
-            .context("Failed to send request to management API")?;
+        let mut request = client.post(&url).json(&mock_config);
+        if let Some(token) = &self.management_token {
+            request = request.header(MANAGEMENT_TOKEN_HEADER, token);
+        }
+
+        let response = request.send().await.context("Failed to send request to management API")?;
+
+        if response.status() == reqwest::StatusCode::UNAUTHORIZED {
+            anyhow::bail!(
+                "Management API returned 401 Unauthorized; set {} to the token the \
+                 MockForge server was started with",
+                MANAGEMENT_TOKEN_ENV
+            );
+        }
 
         if !response.status().is_success() {
             let status = response.status();
@@ -1576,6 +1606,48 @@ mod tests {
 
         assert!(config["http"]["enabled"].as_bool().unwrap());
         assert!(config["http"]["mocks"].is_array());
+    }
+
+    /// Loopback management API that only accepts `expected` as the token.
+    async fn spawn_management_api(expected: &'static str) -> String {
+        use axum::{http::HeaderMap, http::StatusCode, routing::post, Json, Router};
+        let app = Router::new().route(
+            "/__mockforge/api/mocks",
+            post(move |headers: HeaderMap| async move {
+                let token = headers.get(MANAGEMENT_TOKEN_HEADER).and_then(|v| v.to_str().ok());
+                if token == Some(expected) {
+                    Ok(Json(json!({ "id": "mock-1" })))
+                } else {
+                    Err(StatusCode::UNAUTHORIZED)
+                }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("binding an ephemeral loopback port should succeed in tests");
+        let addr = listener.local_addr().expect("bound listener has a local address");
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        format!("http://{addr}")
+    }
+
+    #[tokio::test]
+    async fn test_create_mock_endpoint_sends_management_token() {
+        let base = spawn_management_api("daemon-token").await;
+        let generator = AutoGenerator::new(RuntimeDaemonConfig::default(), base)
+            .with_management_token(Some("daemon-token".to_string()));
+        let id = generator.create_mock_endpoint("GET", "/api/users").await.expect("created");
+        assert_eq!(id, "mock-1");
+    }
+
+    #[tokio::test]
+    async fn test_create_mock_endpoint_without_token_reports_env_var() {
+        let base = spawn_management_api("daemon-token").await;
+        let generator = AutoGenerator::new(RuntimeDaemonConfig::default(), base)
+            .with_management_token(Some("   ".to_string()));
+        let err = generator.create_mock_endpoint("GET", "/api/users").await.expect_err("401");
+        assert!(err.to_string().contains(MANAGEMENT_TOKEN_ENV), "{err}");
     }
 
     // AutoGenerator creation tests

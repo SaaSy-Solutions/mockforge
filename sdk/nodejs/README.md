@@ -87,6 +87,10 @@ All fields on `MockServerConfig` are optional.
 | `openApiSpec`      | _unset_       | Path to an OpenAPI spec file.                                                                       |
 | `noConfig`         | `true`        | Skip auto-discovery of `mockforge.yaml` in the cwd / ancestors. Avoids accidental config inheritance. |
 | `startupTimeoutMs` | `12_000`      | Timeout for the CLI to bind its ports and report ready. Bump on slow CI.                            |
+| `managementToken`  | _see below_   | Control-plane credential. Default: `$MOCKFORGE_MANAGEMENT_TOKEN`, else a random token per server.    |
+
+The SDK passes the token to the spawned CLI as `MOCKFORGE_MANAGEMENT_TOKEN` and sends it as
+`X-MockForge-Management-Token` on every stub/verification call, so it works with no setup.
 
 ## Instance methods
 

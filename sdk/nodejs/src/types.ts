@@ -47,6 +47,15 @@ export interface MockServerConfig {
    * `12_000`. Useful to tune on slow CI runners.
    */
   startupTimeoutMs?: number;
+  /**
+   * Management credential for the server's control plane
+   * (`/__mockforge/*`, `/api/verification/*`, ...). Passed to the spawned
+   * CLI as `MOCKFORGE_MANAGEMENT_TOKEN` and sent on every SDK control-plane
+   * request as `X-MockForge-Management-Token`. Default: the
+   * `MOCKFORGE_MANAGEMENT_TOKEN` env var if set, else a random 64-char hex
+   * token generated per server instance.
+   */
+  managementToken?: string;
 }
 
 export interface ResponseStub {

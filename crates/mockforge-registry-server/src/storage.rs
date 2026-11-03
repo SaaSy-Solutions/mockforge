@@ -516,6 +516,98 @@ impl PluginStorage {
         }
     }
 
+    /// Read an uploaded spec only from this organization's storage namespace.
+    /// Returns None for a URL belonging to an external public document.
+    pub(crate) async fn read_owned_spec(
+        &self,
+        org_id: Uuid,
+        source: &str,
+    ) -> Result<Option<Vec<u8>>> {
+        const MAX_BYTES: usize = 2 * 1024 * 1024;
+        // Accepts current path-style and pre-#1236 AWS-style object URLs.
+        let key = if let Some(key) = source.strip_prefix("/storage/") {
+            key.to_string()
+        } else if let StorageBackend::S3 {
+            bucket, endpoint, ..
+        } = &self.backend
+        {
+            match Self::key_from_url(endpoint.as_deref(), bucket, source) {
+                Some(key) => key,
+                None => return Ok(None),
+            }
+        } else {
+            return Ok(None);
+        };
+        let prefix = format!("specs/{org_id}/");
+        let filename = key
+            .strip_prefix(&prefix)
+            .ok_or_else(|| anyhow::anyhow!("Specification does not belong to this organization"))?;
+        if filename.is_empty()
+            || filename.len() > 105
+            || !filename.ends_with(".json")
+            || !filename
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_'))
+        {
+            anyhow::bail!("Invalid uploaded specification reference");
+        }
+        let bytes = match &self.backend {
+            StorageBackend::Local { base_dir } => {
+                use tokio::io::AsyncReadExt;
+                let path = base_dir.join(&key);
+                let canonical = tokio::fs::canonicalize(&path)
+                    .await
+                    .map_err(|_| anyhow::anyhow!("Uploaded specification is unavailable"))?;
+                let owned_dir = tokio::fs::canonicalize(base_dir.join(format!("specs/{org_id}")))
+                    .await
+                    .map_err(|_| anyhow::anyhow!("Uploaded specification is unavailable"))?;
+                let canonical_base = tokio::fs::canonicalize(base_dir)
+                    .await
+                    .map_err(|_| anyhow::anyhow!("Uploaded specification is unavailable"))?;
+                if owned_dir != canonical_base.join(format!("specs/{org_id}"))
+                    || !canonical.starts_with(&owned_dir)
+                {
+                    anyhow::bail!("Invalid uploaded specification reference");
+                }
+                let file = tokio::fs::File::open(canonical)
+                    .await
+                    .map_err(|_| anyhow::anyhow!("Uploaded specification is unavailable"))?;
+                let mut bytes = Vec::new();
+                file.take((MAX_BYTES + 1) as u64)
+                    .read_to_end(&mut bytes)
+                    .await
+                    .map_err(|_| anyhow::anyhow!("Could not read uploaded specification"))?;
+                bytes
+            }
+            StorageBackend::S3 { client, bucket, .. } => {
+                let mut response = client
+                    .get_object()
+                    .bucket(bucket)
+                    .key(&key)
+                    .send()
+                    .await
+                    .map_err(|_| anyhow::anyhow!("Uploaded specification is unavailable"))?;
+                let mut bytes = Vec::new();
+                while let Some(chunk) = response
+                    .body
+                    .try_next()
+                    .await
+                    .map_err(|_| anyhow::anyhow!("Could not read uploaded specification"))?
+                {
+                    if bytes.len().saturating_add(chunk.len()) > MAX_BYTES {
+                        anyhow::bail!("Specification exceeds 2 MiB");
+                    }
+                    bytes.extend_from_slice(&chunk);
+                }
+                bytes
+            }
+        };
+        if bytes.len() > MAX_BYTES {
+            anyhow::bail!("Specification exceeds 2 MiB");
+        }
+        Ok(Some(bytes))
+    }
+
     /// Health check - verify storage connectivity
     pub async fn health_check(&self) -> Result<()> {
         match &self.backend {
@@ -625,6 +717,10 @@ impl PluginStorage {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "storage_owned_s3_tests.rs"]
+mod owned_s3_tests;
 
 #[cfg(test)]
 mod tests {
@@ -908,5 +1004,67 @@ mod tests {
 
         storage.delete_plugin(key).await.unwrap();
         assert!(storage.download_plugin(key).await.is_err());
+    }
+}
+
+#[cfg(test)]
+mod owned_spec_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn owned_spec_read_does_not_follow_foreign_paths_or_escaped_symlinks() {
+        let base = tempfile::tempdir().unwrap();
+        let storage = PluginStorage {
+            backend: StorageBackend::Local {
+                base_dir: base.path().to_path_buf(),
+            },
+        };
+        let owner = Uuid::new_v4();
+        let foreign = Uuid::new_v4();
+        let url = storage.upload_spec(&owner.to_string(), "api", b"owned".to_vec()).await.unwrap();
+        let other = storage
+            .upload_spec(&foreign.to_string(), "api", b"foreign".to_vec())
+            .await
+            .unwrap();
+        assert_eq!(storage.read_owned_spec(owner, &url).await.unwrap(), Some(b"owned".to_vec()));
+        assert!(storage.read_owned_spec(owner, &other).await.is_err());
+        assert!(storage
+            .read_owned_spec(owner, &format!("/storage/specs/{owner}/../../api.json"))
+            .await
+            .is_err());
+        assert_eq!(
+            storage
+                .read_owned_spec(owner, "https://example.invalid/openapi.json")
+                .await
+                .unwrap(),
+            None
+        );
+        let huge = storage
+            .upload_spec(&owner.to_string(), "huge", vec![b'x'; 2 * 1024 * 1024 + 1])
+            .await
+            .unwrap();
+        assert!(storage.read_owned_spec(owner, &huge).await.is_err());
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(
+                base.path().join(format!("specs/{foreign}/api.json")),
+                base.path().join(format!("specs/{owner}/escape.json")),
+            )
+            .unwrap();
+            assert!(storage
+                .read_owned_spec(owner, &format!("/storage/specs/{owner}/escape.json"))
+                .await
+                .is_err());
+            let linked_org = Uuid::new_v4();
+            std::os::unix::fs::symlink(
+                base.path().join(format!("specs/{foreign}")),
+                base.path().join(format!("specs/{linked_org}")),
+            )
+            .unwrap();
+            assert!(storage
+                .read_owned_spec(linked_org, &format!("/storage/specs/{linked_org}/api.json"))
+                .await
+                .is_err());
+        }
     }
 }

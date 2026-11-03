@@ -1,5 +1,7 @@
 //! Discover exact artifact identities, preserving deterministic selection and integrity.
-use super::{fs, loading, validate_artifact_type, ArtifactFreezer, FrozenArtifact, Result};
+use super::{
+    bundles, fs, loading, validate_artifact_type, ArtifactFreezer, FrozenArtifact, Result,
+};
 use chrono::Utc;
 use serde_json::Value;
 use std::path::PathBuf;
@@ -31,21 +33,25 @@ impl ArtifactFreezer {
         while let Some(entry) = entries.next_entry().await.map_err(|error| {
             mockforge_foundation::Error::io_with_context("read directory entry", error.to_string())
         })? {
-            let path = entry.path();
-            if !entry
-                .file_type()
-                .await
-                .map_err(|error| {
-                    mockforge_foundation::Error::io_with_context(
-                        "read frozen file type",
-                        error.to_string(),
-                    )
-                })?
-                .is_file()
-                || !entry.file_name().to_string_lossy().starts_with(&prefix)
-            {
+            if !entry.file_name().to_string_lossy().starts_with(&prefix) {
                 continue;
             }
+            let file_type = entry.file_type().await.map_err(|error| {
+                mockforge_foundation::Error::io_with_context(
+                    "read frozen file type",
+                    error.to_string(),
+                )
+            })?;
+            let path = if file_type.is_file() {
+                entry.path()
+            } else if file_type.is_dir() {
+                let Some(path) = bundles::payload(&entry.path()) else {
+                    continue;
+                };
+                path
+            } else {
+                continue;
+            };
             let Some(frozen) = loading::read(&path, artifact_type, identifier).await? else {
                 continue;
             };
@@ -55,9 +61,14 @@ impl ArtifactFreezer {
                     path.display()
                 )));
             }
-            let frozen_time = frozen
-                .content
-                .get("_frozen_metadata")
+            let sidecar;
+            let provenance = if frozen.content.is_object() {
+                frozen.content.get("_frozen_metadata")
+            } else {
+                sidecar = super::provenance::read(&path).await?;
+                Some(&sidecar)
+            };
+            let frozen_time = provenance
                 .and_then(|metadata| metadata.get("frozen_at"))
                 .and_then(Value::as_str)
                 .and_then(|time| chrono::DateTime::parse_from_rfc3339(time).ok())

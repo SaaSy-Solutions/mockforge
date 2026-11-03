@@ -10,7 +10,8 @@ pub mod client;
 pub mod contract_diff;
 pub mod provider;
 pub mod quota;
+pub mod reservation;
 
 pub use client::{call_llm, LlmCall, LlmResult};
-pub use provider::{pick_provider, Provider, ProviderSelection};
+pub use provider::{pick_provider, resolve_provider, Provider, ProviderSelection};
 pub use quota::{check_ai_quota, record_ai_usage, QuotaCheck};

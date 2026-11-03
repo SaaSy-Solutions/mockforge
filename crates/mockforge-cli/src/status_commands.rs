@@ -12,9 +12,9 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 /// The version of the JSON document `status --format json` prints.
-pub(crate) const STATUS_SCHEMA_VERSION: u32 = 1;
+pub(crate) const STATUS_SCHEMA_VERSION: u32 = 2;
 /// The version of the report `verify-mocks --record` writes.
-pub(crate) const VERIFICATION_SCHEMA_VERSION: u32 = 1;
+pub(crate) const VERIFICATION_SCHEMA_VERSION: u32 = 2;
 /// Where `verify-mocks --record` keeps the last result, under the project root.
 pub(crate) const VERIFICATION_FILE: &str = ".mockforge/reports/verify-mocks.json";
 
@@ -106,10 +106,13 @@ pub(crate) struct VerificationRecord {
     pub mockforge_version: String,
     pub spec: String,
     pub capture_db: String,
-    /// `faithful`, `drift`, or `no_traffic` (nothing was recorded to check).
+    /// `faithful`, `drift`, `unverified`, or `no_traffic` (nothing was recorded to check).
     pub outcome: VerificationOutcome,
     pub exchanges_checked: usize,
     pub endpoints_with_drift: usize,
+    /// Endpoints whose response media could not be checked.
+    #[serde(default)]
+    pub endpoints_unverified: usize,
     pub unmatched_real_paths: usize,
     pub findings: Vec<VerificationFinding>,
 }
@@ -119,6 +122,7 @@ pub(crate) struct VerificationRecord {
 pub(crate) enum VerificationOutcome {
     Faithful,
     Drift,
+    Unverified,
     NoTraffic,
 }
 
@@ -143,7 +147,7 @@ fn read_verification(root: &Path) -> Option<VerificationRecord> {
     let text = std::fs::read_to_string(root.join(VERIFICATION_FILE)).ok()?;
     serde_json::from_str::<VerificationRecord>(&text)
         .ok()
-        .filter(|record| record.schema_version == VERIFICATION_SCHEMA_VERSION)
+        .filter(|record| matches!(record.schema_version, 1 | VERIFICATION_SCHEMA_VERSION))
 }
 
 /// The host a local client reaches a server bound to `host` on.
@@ -315,11 +319,12 @@ fn print_text(status: &ProjectStatus) {
     }
     match &status.verification {
         Some(record) => println!(
-            "verify-mocks  : {:?} at {} ({} exchanges, {} endpoints with drift)",
+            "verify-mocks  : {:?} at {} ({} exchanges, {} endpoints with drift, {} not verified)",
             record.outcome,
             record.recorded_at,
             record.exchanges_checked,
-            record.endpoints_with_drift
+            record.endpoints_with_drift,
+            record.endpoints_unverified
         ),
         None => println!("verify-mocks  : no recorded run (use `verify-mocks --record`)"),
     }
@@ -361,6 +366,7 @@ mod tests {
             outcome,
             exchanges_checked: 3,
             endpoints_with_drift: 1,
+            endpoints_unverified: 0,
             unmatched_real_paths: 0,
             findings: vec![VerificationFinding {
                 endpoint: "GET /users".into(),
@@ -384,7 +390,7 @@ mod tests {
     async fn a_directory_without_config_reports_none_and_writes_nothing() {
         let (_base, dir) = isolated();
         let status = read_status(&dir, Duration::from_millis(200)).await;
-        assert_eq!(status.schema_version, 1);
+        assert_eq!(status.schema_version, STATUS_SCHEMA_VERSION);
         assert!(status.config.is_none());
         assert!(status.http.is_none());
         assert!(status.server.is_none());
@@ -517,8 +523,36 @@ mod tests {
         };
         write(&record);
         assert!(read_status(&dir, Duration::from_millis(200)).await.verification.is_some());
-        record.schema_version = 2;
+        record.schema_version = VERIFICATION_SCHEMA_VERSION + 1;
         write(&record);
         assert!(read_status(&dir, Duration::from_millis(200)).await.verification.is_none());
+    }
+    #[tokio::test]
+    async fn status_preserves_unverified_evidence_and_reads_legacy_records() {
+        let (_base, dir) = isolated();
+        std::fs::create_dir_all(dir.join(".mockforge/reports")).unwrap();
+        let mut unverified = record(VerificationOutcome::Unverified);
+        unverified.endpoints_with_drift = 0;
+        unverified.endpoints_unverified = 1;
+        unverified.findings[0].kind = "response-unverified".into();
+        unverified.findings[0].detail = "Response media cannot be checked".into();
+        std::fs::write(dir.join(VERIFICATION_FILE), serde_json::to_string(&unverified).unwrap())
+            .unwrap();
+        let status = read_status(&dir, Duration::from_millis(200)).await;
+        assert_eq!(status.verification, Some(unverified));
+        let wire = serde_json::to_value(status).unwrap();
+        assert_eq!(wire["schema_version"], 2);
+        assert_eq!(wire["verification"]["schema_version"], 2);
+        assert_eq!(wire["verification"]["outcome"], "unverified");
+        assert_eq!(wire["verification"]["endpoints_unverified"], 1);
+
+        let mut legacy = serde_json::to_value(record(VerificationOutcome::Faithful)).unwrap();
+        legacy["schema_version"] = serde_json::json!(1);
+        legacy.as_object_mut().unwrap().remove("endpoints_unverified");
+        std::fs::write(dir.join(VERIFICATION_FILE), legacy.to_string()).unwrap();
+        let stored = read_status(&dir, Duration::from_millis(200)).await.verification.unwrap();
+        assert_eq!(stored.schema_version, 1);
+        assert_eq!(stored.outcome, VerificationOutcome::Faithful);
+        assert_eq!(stored.endpoints_unverified, 0);
     }
 }

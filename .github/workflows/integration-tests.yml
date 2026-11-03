@@ -5,22 +5,30 @@ on:
     branches: [main, develop]
     paths:
       - 'crates/**'
+      - 'tests/**'
+      - 'sdk/**'
+      - 'scripts/ci/test_sdk_runtime.py'
       - 'Cargo.toml'
       - 'Cargo.lock'
       - '.github/workflows/integration-tests.yml'
       - 'scripts/ci/check_rust_cache.py'
       - 'scripts/ci/rust_cache_*.py'
       - 'scripts/tests/test_rust_cache_guard.py'
+      - 'scripts/ci/runner-cargo-target.sh'
   pull_request:
     branches: [main, develop]
     paths:
       - 'crates/**'
+      - 'tests/**'
+      - 'sdk/**'
+      - 'scripts/ci/test_sdk_runtime.py'
       - 'Cargo.toml'
       - 'Cargo.lock'
       - '.github/workflows/integration-tests.yml'
       - 'scripts/ci/check_rust_cache.py'
       - 'scripts/ci/rust_cache_*.py'
       - 'scripts/tests/test_rust_cache_guard.py'
+      - 'scripts/ci/runner-cargo-target.sh'
   workflow_dispatch:
 
 env:
@@ -62,10 +70,9 @@ jobs:
         # `runner.name` is unavailable in workflow- or job-level `env:` blocks
         # (GH Actions context: `runner.*` is step-scoped). Writing to
         # `$GITHUB_ENV` here exports it to every subsequent step in this job,
-        # including the rust-toolchain composite action and rust-cache.
+        # including the rust-toolchain composite action.
         run: |
           echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
-          echo "CARGO_TARGET_DIR=$GITHUB_WORKSPACE/target" >> "$GITHUB_ENV"
 
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -98,15 +105,22 @@ jobs:
       - name: Check disk headroom before cache restore
         run: python3 scripts/ci/check_rust_cache.py --workspace "$GITHUB_WORKSPACE"
 
-      - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2
-        with:
-          env-vars: "CARGO_HOME"
+      - name: Use runner-persistent cargo target
+        # Replaces Swatinem/rust-cache: no target or registry tarballs in
+        # GitHub cache storage. See scripts/ci/runner-cargo-target.sh.
+        run: bash scripts/ci/runner-cargo-target.sh integration >> "$GITHUB_ENV"
 
-      # Restored artifacts need checking too. This guard never deletes a
-      # target or follows its symlinks, so active/foreign caches are preserved.
-      - name: Check restored Rust cache and disk headroom
-        run: python3 scripts/ci/check_rust_cache.py --workspace "$GITHUB_WORKSPACE"
+      # The warm target needs checking too. This guard never deletes a target
+      # or follows its symlinks. When the warm dir fails it, this run builds in
+      # a fresh job-scoped dir instead and the warm dir is left for host cleanup.
+      - name: Check warm Rust target and disk headroom
+        run: |
+          if ! python3 scripts/ci/check_rust_cache.py --workspace "$GITHUB_WORKSPACE" --target "$CARGO_TARGET_DIR"; then
+            fresh="$RUNNER_TEMP/cargo-target-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+            echo "::warning::Warm target $CARGO_TARGET_DIR failed the guard; building cold in $fresh"
+            echo "CARGO_TARGET_DIR=$fresh" >> "$GITHUB_ENV"
+            python3 scripts/ci/check_rust_cache.py --workspace "$GITHUB_WORKSPACE" --target "$fresh"
+          fi
 
       - name: Build MockForge binary (needed for integration tests)
         # Retry once on transient "No such file or directory" / SIGKILL
@@ -120,9 +134,9 @@ jobs:
 
       - name: Verify binary exists
         run: |
-          if [ -f "target/release/mockforge" ]; then
+          if [ -f "$CARGO_TARGET_DIR/release/mockforge" ]; then
             echo "✅ Binary built successfully"
-            ./target/release/mockforge --version || true
+            "$CARGO_TARGET_DIR/release/mockforge" --version || true
           else
             echo "❌ Binary not found!"
             exit 1
@@ -133,8 +147,8 @@ jobs:
       # and everything else from PATH. Use GITHUB_PATH, which the runner
       # evaluates per-step, to prepend safely. Some ignored tests shell
       # out to `mockforge` so keep the binary discoverable on PATH.
-      - name: Prepend target/release to PATH
-        run: echo "${{ github.workspace }}/target/release" >> "$GITHUB_PATH"
+      - name: Prepend the cargo release dir to PATH
+        run: echo "$CARGO_TARGET_DIR/release" >> "$GITHUB_PATH"
 
       # We intentionally do NOT pass `--ignored` here. The ~50 ignored
       # tests across this crate split into categories that CI is not set
@@ -147,6 +161,36 @@ jobs:
       # their own infra gaps. Run these locally when testing a specific
       # integration. The non-ignored suite is the real CI coverage.
       #
+      - name: Set up SDK runtime toolchains
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Set up SDK Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Set up SDK Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up SDK Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: 'stable'
+          # setup-go caches by default; that would write to GitHub storage.
+          cache: false
+
+      - name: Verify SDK create, serve, and cleanup against this build
+        run: >-
+          python3 scripts/ci/test_sdk_runtime.py
+          --binary "$CARGO_TARGET_DIR/release/mockforge"
+          --temp-root "$RUNNER_TEMP"
+          --report "$GITHUB_WORKSPACE/target/sdk-runtime-report.json"
+
       # `--skip protocols::` excludes the e2e protocol tests from THIS
       # step — they spawn real mockforge processes that race on ports
       # under parallel test execution (find_available_port TOCTOU).
@@ -155,15 +199,19 @@ jobs:
         run: |
           cargo test --package mockforge-integration-tests --release --test '*' -- --nocapture --skip 'protocols::'
 
+      # Debug evidence only: failure-only and short-lived to keep GitHub
+      # artifact storage near zero.
       - name: Upload test artifacts
-        if: always()
+        if: failure()
         uses: actions/upload-artifact@v7.0.2
         with:
           name: integration-test-results
           path: |
             target/test-results/
+            target/sdk-runtime-report.json
+            target/sdk-runtime-logs/
           if-no-files-found: ignore
-          retention-days: 7
+          retention-days: 1
 
       # --- E2E phase (formerly a separate `e2e-tests` job) -------------------
       # Merged into this job so the release binary built above is reused
@@ -179,7 +227,7 @@ jobs:
       # on develop pushes and manual dispatch.
       - name: Check disk headroom before E2E execution
         if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
-        run: python3 scripts/ci/check_rust_cache.py --workspace "$GITHUB_WORKSPACE"
+        run: python3 scripts/ci/check_rust_cache.py --workspace "$GITHUB_WORKSPACE" --target "$CARGO_TARGET_DIR"
 
       - name: Run E2E tests
         if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
@@ -204,4 +252,4 @@ jobs:
         with:
           name: e2e-test-results
           path: target/test-results/
-          retention-days: 7
+          retention-days: 1

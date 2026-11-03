@@ -2,7 +2,6 @@
 package mockforge
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -75,10 +74,10 @@ func (m *MockServer) Verify(pattern VerificationRequest, expected VerificationCo
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	resp, err := http.Post(
+	resp, err := m.controlRequest(
+		http.MethodPost,
 		fmt.Sprintf("%s/api/verification/verify", m.URL()),
-		"application/json",
-		bytes.NewBuffer(jsonData),
+		jsonData,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("verification request failed: %w", err)
@@ -104,10 +103,10 @@ func (m *MockServer) VerifyNever(pattern VerificationRequest) (*VerificationResu
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	resp, err := http.Post(
+	resp, err := m.controlRequest(
+		http.MethodPost,
 		fmt.Sprintf("%s/api/verification/never", m.URL()),
-		"application/json",
-		bytes.NewBuffer(jsonData),
+		jsonData,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("verification request failed: %w", err)
@@ -138,10 +137,10 @@ func (m *MockServer) VerifyAtLeast(pattern VerificationRequest, min int) (*Verif
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	resp, err := http.Post(
+	resp, err := m.controlRequest(
+		http.MethodPost,
 		fmt.Sprintf("%s/api/verification/at-least", m.URL()),
-		"application/json",
-		bytes.NewBuffer(jsonData),
+		jsonData,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("verification request failed: %w", err)
@@ -171,10 +170,10 @@ func (m *MockServer) VerifySequence(patterns []VerificationRequest) (*Verificati
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	resp, err := http.Post(
+	resp, err := m.controlRequest(
+		http.MethodPost,
 		fmt.Sprintf("%s/api/verification/sequence", m.URL()),
-		"application/json",
-		bytes.NewBuffer(jsonData),
+		jsonData,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("verification request failed: %w", err)
@@ -204,10 +203,10 @@ func (m *MockServer) CountRequests(pattern VerificationRequest) (int, error) {
 		return 0, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	resp, err := http.Post(
+	resp, err := m.controlRequest(
+		http.MethodPost,
 		fmt.Sprintf("%s/api/verification/count", m.URL()),
-		"application/json",
-		bytes.NewBuffer(jsonData),
+		jsonData,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("verification request failed: %w", err)

@@ -1,6 +1,9 @@
 # MockForge Development Makefile
 .PHONY: help build test clean doc fmt clippy audit release install-deps setup sync-git sync-dropbox sync-selective sync-dry-run load-test load-test-high-scale load-test-http load-test-websocket load-test-grpc load-test-marketplace warning-gate warning-gate-preview deploy-ui deploy-ui-preview
 
+# Local compilation goes through worktree isolation and host admission.
+DEV_CARGO := ./scripts/dev/cargo
+
 # Default target
 help: ## Show this help message
 	@echo "MockForge Development Commands:"
@@ -28,20 +31,20 @@ setup-hooks: ## Install only pre-commit hooks
 
 # Build commands
 build: ## Build all crates in debug mode
-	cargo build --workspace
+	$(DEV_CARGO) build --workspace
 
 build-release: ## Build all crates in release mode
-	cargo build --workspace --release
+	$(DEV_CARGO) build --workspace --release
 
 # Testing
 test: ## Run all tests
-	cargo test --workspace
+	$(DEV_CARGO) test --workspace
 
 test-integration: ## Run integration tests (including ignored tests)
-	cargo test --package mockforge-integration-tests --test '*' -- --ignored --nocapture
+	$(DEV_CARGO) test --package mockforge-integration-tests --test '*' -- --ignored --nocapture
 
 test-coverage: ## Run tests with coverage report
-	cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+	$(DEV_CARGO) llvm-cov --all-features --workspace --lcov --output-path lcov.info
 
 test-coverage-baseline: ## Generate per-crate coverage baseline
 	./scripts/coverage-baseline.sh
@@ -57,35 +60,36 @@ test-coverage-summary: ## Show coverage summary
 	fi
 
 test-watch: ## Run tests in watch mode
-	cargo watch -x "test --workspace"
+	@test -n "$(PACKAGE)" || (echo "Set PACKAGE=<affected-crate>"; exit 2)
+	cargo watch -s "$(DEV_CARGO) test -p $(PACKAGE)"
 
 # Benchmarking
 bench: ## Run all performance benchmarks
-	cargo bench
+	$(DEV_CARGO) bench
 
 bench-core: ## Run core benchmarks only
-	cargo bench --bench core_benchmarks
+	$(DEV_CARGO) bench --bench core_benchmarks
 
 bench-baseline: ## Save current benchmarks as baseline
-	cargo bench -- --save-baseline main
+	$(DEV_CARGO) bench -- --save-baseline main
 
 bench-compare: ## Compare current benchmarks against baseline
-	cargo bench -- --baseline main
+	$(DEV_CARGO) bench -- --baseline main
 
 test-mutants: ## Run mutation testing on all crates
-	cargo mutants --all
+	$(DEV_CARGO) mutants --all
 
 test-mutants-check: ## Check if tests pass before running mutation testing
-	cargo mutants --all --check
+	$(DEV_CARGO) mutants --all --check
 
 test-mutants-diff: ## Run mutation testing only on uncommitted changes
-	cargo mutants --all --in-diff HEAD
+	$(DEV_CARGO) mutants --all --in-diff HEAD
 
 test-mutants-report: ## Generate mutation testing report
-	cargo mutants --all --output mutants-report.json
+	$(DEV_CARGO) mutants --all --output mutants-report.json
 
 test-mutants-core: ## Run mutation testing on core crate only
-	cargo mutants -p mockforge-core
+	$(DEV_CARGO) mutants -p mockforge-core
 
 # UI E2E Testing (Playwright)
 test-ui-e2e: ## Run Playwright E2E tests for Admin UI
@@ -111,7 +115,7 @@ fmt-check: ## Check code formatting
 	cargo fmt --all --check
 
 clippy: ## Run clippy lints
-	cargo clippy --all-targets --all-features -- -D warnings
+	$(DEV_CARGO) clippy --all-targets --all-features -- -D warnings
 
 lint: fmt clippy ## Run all linting tools
 
@@ -123,7 +127,7 @@ warning-gate-preview: ## Preview next warning ratchet (adds unused_qualification
 
 # Documentation
 doc: ## Generate API documentation
-	cargo doc --workspace --no-deps --open
+	$(DEV_CARGO) doc --workspace --no-deps --open
 
 book: ## Build mdBook documentation
 	cd book && PATH="$(HOME)/.cargo/bin:$(PATH)" mdbook build
@@ -163,7 +167,7 @@ security-scan: ## Run comprehensive security scan (RustSec, licenses, static ana
 
 security-check: ## Quick security check (audit + clippy)
 	cargo audit
-	cargo clippy --all-targets --all-features -- -D warnings
+	$(DEV_CARGO) clippy --all-targets --all-features -- -D warnings
 
 security-deny: ## Check licenses and sources with cargo-deny
 	cargo deny check licenses sources bans
@@ -200,7 +204,8 @@ clean-all: clean ## Clean everything including target directories
 
 # Development workflow
 dev: ## Start development mode with watch
-	cargo watch -x "check --workspace" -x "test --workspace" -x "clippy --all-targets"
+	@test -n "$(PACKAGE)" || (echo "Set PACKAGE=<affected-crate>"; exit 2)
+	cargo watch -s "$(DEV_CARGO) check -p $(PACKAGE)"
 
 dev-full: ## Start both Rust backend and UI dev server
 	./scripts/dev.sh
@@ -213,16 +218,16 @@ install: ## Install the CLI tool locally
 
 # TUI
 build-tui: ## Build TUI crate
-	cargo build -p mockforge-tui
+	$(DEV_CARGO) build -p mockforge-tui
 
 clippy-tui: ## Lint TUI crate
-	cargo clippy -p mockforge-tui --all-targets -- -D warnings
+	$(DEV_CARGO) clippy -p mockforge-tui --all-targets -- -D warnings
 
 test-tui: ## Test TUI crate
-	cargo test -p mockforge-tui
+	$(DEV_CARGO) test -p mockforge-tui
 
 build-cli-tui: ## Build CLI with TUI feature enabled
-	cargo build -p mockforge-cli --features "tui,all-protocols"
+	$(DEV_CARGO) build -p mockforge-cli --features "tui,all-protocols"
 
 # Examples
 run-example: ## Run with example configuration
@@ -377,3 +382,9 @@ deploy-ui-preview: ## Build & deploy admin UI as a preview (uses current git bra
 				--project-name=mockforge-admin-ui \
 				--branch="$$BRANCH" \
 				--commit-dirty=true
+
+# Focused iteration; existing broad targets above remain available for full gates.
+.PHONY: check-focused test-focused clippy-focused
+check-focused test-focused clippy-focused:
+	@test -n "$(PACKAGE)" || (echo "Set PACKAGE=<affected-crate>"; exit 2)
+	$(DEV_CARGO) $(patsubst %-focused,%,$@) -p $(PACKAGE) $(if $(filter clippy-focused,$@),--all-targets -- -D warnings,)

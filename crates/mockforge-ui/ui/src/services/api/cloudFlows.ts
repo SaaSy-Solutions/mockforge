@@ -4,9 +4,9 @@
  * `flows` is the unified resource backing the Scenario / Orchestration /
  * State Machine / Chain editor pages. Each row has a kind discriminator
  * (`scenario | orchestration | state_machine | chain`) and a versioned
- * config (FlowVersion). Run trigger goes through the standard
- * `test_runs` lifecycle so cloud-mode pages reuse the cloudTestRuns
- * SSE stream for live progress.
+ * config (FlowVersion). Chain run triggers go through the standard
+ * `test_runs` lifecycle so cloud-mode pages reuse the cloudTestRuns SSE
+ * stream for live progress; historic kinds remain readable.
  */
 import { fetchJsonWithErrorBody } from './client';
 import { isCloudMode } from '../../utils/cloudMode';

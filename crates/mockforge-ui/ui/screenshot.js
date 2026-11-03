@@ -88,10 +88,12 @@ async function handleLogin(page) {
     console.log('🔑 Login required, attempting to sign in...');
 
     // Try multiple credential combinations
+    // There are no built-in users (#1016): use the configured admin login.
     const credentials = [
-      { username: 'admin', password: 'admin123' },
-      { username: 'demo', password: 'demo123' },
-      { username: 'viewer', password: 'viewer123' }
+      {
+        username: process.env.MOCKFORGE_ADMIN_USERNAME || 'admin',
+        password: process.env.MOCKFORGE_ADMIN_PASSWORD || '',
+      },
     ];
 
     for (const cred of credentials) {

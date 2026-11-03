@@ -13,6 +13,11 @@ export const RunSummary: React.FC<{ run: Pick<TestRun, 'kind' | 'summary'> }> = 
     const phase = (summary['executor_phase'] as string | undefined) ?? '';
     const kind = run.kind;
 
+    const error = summary['error'];
+    if (typeof error === 'string' && error !== '') {
+        return <RunErrorNotice summary={summary} error={error} />;
+    }
+
     const presenter = SUMMARY_PRESENTERS.get(kind);
     if (presenter && (!presenter.phases || presenter.phases.includes(phase))) {
         const Component = presenter.component;
@@ -25,6 +30,22 @@ export const RunSummary: React.FC<{ run: Pick<TestRun, 'kind' | 'summary'> }> = 
         </details>
     );
 };
+
+const RunErrorNotice: React.FC<{ summary: Record<string, unknown>; error: string }> = ({ summary, error }) => (
+    <div className="space-y-2">
+        <div
+            role="status"
+            className="rounded border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-3 text-sm"
+        >
+            <div className="font-medium text-amber-800 dark:text-amber-300">Run did not complete</div>
+            <div className="mt-1 text-amber-700 dark:text-amber-400">{error}</div>
+        </div>
+        <details className="bg-gray-50 dark:bg-gray-900/50 rounded p-3">
+            <summary className="cursor-pointer text-sm font-medium">Run summary</summary>
+            <pre className="text-xs mt-2 overflow-x-auto">{JSON.stringify(summary, null, 2)}</pre>
+        </details>
+    </div>
+);
 
 const BenchSummary: React.FC<{ summary: Record<string, unknown> }> = ({ summary }) => {
     const total = (summary['total_requests'] as number | undefined) ?? 0;

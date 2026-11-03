@@ -3,6 +3,7 @@
 //! Tests that verify the plugin loading, execution, and management system
 //! works correctly end-to-end.
 
+use mockforge_http::management_auth::MANAGEMENT_TOKEN_HEADER;
 use mockforge_test::MockForgeServer;
 use reqwest::Client;
 use serde_json::Value;
@@ -33,7 +34,11 @@ async fn test_plugin_listing() {
 
     // Test listing all plugins
     let plugins_url = format!("{}/__mockforge/plugins", base_url);
-    let response = client.get(&plugins_url).send().await;
+    let response = client
+        .get(&plugins_url)
+        .header(MANAGEMENT_TOKEN_HEADER, server.management_token())
+        .send()
+        .await;
 
     match response {
         Ok(resp) => {
@@ -88,7 +93,11 @@ async fn test_plugin_status() {
 
     // Test plugin status endpoint
     let status_url = format!("{}/__mockforge/plugins/status", base_url);
-    let response = client.get(&status_url).send().await;
+    let response = client
+        .get(&status_url)
+        .header(MANAGEMENT_TOKEN_HEADER, server.management_token())
+        .send()
+        .await;
 
     match response {
         Ok(resp) => {
@@ -138,7 +147,11 @@ async fn test_plugin_listing_filters() {
 
     // Test with type filter
     let filtered_url = format!("{}/__mockforge/plugins?type=template", base_url);
-    let response = client.get(&filtered_url).send().await;
+    let response = client
+        .get(&filtered_url)
+        .header(MANAGEMENT_TOKEN_HEADER, server.management_token())
+        .send()
+        .await;
 
     match response {
         Ok(resp) => {
@@ -184,7 +197,11 @@ async fn test_plugin_details() {
 
     // First, get list of plugins to find a plugin ID
     let plugins_url = format!("{}/__mockforge/plugins", base_url);
-    let list_response = client.get(&plugins_url).send().await;
+    let list_response = client
+        .get(&plugins_url)
+        .header(MANAGEMENT_TOKEN_HEADER, server.management_token())
+        .send()
+        .await;
 
     match list_response {
         Ok(resp) => {
@@ -201,7 +218,11 @@ async fn test_plugin_details() {
                                 // Query plugin details
                                 let details_url =
                                     format!("{}/__mockforge/plugins/{}", base_url, plugin_id);
-                                let details_response = client.get(&details_url).send().await;
+                                let details_response = client
+                                    .get(&details_url)
+                                    .header(MANAGEMENT_TOKEN_HEADER, server.management_token())
+                                    .send()
+                                    .await;
 
                                 match details_response {
                                     Ok(details_resp) => {
@@ -266,7 +287,11 @@ async fn test_plugin_reload() {
 
     // First, get list of plugins
     let plugins_url = format!("{}/__mockforge/plugins", base_url);
-    let list_response = client.get(&plugins_url).send().await;
+    let list_response = client
+        .get(&plugins_url)
+        .header(MANAGEMENT_TOKEN_HEADER, server.management_token())
+        .send()
+        .await;
 
     match list_response {
         Ok(resp) => {
@@ -285,8 +310,12 @@ async fn test_plugin_reload() {
                                     "plugin_id": plugin_id
                                 });
 
-                                let reload_response =
-                                    client.post(&reload_url).json(&reload_payload).send().await;
+                                let reload_response = client
+                                    .post(&reload_url)
+                                    .header(MANAGEMENT_TOKEN_HEADER, server.management_token())
+                                    .json(&reload_payload)
+                                    .send()
+                                    .await;
 
                                 match reload_response {
                                     Ok(r_resp) => {
@@ -350,7 +379,11 @@ async fn test_plugin_error_handling() {
     // Test getting details for non-existent plugin
     let non_existent_id = "non-existent-plugin-id-12345";
     let details_url = format!("{}/__mockforge/plugins/{}", base_url, non_existent_id);
-    let response = client.get(&details_url).send().await;
+    let response = client
+        .get(&details_url)
+        .header(MANAGEMENT_TOKEN_HEADER, server.management_token())
+        .send()
+        .await;
 
     match response {
         Ok(resp) => {
@@ -432,7 +465,11 @@ async fn test_plugin_unload() {
 
     // Get list of plugins first
     let plugins_url = format!("{}/__mockforge/plugins", base_url);
-    let list_response = client.get(&plugins_url).send().await;
+    let list_response = client
+        .get(&plugins_url)
+        .header(MANAGEMENT_TOKEN_HEADER, server.management_token())
+        .send()
+        .await;
 
     match list_response {
         Ok(resp) => {
@@ -448,7 +485,11 @@ async fn test_plugin_unload() {
                                 // Test plugin deletion (unload)
                                 let delete_url =
                                     format!("{}/__mockforge/plugins/{}", base_url, plugin_id);
-                                let delete_response = client.delete(&delete_url).send().await;
+                                let delete_response = client
+                                    .delete(&delete_url)
+                                    .header(MANAGEMENT_TOKEN_HEADER, server.management_token())
+                                    .send()
+                                    .await;
 
                                 match delete_response {
                                     Ok(d_resp) => {

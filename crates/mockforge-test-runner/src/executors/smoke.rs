@@ -24,10 +24,8 @@
 //! }
 //! ```
 //!
-//! Path templates with `{param}` placeholders are skipped in v1 (we
-//! don't substitute synthetic values — that risks 404s that aren't
-//! actually failures). The follow-up issue can land a "synthetic param
-//! values" mode if needed.
+//! Path templates with `{param}` placeholders are skipped in v1 because
+//! guessing parameter values risks reporting unrelated 404 responses.
 
 use std::time::{Duration, Instant};
 
@@ -240,11 +238,18 @@ impl Executor for SmokeTestExecutor {
 
         let elapsed = started.elapsed();
         let secs = (elapsed.as_secs_f64().ceil() as i32).max(1);
-        let status = if failed == 0 {
-            JobStatus::Passed
-        } else {
-            JobStatus::Failed
-        };
+        let status = smoke_status(probed, failed);
+        if status == JobStatus::Errored {
+            return errored_run(
+                callbacks,
+                &job,
+                started,
+                next_seq,
+                "smoke probed zero routes; configure at least one route without path parameters"
+                    .into(),
+            )
+            .await;
+        }
 
         // Final summary log so the run timeline reads cleanly when scrolling.
         callbacks
@@ -463,6 +468,16 @@ fn parse_spec_text(text: &str) -> std::result::Result<serde_json::Value, String>
         .map_err(|e| format!("spec is neither valid JSON nor YAML: {e}"))
 }
 
+fn smoke_status(probed: usize, failed: usize) -> JobStatus {
+    if probed == 0 {
+        JobStatus::Errored
+    } else if failed == 0 {
+        JobStatus::Passed
+    } else {
+        JobStatus::Failed
+    }
+}
+
 // ─── Failure helpers ─────────────────────────────────────────────────
 
 /// Emit a single failure log + return an `Errored` outcome. Used for
@@ -482,7 +497,7 @@ async fn errored_run(
             "log",
             serde_json::json!({
                 "level": "error",
-                "message": message,
+                "message": &message,
             }),
         )
         .await?;
@@ -495,6 +510,7 @@ async fn errored_run(
         summary: Some(serde_json::json!({
             "executor_phase": "errored_pre_flight",
             "tracking_task": 4,
+            "error": message,
         })),
     })
 }
@@ -502,6 +518,11 @@ async fn errored_run(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn zero_probed_routes_is_errored() {
+        assert_eq!(smoke_status(0, 0), JobStatus::Errored);
+    }
 
     #[test]
     fn smoke_config_defaults_when_payload_empty() {

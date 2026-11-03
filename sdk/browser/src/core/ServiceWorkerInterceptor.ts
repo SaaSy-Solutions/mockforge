@@ -52,7 +52,7 @@ export class ServiceWorkerInterceptor {
             navigator.serviceWorker.addEventListener('message', (event) => {
                 if (event.data && event.data.type === 'FORGECONNECT_REQUEST') {
                     const request: CapturedRequest = event.data.payload;
-                    callback(request).catch(err => {
+                    Promise.resolve().then(() => callback(request)).catch(err => {
                         console.warn('[ForgeConnect] Error in capture callback:', err);
                     });
                 }

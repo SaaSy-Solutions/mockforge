@@ -107,6 +107,7 @@ CRATES=(
   mockforge-bench
   mockforge-chaos
   mockforge-collab
+  mockforge-auth
   mockforge-http
   mockforge-k8s-operator
   mockforge-registry-server
@@ -307,6 +308,7 @@ summary() {
 cd "$(dirname "$0")/.."
 
 python3 scripts/check_publish_order.py || exit 1
+python3 scripts/bundle_cli_tools.py --check || exit 1
 
 blue "publishing MockForge workspace @ $VERSION"
 [ "$DRY_RUN" = true ] && yellow "DRY RUN — no uploads"

@@ -38,6 +38,13 @@ pub async fn buffer_response_middleware(req: Request, next: Next) -> Response<Bo
     // Process request
     let response = next.run(req).await;
 
+    // Event streams never end, so buffering one would hold the response
+    // forever. Pass them through; drift tracking treats an unbuffered
+    // response as having no JSON body.
+    if is_event_stream(&response) {
+        return response;
+    }
+
     // Extract response parts
     let (parts, body) = response.into_parts();
 
@@ -92,7 +99,60 @@ pub async fn buffer_response_middleware(req: Request, next: Next) -> Response<Bo
     response
 }
 
+fn is_event_stream(response: &Response<Body>) -> bool {
+    response
+        .headers()
+        .get(http::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| v.trim_start().to_ascii_lowercase().starts_with("text/event-stream"))
+}
+
 /// Extract buffered response from response extensions
 pub fn get_buffered_response(response: &Response<Body>) -> Option<BufferedResponse> {
     response.extensions().get::<BufferedResponse>().cloned()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::{routing::get, Router};
+    use futures::stream;
+    use std::time::Duration;
+    use tower::ServiceExt;
+
+    fn app() -> Router {
+        Router::new()
+            .route("/json", get(|| async { axum::Json(serde_json::json!({"ok": true})) }))
+            .route(
+                "/events",
+                get(|| async {
+                    axum::response::sse::Sse::new(stream::pending::<
+                        Result<axum::response::sse::Event, std::convert::Infallible>,
+                    >())
+                }),
+            )
+            .layer(axum::middleware::from_fn(buffer_response_middleware))
+    }
+
+    async fn call(path: &str) -> Response<Body> {
+        let req = Request::builder().uri(path).body(Body::empty()).unwrap();
+        tokio::time::timeout(Duration::from_secs(5), app().oneshot(req))
+            .await
+            .unwrap_or_else(|_| panic!("{path} was held by the buffer"))
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn buffers_finite_responses() {
+        let response = call("/json").await;
+        let buffered = get_buffered_response(&response).expect("JSON response is buffered");
+        assert_eq!(buffered.json(), Some(serde_json::json!({"ok": true})));
+    }
+
+    #[tokio::test]
+    async fn passes_event_streams_through_unbuffered() {
+        let response = call("/events").await;
+        assert_eq!(response.status(), http::StatusCode::OK);
+        assert!(get_buffered_response(&response).is_none());
+    }
 }

@@ -23,12 +23,12 @@ From the changed files, extract crate names:
 
 For each affected crate:
 ```bash
-cargo test -p <crate-name> 2>&1
+scripts/dev/cargo test -p <crate-name> 2>&1
 ```
 
 Capture the full output. If a crate has many tests and you need to focus:
 ```bash
-cargo test -p <crate-name> -- <test_name_filter> 2>&1
+scripts/dev/cargo test -p <crate-name> -- <test_name_filter> 2>&1
 ```
 
 ### 3. Diagnose Failures

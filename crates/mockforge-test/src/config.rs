@@ -53,6 +53,13 @@ pub struct ServerConfig {
 
     /// Path to mockforge binary (optional, will search PATH if not provided)
     pub binary_path: Option<PathBuf>,
+
+    /// Management token for the HTTP data port's control plane (optional).
+    ///
+    /// When unset, [`crate::MockForgeServer::start`] uses `MOCKFORGE_MANAGEMENT_TOKEN`
+    /// from `env_vars` or the parent environment, and otherwise generates a random
+    /// token. The token is passed to the child as `MOCKFORGE_MANAGEMENT_TOKEN`.
+    pub management_token: Option<String>,
 }
 
 impl Default for ServerConfig {
@@ -74,6 +81,7 @@ impl Default for ServerConfig {
             working_dir: None,
             env_vars: Vec::new(),
             binary_path: None,
+            management_token: None,
         }
     }
 }
@@ -199,6 +207,12 @@ impl ServerConfigBuilder {
     /// Set path to mockforge binary
     pub fn binary_path<P: Into<PathBuf>>(mut self, path: P) -> Self {
         self.config.binary_path = Some(path.into());
+        self
+    }
+
+    /// Set the management token for the server's control plane
+    pub fn management_token<S: Into<String>>(mut self, token: S) -> Self {
+        self.config.management_token = Some(token.into());
         self
     }
 

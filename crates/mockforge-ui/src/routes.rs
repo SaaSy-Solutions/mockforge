@@ -76,7 +76,7 @@ pub fn create_admin_router(
 
     let cors = admin_cors_layer(std::env::var("CORS_ALLOWED_ORIGINS").ok().as_deref());
 
-    let state = AdminState::new(
+    let mut state = AdminState::new(
         http_server_addr,
         ws_server_addr,
         grpc_server_addr,
@@ -92,6 +92,18 @@ pub fn create_admin_router(
         federation,
         vbr_engine,
     );
+
+    // Share one registry between workspace management and AI policy resolution.
+    let ai_workspace_registry = std::sync::Arc::new(tokio::sync::RwLock::new(
+        mockforge_core::MultiTenantWorkspaceRegistry::new(
+            mockforge_core::multi_tenant::MultiTenantConfig {
+                enabled: true,
+                default_workspace: "default".to_string(),
+                ..Default::default()
+            },
+        ),
+    ));
+    state.workspace_registry = Some(ai_workspace_registry.clone());
 
     // Start system monitoring background task to poll CPU, memory, and thread metrics
     let state_clone = state.clone();
@@ -263,6 +275,8 @@ pub fn create_admin_router(
         .route("/__mockforge/continuum/enabled", axum::routing::put(set_continuum_enabled))
         .route("/__mockforge/continuum/overrides", get(get_continuum_overrides))
         .route("/__mockforge/continuum/overrides", delete(clear_continuum_overrides))
+        // Stateless fidelity comparison, protected by the admin RBAC layer.
+        .route("/__mockforge/fidelity/compare", post(fidelity::compare).layer(axum::extract::DefaultBodyLimit::max(8 * 1024 * 1024)))
         // Contract diff routes
         .route("/__mockforge/contract-diff/upload", post(contract_diff::upload_request))
         .route("/__mockforge/contract-diff/submit", post(contract_diff::submit_request))
@@ -539,17 +553,7 @@ pub fn create_admin_router(
     // Add workspace router with WorkspaceState
     {
         use crate::handlers::workspaces::WorkspaceState;
-        use mockforge_core::multi_tenant::{MultiTenantConfig, MultiTenantWorkspaceRegistry};
-        use std::sync::Arc;
-
-        // Create workspace registry
-        let mt_config = MultiTenantConfig {
-            enabled: true,
-            default_workspace: "default".to_string(),
-            ..Default::default()
-        };
-        let registry = MultiTenantWorkspaceRegistry::new(mt_config);
-        let workspace_state = WorkspaceState::new(Arc::new(tokio::sync::RwLock::new(registry)));
+        let workspace_state = WorkspaceState::new(ai_workspace_registry);
 
         // Create workspace router with state
         use crate::handlers::workspaces;
@@ -954,7 +958,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_tui_get_endpoints_return_json_without_auth() {
+    async fn test_tui_get_endpoints_require_auth_and_return_json() {
         let router = make_test_router();
 
         let endpoints = vec![
@@ -967,8 +971,17 @@ mod tests {
         ];
 
         for endpoint in endpoints {
+            // Reads need credentials like writes do (#1019).
+            let (status, _, _) = send(router.clone(), "GET", endpoint, None, None).await;
+            assert_eq!(
+                status,
+                axum::http::StatusCode::UNAUTHORIZED,
+                "anonymous GET {} must be rejected",
+                endpoint
+            );
+
             let (status, content_type, body) =
-                send(router.clone(), "GET", endpoint, None, None).await;
+                send_authed(router.clone(), "GET", endpoint, None).await;
 
             assert_eq!(
                 status,
@@ -1097,7 +1110,7 @@ mod tests {
         let router = make_test_router();
 
         // Chaos: verify shape
-        let (_, _, body) = send(router.clone(), "GET", "/__mockforge/chaos", None, None).await;
+        let (_, _, body) = send_authed(router.clone(), "GET", "/__mockforge/chaos", None).await;
         let v: serde_json::Value = serde_json::from_str(&body).unwrap();
         let data = &v["data"];
         assert!(data.get("enabled").is_some(), "chaos missing 'enabled'");
@@ -1108,7 +1121,7 @@ mod tests {
 
         // Recorder: verify shape
         let (_, _, body) =
-            send(router.clone(), "GET", "/__mockforge/recorder/status", None, None).await;
+            send_authed(router.clone(), "GET", "/__mockforge/recorder/status", None).await;
         let v: serde_json::Value = serde_json::from_str(&body).unwrap();
         let data = &v["data"];
         assert!(data.get("recording").is_some(), "recorder missing 'recording'");
@@ -1116,12 +1129,13 @@ mod tests {
 
         // Federation: verify shape (empty array when not configured)
         let (_, _, body) =
-            send(router.clone(), "GET", "/__mockforge/federation/peers", None, None).await;
+            send_authed(router.clone(), "GET", "/__mockforge/federation/peers", None).await;
         let v: serde_json::Value = serde_json::from_str(&body).unwrap();
         assert!(v["data"].is_array(), "federation peers should be an array");
 
         // VBR: verify shape
-        let (_, _, body) = send(router.clone(), "GET", "/__mockforge/vbr/status", None, None).await;
+        let (_, _, body) =
+            send_authed(router.clone(), "GET", "/__mockforge/vbr/status", None).await;
         let v: serde_json::Value = serde_json::from_str(&body).unwrap();
         let data = &v["data"];
         assert!(data.get("enabled").is_some(), "vbr missing 'enabled'");
@@ -1130,7 +1144,7 @@ mod tests {
 
         // Predefined scenarios: verify shape
         let (_, _, body) =
-            send(router.clone(), "GET", "/__mockforge/chaos/scenarios/predefined", None, None)
+            send_authed(router.clone(), "GET", "/__mockforge/chaos/scenarios/predefined", None)
                 .await;
         let v: serde_json::Value = serde_json::from_str(&body).unwrap();
         assert!(v["success"].as_bool().unwrap(), "predefined scenarios not success");

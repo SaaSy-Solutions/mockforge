@@ -10,6 +10,7 @@ members = [
     "crates/mockforge-scenarios",
 
     # Protocol implementations
+    "crates/mockforge-auth",
     "crates/mockforge-http",
     "crates/mockforge-grpc",
     "crates/mockforge-ws",
@@ -98,7 +99,7 @@ exclude = ["vendor/aws-sigv4"]
 
 # Workspace-wide package metadata
 [workspace.package]
-version = "0.3.236"
+version = "0.3.240"
 edition = "2021"
 rust-version = "1.96.0"
 authors = ["SaaSy Solutions LLC <ray.clanan@saasysolutionsllc.com>"]

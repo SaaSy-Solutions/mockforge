@@ -1,0 +1,8 @@
+zip v9.0.5
+├── mockforge-plugin-loader v0.3.238 (/mnt/build/worktrees/mockforge-merge-desktop-deps-20261031/crates/mockforge-plugin-loader)
+│   └── mockforge-scenarios v0.3.238 (/mnt/build/worktrees/mockforge-merge-desktop-deps-20261031/crates/mockforge-scenarios)
+│       └── mockforge-http v0.3.238 (/mnt/build/worktrees/mockforge-merge-desktop-deps-20261031/crates/mockforge-http)
+│           └── mockforge-desktop v0.3.238 (/mnt/build/worktrees/mockforge-merge-desktop-deps-20261031/desktop-app)
+├── mockforge-scenarios v0.3.238 (/mnt/build/worktrees/mockforge-merge-desktop-deps-20261031/crates/mockforge-scenarios) (*)
+└── tauri-plugin-updater v2.14.1
+    └── mockforge-desktop v0.3.238 (/mnt/build/worktrees/mockforge-merge-desktop-deps-20261031/desktop-app)

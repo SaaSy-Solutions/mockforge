@@ -190,9 +190,11 @@ See the [Configuration Validation Guide](config-validation.md).
 
 ---
 
-### Why does my hosted mock return 401 when I change it with curl?
+### Why does MockForge's management API return 401?
 
-Hosted mocks protect MockForge's management API. Writes to `/__mockforge/*` and the other MockForge control routes (creating mocks, chaos, time travel, the recorder) need the deployment's management token. Open the deployment on the **Hosted Mocks** page, press **Reveal** next to *Management token*, and send it as a header:
+MockForge's own control routes on the HTTP port (`/__mockforge/*`, `/api/chaos`, `/api/recorder`, `/api/verification` and the other management APIs) need a management token for reads and writes. Your mocked API, `/health` and `/__mockforge/docs` don't.
+
+For a hosted mock, open the deployment on the **Hosted Mocks** page, press **Reveal** next to *Management token*, and send it as a header:
 
 ```bash
 curl -X POST https://<your-mock>/__mockforge/api/mocks \
@@ -201,7 +203,7 @@ curl -X POST https://<your-mock>/__mockforge/api/mocks \
   -d '{"id":"hello","method":"GET","path":"/hello","response":{"body":{"hi":true}}}'
 ```
 
-Reads (the spec, route list, docs, live stream) and your mocked API itself don't need the token. Self-hosted `mockforge serve` doesn't use one.
+For `mockforge serve`, set `MOCKFORGE_MANAGEMENT_TOKEN` (32+ characters) on the server and send the same value. The CLI commands read it from the environment, and SDKs that start the server generate one for you. For local development only, `MOCKFORGE_HTTP_HOST=127.0.0.1 MOCKFORGE_INSECURE_MANAGEMENT=1 mockforge serve ...` turns the check off; the server refuses to start with it on any non-loopback address.
 
 ## OpenAPI & HTTP Mocking
 
@@ -466,9 +468,9 @@ Use `mockforge admin` to run the Admin UI as a standalone server without startin
 
 ### Is authentication available?
 
-**Yes.** The Admin UI uses JWT login with three roles: Admin (full access), Editor (manage mocks and fixtures), and Viewer (read-only). Mutating admin endpoints are permission-checked per role; read-only `GET /__mockforge/*` endpoints stay open so the TUI can poll them.
+**Yes.** The Admin UI uses JWT login with three roles: Admin (full access), Editor (manage mocks and fixtures), and Viewer (read-only). Every admin endpoint, reads included, is permission-checked per role. Bound to loopback with no credentials configured, anonymous `GET /__mockforge/*` reads are allowed from the same machine so the TUI can poll them. There are no built-in users or default passwords; set `MOCKFORGE_ADMIN_PASSWORD` to log in.
 
-Without `JWT_SECRET`, MockForge seeds local development users (`admin` / `admin123`, `editor` / `editor123`, `viewer` / `viewer123`). Set `JWT_SECRET` and `MOCKFORGE_DISABLE_DEV_SEED_USERS=true` for shared deployments. OAuth/SSO login is not available in the local Admin UI; MockForge Cloud supports OIDC and SAML SSO.
+Bound to any other address, the admin server refuses to start until you set `MOCKFORGE_ADMIN_PASSWORD` (12+ characters; replaces the demo users), `MOCKFORGE_MANAGEMENT_TOKEN` (32+ characters; for API clients and `mockforge-tui --token`) or `JWT_SECRET`. OAuth/SSO login is not available in the local Admin UI; MockForge Cloud supports OIDC and SAML SSO.
 
 ### What can I do in the Admin UI?
 

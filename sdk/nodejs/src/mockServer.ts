@@ -1,6 +1,7 @@
 import { spawn, ChildProcess } from 'child_process';
 import { promisify } from 'util';
-import axios from 'axios';
+import axios, { AxiosInstance } from 'axios';
+import { randomBytes } from 'crypto';
 import {
   MockServerConfig,
   ResponseStub,
@@ -12,6 +13,20 @@ import {
 import { MockServerError, MockServerErrorCode } from './errors';
 
 const sleep = promisify(setTimeout);
+
+/** Header carrying the management credential on control-plane requests. */
+export const MANAGEMENT_TOKEN_HEADER = 'X-MockForge-Management-Token';
+
+/**
+ * Resolve the management token: explicit option, else the
+ * `MOCKFORGE_MANAGEMENT_TOKEN` env var, else a fresh random 64-char hex token.
+ */
+export function resolveManagementToken(explicit?: string): string {
+  if (explicit) return explicit;
+  const fromEnv = process.env.MOCKFORGE_MANAGEMENT_TOKEN;
+  if (fromEnv) return fromEnv;
+  return randomBytes(32).toString('hex');
+}
 
 /**
  * MockServer - Embedded mock server for testing
@@ -31,6 +46,9 @@ export class MockServer {
   // Track stub IDs returned from Admin API for later updates/deletes
   private stubIds: Map<string, string> = new Map(); // key: "METHOD:path", value: mock ID
   private stderrBuffer = '';
+  private managementToken: string;
+  // Control-plane HTTP client; carries the management token on every call.
+  private http: AxiosInstance;
 
   constructor(private config: MockServerConfig = {}) {
     this.port = config.port ?? 0;
@@ -45,6 +63,17 @@ export class MockServer {
     this.metricsPort = config.metricsPort ?? 0;
     this.noConfig = config.noConfig ?? true;
     this.startupTimeoutMs = config.startupTimeoutMs ?? 12_000;
+    this.managementToken = resolveManagementToken(config.managementToken);
+    this.http = axios.create({
+      headers: { [MANAGEMENT_TOKEN_HEADER]: this.managementToken },
+    });
+  }
+
+  /**
+   * The management token this instance uses for the control plane.
+   */
+  getManagementToken(): string {
+    return this.managementToken;
   }
 
   /**
@@ -91,6 +120,7 @@ export class MockServer {
     try {
       this.process = spawn('mockforge', args, {
         stdio: ['ignore', 'pipe', 'pipe'],
+        env: { ...process.env, MOCKFORGE_MANAGEMENT_TOKEN: this.managementToken },
       });
     } catch (error) {
       throw MockServerError.cliNotFound(error instanceof Error ? error : undefined);
@@ -260,7 +290,7 @@ export class MockServer {
     };
 
     try {
-      const response = await axios.post(
+      const response = await this.http.post(
         `http://${this.host}:${this.port}/__mockforge/api/mocks`,
         mockConfig
       );
@@ -295,7 +325,7 @@ export class MockServer {
       // Mock wasn't created through this instance; try to locate it by
       // listing the Admin API's current mocks and matching on method+path.
       try {
-        const response = await axios.get(
+        const response = await this.http.get(
           `http://${this.host}:${this.port}/__mockforge/api/mocks`
         );
         const mocks = response.data.mocks || [];
@@ -341,7 +371,7 @@ export class MockServer {
     };
 
     try {
-      await axios.put(
+      await this.http.put(
         `http://${this.host}:${this.port}/__mockforge/api/mocks/${mockId}`,
         mockConfig
       );
@@ -369,7 +399,7 @@ export class MockServer {
     this.stubIds.delete(stubKey);
 
     const doDelete = async (id: string) => {
-      await axios.delete(
+      await this.http.delete(
         `http://${this.host}:${this.port}/__mockforge/api/mocks/${id}`
       );
     };
@@ -380,7 +410,7 @@ export class MockServer {
         return;
       }
       // Mock wasn't created by this instance; locate by method+path.
-      const response = await axios.get(
+      const response = await this.http.get(
         `http://${this.host}:${this.port}/__mockforge/api/mocks`
       );
       const mocks = response.data.mocks || [];
@@ -409,14 +439,14 @@ export class MockServer {
     this.stubIds.clear();
 
     try {
-      const response = await axios.get(
+      const response = await this.http.get(
         `http://${this.host}:${this.port}/__mockforge/api/mocks`
       );
       const mocks = response.data.mocks || [];
 
       await Promise.all(
         mocks.map((mock: { id: string }) =>
-          axios
+          this.http
             .delete(`http://${this.host}:${this.port}/__mockforge/api/mocks/${mock.id}`)
             .catch(() => {})
         )
@@ -486,7 +516,7 @@ export class MockServer {
     expected: VerificationCount
   ): Promise<VerificationResult> {
     try {
-      const response = await axios.post(
+      const response = await this.http.post(
         `${this.url()}/api/verification/verify`,
         {
           pattern: {
@@ -516,7 +546,7 @@ export class MockServer {
    */
   async verifyNever(pattern: VerificationRequest): Promise<VerificationResult> {
     try {
-      const response = await axios.post(
+      const response = await this.http.post(
         `${this.url()}/api/verification/never`,
         {
           method: pattern.method,
@@ -546,7 +576,7 @@ export class MockServer {
     min: number
   ): Promise<VerificationResult> {
     try {
-      const response = await axios.post(
+      const response = await this.http.post(
         `${this.url()}/api/verification/at-least`,
         {
           pattern: {
@@ -578,7 +608,7 @@ export class MockServer {
     patterns: VerificationRequest[]
   ): Promise<VerificationResult> {
     try {
-      const response = await axios.post(
+      const response = await this.http.post(
         `${this.url()}/api/verification/sequence`,
         {
           patterns: patterns.map((p) => ({
@@ -607,7 +637,7 @@ export class MockServer {
    */
   async countRequests(pattern: VerificationRequest): Promise<number> {
     try {
-      const response = await axios.post(
+      const response = await this.http.post(
         `${this.url()}/api/verification/count`,
         {
           pattern: {

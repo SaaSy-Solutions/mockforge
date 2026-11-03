@@ -1,10 +1,22 @@
 //! Scenario and workspace management for tests
 
 use crate::error::{Error, Result};
+use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::Client;
 use serde_json::Value;
 use std::time::Duration;
 use tracing::{debug, info};
+
+/// Environment variable carrying the data-port management token.
+pub const MANAGEMENT_TOKEN_ENV: &str = "MOCKFORGE_MANAGEMENT_TOKEN";
+
+/// Header the HTTP data port checks for the management token.
+pub const MANAGEMENT_TOKEN_HEADER: &str = "X-MockForge-Management-Token";
+
+/// Return `token` trimmed, or `None` when it is missing or blank.
+pub(crate) fn non_blank(token: Option<&str>) -> Option<String> {
+    token.map(str::trim).filter(|t| !t.is_empty()).map(str::to_owned)
+}
 
 /// Scenario manager for switching test scenarios
 pub struct ScenarioManager {
@@ -15,16 +27,43 @@ pub struct ScenarioManager {
 impl ScenarioManager {
     /// Create a new scenario manager
     ///
+    /// The management token is read from `MOCKFORGE_MANAGEMENT_TOKEN` when set; use
+    /// [`ScenarioManager::with_management_token`] to pass one explicitly.
+    ///
     /// # Arguments
     ///
     /// * `host` - Server host (e.g., "localhost")
     /// * `port` - Server port
     pub fn new(host: &str, port: u16) -> Self {
+        let token = non_blank(std::env::var(MANAGEMENT_TOKEN_ENV).ok().as_deref());
+        Self::with_management_token(host, port, token.as_deref())
+    }
+
+    /// Create a scenario manager that sends `token` as
+    /// `X-MockForge-Management-Token` on every control-plane request.
+    pub fn with_management_token(host: &str, port: u16, token: Option<&str>) -> Self {
+        let mut headers = HeaderMap::new();
+        if let Some(token) = non_blank(token) {
+            match HeaderValue::from_str(&token) {
+                Ok(mut value) => {
+                    value.set_sensitive(true);
+                    headers.insert(MANAGEMENT_TOKEN_HEADER, value);
+                }
+                Err(_) => {
+                    tracing::warn!(
+                        "{} is not a valid header value; control calls will be sent \
+                         without a management token",
+                        MANAGEMENT_TOKEN_ENV
+                    );
+                }
+            }
+        }
         Self {
             client: Client::builder()
                 .timeout(Duration::from_secs(10))
+                .default_headers(headers)
                 .build()
-                .expect("Failed to build HTTP client"),
+                .expect("reqwest client with a timeout and static headers always builds"),
             base_url: format!("http://{}:{}", host, port),
         }
     }
@@ -218,6 +257,57 @@ impl ScenarioBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Loopback stand-in for the data port: control routes demand `expected`.
+    fn spawn_control_plane(expected: &'static str) -> u16 {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0")
+            .expect("binding an ephemeral loopback port should succeed in tests");
+        let port = listener.local_addr().expect("bound listener has a local address").port();
+        std::thread::spawn(move || {
+            for mut socket in listener.incoming().flatten() {
+                let mut buf = vec![0u8; 8192];
+                let n = socket.read(&mut buf).unwrap_or(0);
+                let request = String::from_utf8_lossy(&buf[..n]).to_ascii_lowercase();
+                let wanted =
+                    format!("{}: {}\r\n", MANAGEMENT_TOKEN_HEADER, expected).to_ascii_lowercase();
+                let reply = if request.contains(&wanted) {
+                    "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\n\
+                     content-length: 2\r\nconnection: close\r\n\r\n{}"
+                } else {
+                    "HTTP/1.1 401 Unauthorized\r\ncontent-length: 0\r\n\
+                     connection: close\r\n\r\n"
+                };
+                let _ = socket.write_all(reply.as_bytes());
+            }
+        });
+        port
+    }
+
+    #[tokio::test]
+    async fn test_scenario_manager_sends_management_token() {
+        let port = spawn_control_plane("scenario-token");
+        let manager =
+            ScenarioManager::with_management_token("127.0.0.1", port, Some("scenario-token"));
+        manager.reset().await.expect("reset authorized");
+        let stats = manager.get_stats().await.expect("stats authorized");
+        assert_eq!(stats, serde_json::json!({}));
+    }
+
+    #[tokio::test]
+    async fn test_scenario_manager_without_token_is_rejected() {
+        let port = spawn_control_plane("scenario-token");
+        let manager = ScenarioManager::with_management_token("127.0.0.1", port, Some("  "));
+        let err = manager.reset().await.expect_err("401 without token");
+        assert!(err.to_string().contains("401"), "{err}");
+    }
+
+    #[test]
+    fn test_non_blank() {
+        assert_eq!(non_blank(None), None);
+        assert_eq!(non_blank(Some("  ")), None);
+        assert_eq!(non_blank(Some(" t ")), Some("t".to_string()));
+    }
 
     // ScenarioBuilder tests
     #[test]

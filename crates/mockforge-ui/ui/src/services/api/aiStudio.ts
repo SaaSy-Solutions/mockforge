@@ -19,6 +19,8 @@ export interface AiUsageMeta {
   tokens_used: number;
   /** Updated monthly counter, for the quota meter. */
   tokens_used_this_period: number;
+  /** Credits held by outstanding provider calls. Omitted by older servers. */
+  tokens_reserved_this_period?: number;
   /** Monthly platform-token limit. -1 means unlimited. */
   tokens_limit: number;
 }
@@ -181,6 +183,8 @@ export interface AiQuotaResponse {
   provider: 'byok' | 'platform' | 'disabled';
   /** Tokens used this billing period. */
   tokens_used_this_period: number;
+  /** Credits held by outstanding provider calls. Omitted by older servers. */
+  tokens_reserved_this_period?: number;
   /** Monthly platform-token limit. -1 means unlimited. */
   tokens_limit: number;
   /**
@@ -189,6 +193,8 @@ export interface AiQuotaResponse {
    * BYOK). Use to disable the send button / show an upgrade nudge.
    */
   call_allowed: boolean;
+  /** Actionable admission failure. Omitted by older servers. */
+  deny_reason?: string;
 }
 
 // --- service ----------------------------------------------------------------

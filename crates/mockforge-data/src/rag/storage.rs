@@ -12,6 +12,10 @@ use tokio::sync::RwLock;
 
 type VectorStore = Arc<RwLock<Vec<(String, Vec<f32>)>>>;
 
+/// Qdrant-backed persistent vector storage (requires the `qdrant` feature).
+#[cfg(feature = "qdrant")]
+pub mod qdrant;
+
 /// Vector index for similarity search
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VectorIndex {
@@ -692,9 +696,15 @@ impl StorageFactory {
 
         let provider = config.get("provider").map(|s| s.as_str()).unwrap_or("<unspecified>");
 
+        #[cfg(feature = "qdrant")]
+        if provider == "qdrant" {
+            return Ok(Box::new(qdrant::QdrantStorage::new(&config)?));
+        }
+
         Err(crate::Error::generic(format!(
             "vector-db backend '{provider}' not compiled in. \
-             Enable the `qdrant` or `lancedb` feature on mockforge-data, \
+             Enable the `qdrant` feature on mockforge-data for Qdrant \
+             (LanceDB is not implemented), \
              or use `create_file()` for persistent local storage."
         )))
     }
@@ -900,6 +910,7 @@ mod tests {
         assert_eq!(stats.backend_type, "database");
     }
 
+    #[cfg(not(feature = "qdrant"))]
     #[tokio::test]
     async fn test_create_vector_storage_errors_without_real_backend() {
         // After #669: vector-db requested without `qdrant`/`lancedb` feature

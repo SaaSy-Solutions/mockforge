@@ -6,21 +6,35 @@
 //! semantics; this module executes the same `ChainDefinition` config
 //! against whatever target URL the chain points at, in cloud mode.
 //!
-//! Triggered through `FlowExecutor` when:
-//!   * `kind == "chain"`
-//!   * `config.links` is a non-empty array
-//!
-//! Otherwise FlowExecutor falls back to its synthetic-pass mode so the
-//! UI still shows progress events for chains authored with no links yet.
-
+use async_trait::async_trait;
 use std::collections::HashMap;
 use std::time::Instant;
 
 use serde::Deserialize;
 
 use crate::callbacks::RegistryCallbacks;
-use crate::error::Result;
-use crate::executors::{JobOutcome, JobStatus, RunJob};
+use crate::error::{Error, Result};
+use crate::executors::{Executor, JobOutcome, JobStatus, RunJob};
+
+/// Executor for chain flows.
+pub struct ChainExecutor;
+
+#[async_trait]
+impl Executor for ChainExecutor {
+    fn kind(&self) -> &'static str {
+        "chain"
+    }
+
+    async fn execute(&self, job: RunJob, callbacks: &RegistryCallbacks) -> Result<JobOutcome> {
+        let config = job
+            .payload
+            .get("config")
+            .filter(|value| !value.is_null())
+            .cloned()
+            .unwrap_or_else(|| job.payload.clone());
+        run_chain(job, callbacks, Instant::now(), &config).await
+    }
+}
 
 /// One step in a chain. Mirrors the UI's `ChainLink` shape so cloud and
 /// self-hosted persist the same JSON.
@@ -59,13 +73,22 @@ pub async fn run_chain(
     started: Instant,
     config: &serde_json::Value,
 ) -> Result<JobOutcome> {
-    let links: Vec<ChainLinkConfig> = match config.get("links").and_then(|v| v.as_array()) {
-        Some(arr) => arr
-            .iter()
-            .filter_map(|v| serde_json::from_value::<ChainLinkConfig>(v.clone()).ok())
-            .collect(),
-        None => Vec::new(),
-    };
+    let link_values = config
+        .get("links")
+        .and_then(|value| value.as_array())
+        .filter(|links| !links.is_empty())
+        .ok_or_else(|| {
+            Error::Executor("chain requires at least one link in `config.links`".into())
+        })?;
+    let links: Vec<ChainLinkConfig> = link_values
+        .iter()
+        .enumerate()
+        .map(|(index, value)| {
+            serde_json::from_value(value.clone()).map_err(|error| {
+                Error::Executor(format!("chain link {} is invalid: {error}", index + 1))
+            })
+        })
+        .collect::<Result<_>>()?;
 
     let global_timeout = config
         .get("config")
@@ -188,6 +211,9 @@ pub async fn run_chain(
     let elapsed = started.elapsed();
     let secs = (elapsed.as_secs_f64().ceil() as i32).max(1);
     let total = succeeded + failed + errored;
+    if total == 0 {
+        return Err(Error::Executor("chain executed zero links".into()));
+    }
     let executed_count = total;
     let status = if failed == 0 && errored == 0 && total == links.len() as u32 {
         JobStatus::Passed
@@ -400,6 +426,42 @@ fn follow_indexes<'a>(
 mod tests {
     use super::*;
     use serde_json::json;
+
+    fn job() -> RunJob {
+        RunJob {
+            run_id: uuid::Uuid::new_v4(),
+            org_id: uuid::Uuid::new_v4(),
+            source_id: uuid::Uuid::new_v4(),
+            kind: "chain".to_string(),
+            payload: json!({}),
+        }
+    }
+
+    #[tokio::test]
+    async fn chain_with_no_links_is_an_executor_error() {
+        let callbacks = RegistryCallbacks::for_test();
+        let result = run_chain(job(), &callbacks, Instant::now(), &json!({"links": []})).await;
+        assert!(
+            matches!(result, Err(Error::Executor(ref message)) if message.contains("at least one link")),
+            "empty chain must error, got {result:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn malformed_chain_link_is_not_silently_dropped() {
+        let callbacks = RegistryCallbacks::for_test();
+        let result = run_chain(
+            job(),
+            &callbacks,
+            Instant::now(),
+            &json!({"links": [{"request": {"method": "GET"}}]}),
+        )
+        .await;
+        assert!(
+            matches!(result, Err(Error::Executor(ref message)) if message.contains("link 1") && message.contains("url")),
+            "malformed link must error with its index, got {result:?}"
+        );
+    }
 
     #[test]
     fn substitute_replaces_known_vars() {

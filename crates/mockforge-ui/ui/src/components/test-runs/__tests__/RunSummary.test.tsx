@@ -17,4 +17,10 @@ describe('Run summary presentation', () => {
     render(<RunSummary run={{ kind, summary: { executor_phase: 'real_bench' } }} />);
     expect(screen.getByText('Run summary')).toBeVisible();
   });
+  it('shows a runner error instead of an all-zero results widget', () => {
+    const error = 'chaos_campaign needs at least one fault in config.faults';
+    render(<RunSummary run={{ kind: 'chaos_campaign', summary: { error } }} />);
+    expect(screen.getByText('Run did not complete')).toBeVisible();
+    expect(screen.getByText(error)).toBeVisible();
+  });
 });

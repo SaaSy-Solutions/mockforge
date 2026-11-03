@@ -1,12 +1,10 @@
-# MockForge Python Remote Plugin SDK
-mockforge-plugin[fastapi]>=0.1.0
+# MockForge Python Remote Plugin SDK: not yet on PyPI. It is vendored as
+# mockforge_plugin.py (see README / Dockerfile); it needs FastAPI + uvicorn.
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
 
 # HTTP client for OAuth2 server communication
 requests>=2.31.0
-
-# Web framework (installed via mockforge-plugin[fastapi])
-# fastapi>=0.104.0
-# uvicorn[standard]>=0.24.0
 
 # Optional: Enhanced logging
 python-json-logger>=2.0.0

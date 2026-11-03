@@ -94,29 +94,16 @@ export async function loginAsAdmin(page: Page): Promise<void> {
     // Not logged in, continue
   }
 
-  // Look for "Demo Admin" button first (fastest way)
-  const demoAdminButton = page.locator('button:has-text("Demo Admin")');
-  try {
-    if (await demoAdminButton.isVisible({ timeout: 2000 })) {
-      await demoAdminButton.click();
-      // Wait for login to complete (with shorter timeout)
-      await page.waitForSelector('#main-navigation', { timeout: 8000, state: 'attached' });
-      await page.waitForTimeout(500); // Brief wait for React
-      return;
-    }
-  } catch {
-    // Demo button not found, try form instead
-  }
-
-  // Fallback: fill in login form
+  // Fill in the login form. There are no built-in users (#1016): start the
+  // server with MOCKFORGE_ADMIN_PASSWORD and pass the same value here.
   try {
     const usernameInput = page.locator('input[type="text"], input[name="username"], input[placeholder*="username" i]').first();
     const passwordInput = page.locator('input[type="password"], input[name="password"]').first();
     const signInButton = page.locator('button:has-text("Sign In"), button[type="submit"]').first();
 
     if (await usernameInput.isVisible({ timeout: 2000 })) {
-      await usernameInput.fill('admin');
-      await passwordInput.fill('admin123');
+      await usernameInput.fill(process.env.MOCKFORGE_ADMIN_USERNAME ?? 'admin');
+      await passwordInput.fill(process.env.MOCKFORGE_ADMIN_PASSWORD ?? '');
       await signInButton.click();
       // Wait for login to complete
       await page.waitForSelector('#main-navigation', { timeout: 8000, state: 'attached' });

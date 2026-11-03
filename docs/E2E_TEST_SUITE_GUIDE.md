@@ -16,20 +16,20 @@ Complete guide for creating an end-to-end test suite covering all protocols and 
 
 ## Overview
 
-The E2E test suite validates complete workflows across all MockForge protocols and SDKs, ensuring end-to-end functionality from client to server.
+This document describes coverage goals and example layouts; it is not a claim that every example is implemented or verified. The implemented Rust protocol test tree is `tests/tests/e2e/`, mounted by `tests/tests/e2e.rs`. See [the test README](../tests/README.md) for commands and binary selection.
 
 ### Test Coverage Goals
 
-- ✅ **All Protocols**: HTTP, gRPC, WebSocket, GraphQL, Kafka, MQTT, AMQP, SMTP, FTP, TCP
-- ✅ **All SDKs**: Node.js, Python, Go, Java, .NET, Rust
-- ✅ **Cross-Protocol**: Protocol interactions and conversions
-- ✅ **Real-World Scenarios**: Common use cases and workflows
+- **All Protocols**: HTTP, gRPC, WebSocket, GraphQL, Kafka, MQTT, AMQP, SMTP, FTP, TCP
+- **All SDKs**: Node.js, Python, Go, Java, .NET, Rust
+- **Cross-Protocol**: Protocol interactions and conversions
+- **Real-World Scenarios**: Common use cases and workflows
 
 ---
 
 ## Test Architecture
 
-### Test Structure
+### Proposed Test Structure
 
 ```
 tests/e2e/
@@ -728,11 +728,11 @@ jobs:
 
 The E2E test suite provides:
 
-- ✅ **Protocol Coverage**: All 10+ protocols
-- ✅ **SDK Coverage**: All 6 SDKs
-- ✅ **Cross-Protocol**: Integration tests
-- ✅ **Real-World Scenarios**: Common use cases
-- ✅ **CI/CD Integration**: Automated testing
+- **Protocol Coverage**: All 10+ protocols
+- **SDK Coverage**: All 6 SDKs
+- **Cross-Protocol**: Integration tests
+- **Real-World Scenarios**: Common use cases
+- **CI/CD Integration**: Automated testing
 
 **Status**: Infrastructure exists, comprehensive test coverage needed
 

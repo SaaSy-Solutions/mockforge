@@ -26,7 +26,7 @@ class MockForgeLineMarkerProvider : LineMarkerProvider {
             com.intellij.icons.AllIcons.General.Information,
             { "MockForge: ${endpoint.method} ${endpoint.path}" },
             { _, _ -> showMockPreview(element.project, endpoint) },
-            com.intellij.codeInsight.daemon.GutterIconRenderer.Alignment.LEFT
+            com.intellij.openapi.editor.markup.GutterIconRenderer.Alignment.LEFT
         )
     }
 

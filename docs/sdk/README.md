@@ -7,7 +7,7 @@ MockForge provides SDKs for multiple languages to integrate with your testing wo
 | SDK | Use Case | Installation |
 |-----|----------|--------------|
 | [Node.js](./nodejs.md) | Embed mock servers in JS/TS tests | `npm install @mockforge-dev/sdk` |
-| [Python](./python.md) | Build remote plugins | `pip install mockforge-plugin` |
+| [Python](./python.md) | Build remote plugins | Vendor `sdk/python/mockforge_plugin/sdk.py` (not on PyPI; see [guide](./python.md#installation)) |
 | [Go](./go.md) | Build WASM plugins with TinyGo | `go get github.com/mockforge/sdk/go` |
 | [.NET](./dotnet.md) | Embed in C# tests | `dotnet add package MockForge.Sdk` |
 

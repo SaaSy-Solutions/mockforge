@@ -29,7 +29,6 @@ use mockforge_registry_core::models::test_run::EnqueueTestRun;
 
 use crate::{
     error::{ApiError, ApiResult},
-    handlers::usage::effective_limits,
     middleware::{resolve_org_context, AuthUser},
     models::{CaptureSession, CloneModel, CloudWorkspace, TestRun},
     store::with_org_context,
@@ -172,93 +171,26 @@ pub struct TrainCloneRequest {
 
 /// `POST /api/v1/capture-sessions/{id}/train`
 ///
-/// Creates the clone_models row in `training` state AND enqueues a
-/// `behavioral_clone` test_run so the worker actually picks it up. The
-/// CloneTrainExecutor reports back via internal callbacks (status flips
-/// to terminal, runner_seconds metered).
+/// Behavioral clone training remains unavailable until a real trainer is
+/// connected to this route.
 pub async fn train_clone_from_session(
     State(state): State<AppState>,
     AuthUser(user_id): AuthUser,
     Path(session_id): Path<Uuid>,
     headers: HeaderMap,
-    Json(request): Json<TrainCloneRequest>,
+    Json(_request): Json<TrainCloneRequest>,
 ) -> ApiResult<Json<CloneModel>> {
-    let (session, org_id) =
-        load_authorized_session_with_org(&state, user_id, &headers, session_id).await?;
-    if request.name.trim().is_empty() {
-        return Err(ApiError::InvalidRequest("name must not be empty".into()));
-    }
-
-    let limits = effective_limits(&state, &load_org(&state, org_id).await?).await?;
-    let max_clones = limits.get("max_clone_models").and_then(|v| v.as_i64()).unwrap_or(0);
-    if max_clones == 0 {
-        return Err(ApiError::ResourceLimitExceeded(
-            "Behavioral cloning is not enabled on this plan".into(),
-        ));
-    }
-
-    let (workspace_id, sid) = (session.workspace_id, session.id);
-    let name = request.name.clone();
-    let (row, run) = with_org_context(state.db.runtime_pool(), org_id, |tx| {
-        Box::pin(async move {
-            let row =
-                CloneModel::create_training(&mut **tx, org_id, workspace_id, Some(sid), &name)
-                    .await?;
-            let run = TestRun::enqueue(
-                &mut **tx,
-                EnqueueTestRun {
-                    suite_id: row.id,
-                    org_id,
-                    kind: "behavioral_clone",
-                    triggered_by: "manual",
-                    triggered_by_user: Some(user_id),
-                    git_ref: None,
-                    git_sha: None,
-                },
-            )
-            .await?;
-            Ok((row, run))
-        })
-    })
-    .await?;
-
-    if let Err(e) = crate::run_queue::enqueue(
-        state.redis.as_ref(),
-        crate::run_queue::EnqueuedJob {
-            run_id: run.id,
-            org_id: run.org_id,
-            source_id: row.id,
-            kind: "behavioral_clone",
-            payload: serde_json::json!({
-                "session_id": session.id,
-                "clone_model_id": row.id,
-                "name": request.name,
-            }),
-        },
-    )
-    .await
-    {
-        tracing::error!(run_id = %run.id, error = %e, "failed to enqueue behavioral_clone run");
-    }
-
-    Ok(Json(row))
+    load_authorized_session_with_org(&state, user_id, &headers, session_id).await?;
+    Err(ApiError::InvalidRequest("behavioral clone training isn't available yet".into()))
 }
 
 /// `POST /api/v1/capture-sessions/{id}/replay`
 ///
-/// Triggers a synthetic replay of the capture session against a target.
-/// Reuses the test_runs lifecycle with kind='replay'. The runner-side
-/// ReplayExecutor synthesizes per-capture events until real impl
-/// (real HTTP replay against `target_url`) lands.
+/// Replays the capture session against a required target URL.
 #[derive(Debug, Deserialize)]
 pub struct ReplaySessionRequest {
     #[serde(default)]
     pub target_url: Option<String>,
-    /// How many synthetic captures the executor should pretend to replay.
-    /// Optional — defaults to 5 on the runner side. Ignored once real
-    /// replay lands.
-    #[serde(default)]
-    pub synthetic_captures: Option<u32>,
 }
 
 pub async fn replay_capture_session(
@@ -270,6 +202,13 @@ pub async fn replay_capture_session(
 ) -> ApiResult<Json<TestRun>> {
     let (session, org_id) =
         load_authorized_session_with_org(&state, user_id, &headers, session_id).await?;
+    let target_url = request
+        .target_url
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| ApiError::InvalidRequest("target_url must not be empty".into()))?
+        .to_string();
 
     let sid = session.id;
     let run = with_org_context(state.db.runtime_pool(), org_id, |tx| {
@@ -291,14 +230,10 @@ pub async fn replay_capture_session(
     })
     .await?;
 
-    let mut payload = serde_json::Map::new();
-    payload.insert("session_id".into(), serde_json::json!(session.id));
-    if let Some(url) = request.target_url.as_deref() {
-        payload.insert("target_url".into(), serde_json::Value::String(url.to_string()));
-    }
-    if let Some(n) = request.synthetic_captures {
-        payload.insert("synthetic_captures".into(), serde_json::json!(n));
-    }
+    let payload = serde_json::json!({
+        "session_id": session.id,
+        "target_url": target_url,
+    });
 
     if let Err(e) = crate::run_queue::enqueue(
         state.redis.as_ref(),
@@ -307,7 +242,7 @@ pub async fn replay_capture_session(
             org_id: run.org_id,
             source_id: session.id,
             kind: "replay",
-            payload: serde_json::Value::Object(payload),
+            payload,
         },
     )
     .await
@@ -471,15 +406,4 @@ async fn load_authorized_clone(
         .await
         .map_err(|e| as_not_found(e, "Clone model not found"))?;
     Ok((model, org_id))
-}
-
-async fn load_org(
-    state: &AppState,
-    org_id: Uuid,
-) -> ApiResult<mockforge_registry_core::models::Organization> {
-    use mockforge_registry_core::models::Organization;
-    Organization::find_by_id(state.db.pool(), org_id)
-        .await
-        .map_err(|_| ApiError::Internal(anyhow::anyhow!("DB error loading org")))?
-        .ok_or_else(|| ApiError::InvalidRequest("Organization not found".into()))
 }

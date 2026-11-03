@@ -7,15 +7,16 @@ use axum::{
     extract::{Json, Query, State},
     http::StatusCode,
     response::Json as ResponseJson,
+    Extension,
 };
 use json_patch::{patch, Patch};
 use jsonptr::PointerBuf;
 use mockforge_core::ai_studio::{
-    get_conversation_store, initialize_conversation_store, ArtifactFreezer, BudgetConfig,
-    BudgetManager, ChatContext, ChatMessage, ChatOrchestrator, ChatRequest, ChatResponse,
-    ContractDiffHandler, ContractDiffQueryResult, DebugAnalyzer, DebugContextIntegrator,
-    DebugRequest, DebugResponse, FreezeRequest, FrozenArtifact, MockGenerator, OrgAiControlsConfig,
-    OrgControls, PersonaGenerationRequest, PersonaGenerationResponse, PersonaGenerator, UsageStats,
+    ArtifactFreezer, BudgetConfig, BudgetManager, ChatContext, ChatMessage, ChatOrchestrator,
+    ChatRequest, ChatResponse, ContractDiffHandler, ContractDiffQueryResult, DebugAnalyzer,
+    DebugContextIntegrator, DebugRequest, DebugResponse, FreezeRequest, FrozenArtifact,
+    MockGenerator, OrgAiControlsConfig, OrgControls, PersonaGenerationRequest,
+    PersonaGenerationResponse, PersonaGenerator, UsageStats,
 };
 use mockforge_foundation::intelligent_behavior::IntelligentBehaviorConfig;
 use serde::{Deserialize, Serialize};
@@ -24,7 +25,9 @@ use std::collections::HashMap;
 
 use crate::handlers::AdminState;
 use crate::models::ApiResponse;
-use mockforge_core::ai_studio::config::DeterministicModeConfig;
+
+mod policy;
+pub use policy::AiAuthoringDefaults;
 
 /// Request for chat interaction
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,23 +46,21 @@ pub struct ChatRequestPayload {
 ///
 /// POST /api/v1/ai-studio/chat
 pub async fn chat(
+    State(state): State<AdminState>,
+    defaults: Option<Extension<AiAuthoringDefaults>>,
     Json(request): Json<ChatRequestPayload>,
 ) -> Result<ResponseJson<ApiResponse<ChatResponse>>, StatusCode> {
     if request.message.trim().is_empty() {
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    // Create orchestrator with default config
-    let config = IntelligentBehaviorConfig::default();
-    let orchestrator = ChatOrchestrator::new(config);
-
     // Initialize conversation store if not already done
     // Note: In production, this should be done at application startup
-    let _ = initialize_conversation_store().await;
+    let _ = state.ai_conversations.initialize().await;
 
     // Load conversation context if conversation_id provided
     let context = if let Some(conv_id) = &request.conversation_id {
-        let store = get_conversation_store();
+        let store = &state.ai_conversations;
         match store.get_context(conv_id).await {
             Ok(Some(ctx)) => Some(ctx),
             Ok(None) => {
@@ -81,11 +82,30 @@ pub async fn chat(
         None
     };
 
+    let context_workspace = context.as_ref().and_then(|context| context.workspace_id.as_ref());
+    if request
+        .workspace_id
+        .as_ref()
+        .zip(context_workspace)
+        .is_some_and(|(requested, recorded)| requested != recorded)
+    {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    let workspace_id = request.workspace_id.clone().or_else(|| context_workspace.cloned());
+    let settings = policy::resolve(
+        &state,
+        workspace_id.as_deref(),
+        defaults.as_ref().map(|Extension(defaults)| defaults),
+    )
+    .await?;
+    let orchestrator = ChatOrchestrator::new(settings.behavior)
+        .with_generation_policy(settings.mode, settings.deterministic);
+
     // Build chat request
     let chat_request = ChatRequest {
         message: request.message.clone(),
         context,
-        workspace_id: request.workspace_id.clone(),
+        workspace_id: workspace_id.clone(),
         org_id: None,
         user_id: None,
     };
@@ -95,7 +115,7 @@ pub async fn chat(
 
     // Save conversation history if conversation_id provided
     if let Some(conv_id) = &request.conversation_id {
-        let store = get_conversation_store();
+        let store = &state.ai_conversations;
 
         // Add user message to conversation
         let user_message = ChatMessage {
@@ -114,8 +134,8 @@ pub async fn chat(
         }
     } else {
         // Create new conversation if none specified
-        let store = get_conversation_store();
-        if let Ok(conv_id) = store.create_conversation(request.workspace_id.clone()).await {
+        let store = &state.ai_conversations;
+        if let Ok(conv_id) = store.create_conversation(workspace_id).await {
             // Add messages to new conversation
             let user_message = ChatMessage {
                 role: "user".to_string(),
@@ -165,50 +185,27 @@ pub struct GenerateMockResponse {
 /// POST /api/v1/ai-studio/generate-mock
 pub async fn generate_mock(
     State(state): State<AdminState>,
+    defaults: Option<Extension<AiAuthoringDefaults>>,
     Json(request): Json<GenerateMockRequest>,
 ) -> Result<ResponseJson<ApiResponse<GenerateMockResponse>>, StatusCode> {
     if request.description.trim().is_empty() {
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    let generator = MockGenerator::new();
-
-    // Get workspace config to check ai_mode and deterministic config
-    let ai_mode = if let Some(workspace_id) = &request.workspace_id {
-        // Try to load workspace to get ai_mode
-        if let Ok(workspace) = state.workspace_persistence.load_workspace(workspace_id).await {
-            workspace.config.ai_mode
-        } else {
-            None // Default to live mode if workspace not found
-        }
-    } else {
-        None // Default to live mode if no workspace_id provided
-    };
-    // Fall back to the server-wide default when the workspace doesn't override.
-    let ai_mode = match ai_mode {
-        Some(m) => Some(m),
-        None => state.ai_mode_default().await,
-    };
-
-    // Get deterministic config from workspace if available
-    let deterministic_config = if let Some(workspace_id) = &request.workspace_id {
-        if let Ok(_workspace) = state.workspace_persistence.load_workspace(workspace_id).await {
-            // Check if workspace has deterministic mode config
-            // For now, use default config - in production this would come from workspace config
-            Some(DeterministicModeConfig::default())
-        } else {
-            None
-        }
-    } else {
-        None
-    };
+    let settings = policy::resolve(
+        &state,
+        request.workspace_id.as_deref(),
+        defaults.as_ref().map(|Extension(defaults)| defaults),
+    )
+    .await?;
+    let generator = MockGenerator::with_config(settings.behavior);
 
     match generator
         .generate(
             &request.description,
             request.workspace_id.as_deref(),
-            ai_mode,
-            deterministic_config.as_ref(),
+            settings.mode,
+            settings.deterministic.as_ref(),
         )
         .await
     {
@@ -240,13 +237,21 @@ pub struct DebugTestRequest {
 ///
 /// POST /api/v1/ai-studio/debug-test
 pub async fn debug_test(
+    State(state): State<AdminState>,
+    defaults: Option<Extension<AiAuthoringDefaults>>,
     Json(request): Json<DebugTestRequest>,
 ) -> Result<ResponseJson<ApiResponse<DebugResponse>>, StatusCode> {
     if request.test_logs.trim().is_empty() {
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    let analyzer = DebugAnalyzer::new();
+    let settings = policy::resolve(
+        &state,
+        request.workspace_id.as_deref(),
+        defaults.as_ref().map(|Extension(defaults)| defaults),
+    )
+    .await?;
+    let analyzer = DebugAnalyzer::with_config(settings.behavior);
 
     let debug_request = DebugRequest {
         test_logs: request.test_logs,
@@ -283,13 +288,21 @@ pub struct DebugWithContextRequest {
 ///
 /// POST /api/v1/ai-studio/debug/analyze-with-context
 pub async fn debug_analyze_with_context(
+    State(state): State<AdminState>,
+    defaults: Option<Extension<AiAuthoringDefaults>>,
     Json(request): Json<DebugWithContextRequest>,
 ) -> Result<ResponseJson<ApiResponse<DebugResponse>>, StatusCode> {
     if request.test_logs.trim().is_empty() {
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    let analyzer = DebugAnalyzer::new();
+    let settings = policy::resolve(
+        &state,
+        request.workspace_id.as_deref(),
+        defaults.as_ref().map(|Extension(defaults)| defaults),
+    )
+    .await?;
+    let analyzer = DebugAnalyzer::with_config(settings.behavior);
 
     // Create debug context integrator (optional - would need subsystem references in production)
     // For now, pass None as we don't have direct access to RealityEngine, etc. here
@@ -329,13 +342,20 @@ pub struct GeneratePersonaRequest {
 /// POST /api/v1/ai-studio/generate-persona
 pub async fn generate_persona(
     State(state): State<AdminState>,
+    defaults: Option<Extension<AiAuthoringDefaults>>,
     Json(request): Json<GeneratePersonaRequest>,
 ) -> Result<ResponseJson<ApiResponse<PersonaGenerationResponse>>, StatusCode> {
     if request.description.trim().is_empty() {
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    let generator = PersonaGenerator::new();
+    let settings = policy::resolve(
+        &state,
+        request.workspace_id.as_deref(),
+        defaults.as_ref().map(|Extension(defaults)| defaults),
+    )
+    .await?;
+    let generator = PersonaGenerator::with_config(settings.behavior);
 
     let persona_request = PersonaGenerationRequest {
         description: request.description.clone(),
@@ -343,34 +363,8 @@ pub async fn generate_persona(
         workspace_id: request.workspace_id.clone(),
     };
 
-    // Get workspace config to check ai_mode and deterministic config
-    let ai_mode = if let Some(workspace_id) = &request.workspace_id {
-        if let Ok(workspace) = state.workspace_persistence.load_workspace(workspace_id).await {
-            workspace.config.ai_mode
-        } else {
-            None
-        }
-    } else {
-        None
-    };
-    // Fall back to the server-wide default when the workspace doesn't override.
-    let ai_mode = match ai_mode {
-        Some(m) => Some(m),
-        None => state.ai_mode_default().await,
-    };
-
-    let deterministic_config = if let Some(workspace_id) = &request.workspace_id {
-        if let Ok(_workspace) = state.workspace_persistence.load_workspace(workspace_id).await {
-            Some(DeterministicModeConfig::default())
-        } else {
-            None
-        }
-    } else {
-        None
-    };
-
     match generator
-        .generate(&persona_request, ai_mode, deterministic_config.as_ref())
+        .generate(&persona_request, settings.mode, settings.deterministic.as_ref())
         .await
     {
         Ok(response) => Ok(ResponseJson(ApiResponse::success(response))),
@@ -856,3 +850,6 @@ pub async fn contract_diff_query(
         )))),
     }
 }
+
+#[cfg(test)]
+mod workspace_policy_tests;

@@ -171,6 +171,11 @@
           "default": "http://localhost:3000",
           "description": "MockForge server URL"
         },
+        "mockforge.managementToken": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Management token sent as `X-MockForge-Management-Token` on control-plane requests (must match the server's `MOCKFORGE_MANAGEMENT_TOKEN`). Also passed to `mockforge serve` started from the extension. Stored as a plain setting."
+        },
         "mockforge.autoConnect": {
           "type": "boolean",
           "default": true,
@@ -242,6 +247,7 @@
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
+    "@types/mocha": "^10.0.10",
     "@types/node": "^20.10.0",
     "@types/vscode": "^1.85.0",
     "@types/ws": "^8.5.10",
@@ -250,6 +256,7 @@
     "@vscode/test-electron": "^2.3.8",
     "@vscode/vsce": "^2.22.0",
     "eslint": "^8.54.0",
+    "mocha": "^10.8.2",
     "typescript": "^5.3.2"
   }
 }

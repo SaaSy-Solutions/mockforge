@@ -26,8 +26,26 @@ class MockForgeClientService(private val project: Project) {
     private var serverUrl: String = "http://localhost:3000"
     private var isConnected: Boolean = false
 
+    // Control-plane credential; defaults to the MOCKFORGE_MANAGEMENT_TOKEN env var
+    // (the plugin has no settings page yet).
+    private var managementToken: String = System.getenv(MANAGEMENT_TOKEN_ENV).orEmpty()
+
     companion object {
+        const val MANAGEMENT_TOKEN_HEADER = "X-MockForge-Management-Token"
+        const val MANAGEMENT_TOKEN_ENV = "MOCKFORGE_MANAGEMENT_TOKEN"
+
         fun getInstance(project: Project): MockForgeClientService = project.service()
+
+        /**
+         * Build a control-plane request, attaching the management token when set.
+         */
+        fun controlPlaneRequest(url: String, managementToken: String): Request {
+            val builder = Request.Builder().url(url).get()
+            if (managementToken.isNotBlank()) {
+                builder.header(MANAGEMENT_TOKEN_HEADER, managementToken)
+            }
+            return builder.build()
+        }
     }
 
     /**
@@ -35,6 +53,14 @@ class MockForgeClientService(private val project: Project) {
      */
     fun setServerUrl(url: String) {
         this.serverUrl = url
+        this.isConnected = false
+    }
+
+    /**
+     * Set the management token sent as X-MockForge-Management-Token
+     */
+    fun setManagementToken(token: String) {
+        this.managementToken = token
         this.isConnected = false
     }
 
@@ -70,13 +96,11 @@ class MockForgeClientService(private val project: Project) {
      */
     fun checkConnection(): Boolean {
         return try {
-            val request = Request.Builder()
-                .url("$serverUrl/__mockforge/api/stats")
-                .get()
-                .build()
+            val request = controlPlaneRequest("$serverUrl/__mockforge/api/stats", managementToken)
 
-            val response = client.newCall(request).execute()
-            isConnected = response.isSuccessful
+            client.newCall(request).execute().use { response ->
+                isConnected = response.isSuccessful
+            }
             isConnected
         } catch (e: Exception) {
             isConnected = false

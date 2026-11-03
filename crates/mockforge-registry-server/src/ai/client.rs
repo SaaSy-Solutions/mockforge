@@ -40,7 +40,7 @@ pub struct LlmResult {
 
 impl LlmResult {
     pub fn total_tokens(&self) -> u64 {
-        self.prompt_tokens + self.completion_tokens
+        self.prompt_tokens.saturating_add(self.completion_tokens)
     }
 }
 
@@ -54,6 +54,39 @@ pub async fn call_llm(call: LlmCall) -> ApiResult<LlmResult> {
         // implement this shape.
         _ => call_openai_compatible(call).await,
     }
+}
+
+fn provider_client() -> ApiResult<reqwest::Client> {
+    reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(90))
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .map_err(|_| ApiError::Internal(anyhow::anyhow!("LLM client unavailable")))
+}
+
+async fn bounded_json<T: serde::de::DeserializeOwned>(
+    mut response: reqwest::Response,
+) -> ApiResult<T> {
+    const MAX_BYTES: usize = 2 * 1024 * 1024;
+    if response.content_length().is_some_and(|size| size > MAX_BYTES as u64) {
+        return Err(ApiError::Internal(anyhow::anyhow!(
+            "LLM response exceeds 2 MiB; usage is unknown"
+        )));
+    }
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response.chunk().await.map_err(|_| {
+        ApiError::Internal(anyhow::anyhow!("LLM response interrupted; usage is unknown"))
+    })? {
+        if bytes.len().saturating_add(chunk.len()) > MAX_BYTES {
+            return Err(ApiError::Internal(anyhow::anyhow!(
+                "LLM response exceeds 2 MiB; usage is unknown"
+            )));
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    serde_json::from_slice(&bytes)
+        .map_err(|_| ApiError::Internal(anyhow::anyhow!("LLM response or usage is invalid")))
 }
 
 #[derive(Serialize)]
@@ -73,7 +106,6 @@ struct OpenAiMessage<'a> {
 #[derive(Deserialize)]
 struct OpenAiResponse {
     choices: Vec<OpenAiChoice>,
-    #[serde(default)]
     usage: OpenAiUsage,
 }
 
@@ -89,9 +121,7 @@ struct OpenAiResponseMessage {
 
 #[derive(Deserialize, Default)]
 struct OpenAiUsage {
-    #[serde(default)]
     prompt_tokens: u64,
-    #[serde(default)]
     completion_tokens: u64,
 }
 
@@ -119,7 +149,7 @@ async fn call_openai_compatible(call: LlmCall) -> ApiResult<LlmResult> {
         max_tokens: call.max_tokens,
     };
 
-    let resp = reqwest::Client::new()
+    let resp = provider_client()?
         .post(&url)
         .bearer_auth(&call.api_key)
         .json(&body)
@@ -129,14 +159,12 @@ async fn call_openai_compatible(call: LlmCall) -> ApiResult<LlmResult> {
 
     if !resp.status().is_success() {
         let status = resp.status();
-        let text = resp.text().await.unwrap_or_default();
-        return Err(ApiError::Internal(anyhow::anyhow!("LLM provider returned {status}: {text}")));
+        return Err(ApiError::Internal(anyhow::anyhow!(
+            "LLM provider returned {status}; usage is unknown"
+        )));
     }
 
-    let parsed: OpenAiResponse = resp
-        .json()
-        .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("LLM response parse error: {e}")))?;
+    let parsed: OpenAiResponse = bounded_json(resp).await?;
 
     let content = parsed
         .choices
@@ -170,7 +198,6 @@ struct AnthropicMessage<'a> {
 #[derive(Deserialize)]
 struct AnthropicResponse {
     content: Vec<AnthropicContentBlock>,
-    #[serde(default)]
     usage: AnthropicUsage,
 }
 
@@ -184,9 +211,7 @@ struct AnthropicContentBlock {
 
 #[derive(Deserialize, Default)]
 struct AnthropicUsage {
-    #[serde(default)]
     input_tokens: u64,
-    #[serde(default)]
     output_tokens: u64,
 }
 
@@ -209,7 +234,7 @@ async fn call_anthropic(call: LlmCall) -> ApiResult<LlmResult> {
         temperature: call.temperature,
     };
 
-    let resp = reqwest::Client::new()
+    let resp = provider_client()?
         .post(&url)
         .header("x-api-key", &call.api_key)
         .header("anthropic-version", "2023-06-01")
@@ -220,14 +245,12 @@ async fn call_anthropic(call: LlmCall) -> ApiResult<LlmResult> {
 
     if !resp.status().is_success() {
         let status = resp.status();
-        let text = resp.text().await.unwrap_or_default();
-        return Err(ApiError::Internal(anyhow::anyhow!("LLM provider returned {status}: {text}")));
+        return Err(ApiError::Internal(anyhow::anyhow!(
+            "LLM provider returned {status}; usage is unknown"
+        )));
     }
 
-    let parsed: AnthropicResponse = resp
-        .json()
-        .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("LLM response parse error: {e}")))?;
+    let parsed: AnthropicResponse = bounded_json(resp).await?;
 
     let content = parsed
         .content

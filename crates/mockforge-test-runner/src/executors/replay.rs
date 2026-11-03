@@ -7,16 +7,11 @@
 //! match/mismatch events. The match check compares actual response
 //! status code against the recorded one.
 //!
-//! Synthetic mode: when `target_url` is missing the executor falls back
-//! to emitting `request_replayed` events with `matched=true` for the
-//! configured `synthetic_captures` count. Useful when the operator just
-//! wants to exercise the runner pipeline without an upstream service.
-
 use async_trait::async_trait;
 use std::time::Instant;
 
 use crate::callbacks::{CaptureExchange, RegistryCallbacks};
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::executors::{Executor, JobOutcome, JobStatus, RunJob};
 
 /// Executor for capture-session replay.
@@ -29,25 +24,24 @@ impl Executor for ReplayExecutor {
     }
 
     async fn execute(&self, job: RunJob, callbacks: &RegistryCallbacks) -> Result<JobOutcome> {
-        let started = Instant::now();
-        callbacks.run_started(job.run_id).await?;
-
-        let target_url = job.payload.get("target_url").and_then(|v| v.as_str()).map(String::from);
+        let target_url = job
+            .payload
+            .get("target_url")
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+            .ok_or_else(|| Error::Executor("replay requires non-empty `target_url`".to_string()))?;
         let session_id = job
             .payload
             .get("session_id")
             .and_then(|v| v.as_str())
-            .and_then(|s| uuid::Uuid::parse_str(s).ok());
+            .and_then(|s| uuid::Uuid::parse_str(s).ok())
+            .ok_or_else(|| Error::Executor("replay requires a valid `session_id`".to_string()))?;
 
-        // Real mode requires both a target_url and a session_id we can
-        // ask the registry about. If either's missing we degrade to
-        // synthetic so a curl-driven test still produces sensible
-        // events.
-        if let (Some(target_url), Some(session_id)) = (target_url.as_deref(), session_id) {
-            return run_real_replay(job, callbacks, started, target_url, session_id).await;
-        }
-
-        run_synthetic(job, callbacks, started).await
+        let started = Instant::now();
+        callbacks.run_started(job.run_id).await?;
+        run_real_replay(job, callbacks, started, &target_url, session_id).await
     }
 }
 
@@ -68,46 +62,21 @@ async fn run_real_replay(
                 "message": format!(
                     "Real replay against {target_url} (session {session_id})",
                 ),
-                "synthetic": false,
                 "tracking_task": 6,
             }),
         )
         .await?;
 
-    let exchanges = match callbacks.fetch_capture_exchanges(session_id).await {
-        Ok(rows) => rows,
-        Err(e) => {
-            // Fetch failure is not fatal — emit an error log + fall back
-            // to synthetic so the run still produces a coherent outcome.
-            tracing::warn!(error = %e, %session_id, "fetch_capture_exchanges failed; falling back to synthetic");
-            callbacks
-                .run_event(
-                    job.run_id,
-                    2,
-                    "log",
-                    serde_json::json!({
-                        "level": "warn",
-                        "message": format!("fetch_capture_exchanges failed: {e}; falling back to synthetic"),
-                    }),
-                )
-                .await?;
-            return run_synthetic(job, callbacks, started).await;
-        }
-    };
+    let exchanges = callbacks.fetch_capture_exchanges(session_id).await.map_err(|error| {
+        Error::Executor(format!(
+            "replay failed to fetch captured exchanges for session {session_id}: {error}"
+        ))
+    })?;
 
     if exchanges.is_empty() {
-        callbacks
-            .run_event(
-                job.run_id,
-                2,
-                "log",
-                serde_json::json!({
-                    "level": "warn",
-                    "message": "session has no captured exchanges; falling back to synthetic",
-                }),
-            )
-            .await?;
-        return run_synthetic(job, callbacks, started).await;
+        return Err(Error::Executor(format!(
+            "replay session {session_id} has no captured exchanges"
+        )));
     }
 
     let client = crate::target_client::TargetClient::new(
@@ -311,61 +280,74 @@ async fn replay_one(
     }
 }
 
-/// Synthetic fallback — same shape as before for callers that don't
-/// supply a target_url or session_id.
-async fn run_synthetic(
-    job: RunJob,
-    callbacks: &RegistryCallbacks,
-    started: Instant,
-) -> Result<JobOutcome> {
-    let captures = job
-        .payload
-        .get("synthetic_captures")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(5)
-        .clamp(1, 200) as u32;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    callbacks
-        .run_event(
-            job.run_id,
-            1,
-            "log",
-            serde_json::json!({
-                "level": "info",
-                "message": format!("Synthetic replay: {} captures", captures),
-                "synthetic": true,
-                "tracking_task": 6,
-            }),
-        )
-        .await?;
-
-    let mut next_seq: u32 = 2;
-    let mut matched = 0u32;
-    for i in 1..=captures {
-        matched += 1;
-        callbacks
-            .run_event(
-                job.run_id,
-                next_seq,
-                "request_replayed",
-                serde_json::json!({ "index": i, "matched": true }),
-            )
-            .await?;
-        next_seq += 1;
-        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    fn job(payload: serde_json::Value) -> RunJob {
+        RunJob {
+            run_id: uuid::Uuid::new_v4(),
+            org_id: uuid::Uuid::new_v4(),
+            source_id: uuid::Uuid::new_v4(),
+            kind: "replay".to_string(),
+            payload,
+        }
     }
 
-    let elapsed = started.elapsed();
-    let secs = (elapsed.as_secs_f64().ceil() as i32).max(1);
-    Ok(JobOutcome {
-        status: JobStatus::Passed,
-        runner_seconds: secs,
-        summary: Some(serde_json::json!({
-            "executor_phase": "synthetic",
-            "tracking_task": 6,
-            "captures_replayed": captures,
-            "matched": matched,
-            "wall_ms": elapsed.as_millis() as u64,
-        })),
-    })
+    #[tokio::test]
+    async fn missing_target_or_session_is_an_executor_error() {
+        let callbacks = RegistryCallbacks::for_test();
+        for (payload, expected) in [
+            (
+                serde_json::json!({"session_id": uuid::Uuid::new_v4()}),
+                "replay requires non-empty `target_url`",
+            ),
+            (
+                serde_json::json!({"target_url": "https://example.com"}),
+                "replay requires a valid `session_id`",
+            ),
+        ] {
+            let result = ReplayExecutor.execute(job(payload), &callbacks).await;
+            assert!(
+                matches!(result, Err(Error::Executor(ref message)) if message == expected),
+                "missing replay config must error, got {result:?}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn zero_capture_exchanges_is_an_executor_error() {
+        let callbacks = RegistryCallbacks::for_test();
+        let result = ReplayExecutor
+            .execute(
+                job(serde_json::json!({
+                    "target_url": "https://example.com",
+                    "session_id": uuid::Uuid::new_v4(),
+                })),
+                &callbacks,
+            )
+            .await;
+        assert!(
+            matches!(result, Err(Error::Executor(ref message)) if message.contains("no captured exchanges")),
+            "empty capture session must error, got {result:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn capture_fetch_failure_is_an_executor_error() {
+        let callbacks = RegistryCallbacks::for_test_failing_capture_fetch();
+        let result = ReplayExecutor
+            .execute(
+                job(serde_json::json!({
+                    "target_url": "https://example.com",
+                    "session_id": uuid::Uuid::new_v4(),
+                })),
+                &callbacks,
+            )
+            .await;
+        assert!(
+            matches!(result, Err(Error::Executor(ref message)) if message.contains("failed to fetch captured exchanges")),
+            "capture fetch failure must error, got {result:?}"
+        );
+    }
 }

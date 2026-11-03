@@ -28,6 +28,13 @@ pub struct Organization {
     pub stripe_customer_id: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    /// Internal organization exempt from billing: no Stripe subscription is
+    /// needed and no plan limit, overage cutoff, or metered AI-credit
+    /// drawdown applies. Only a site admin (`users.is_admin`) can change it.
+    /// Defaults to false for rows and stores that predate the column.
+    #[sqlx(default)]
+    #[serde(default)]
+    pub billing_exempt: bool,
 }
 
 /// Organization member role
@@ -62,6 +69,33 @@ impl Organization {
             "team" => Plan::Team,
             _ => Plan::Free,
         }
+    }
+
+    /// The limits to enforce for this organization: the exempt profile for a
+    /// billing-exempt org, otherwise the stored `limits_json`. Enforcement
+    /// paths read this rather than `limits_json` directly.
+    pub fn limits(&self) -> serde_json::Value {
+        if self.billing_exempt {
+            billing_exempt_limits()
+        } else {
+            self.limits_json.clone()
+        }
+    }
+
+    /// Set or clear the billing exemption. Callers must have verified that
+    /// the actor is a site admin.
+    pub async fn set_billing_exempt(
+        executor: impl sqlx::PgExecutor<'_>,
+        org_id: Uuid,
+        billing_exempt: bool,
+    ) -> sqlx::Result<Option<Self>> {
+        sqlx::query_as::<_, Self>(
+            "UPDATE organizations SET billing_exempt = $1, updated_at = NOW() WHERE id = $2 RETURNING *",
+        )
+        .bind(billing_exempt)
+        .bind(org_id)
+        .fetch_optional(executor)
+        .await
     }
 
     /// Create a new organization
@@ -394,6 +428,54 @@ impl OrgRole {
     }
 }
 
+impl Plan {
+    /// Default entitlements for a newly created or downgraded organization.
+    #[cfg(feature = "postgres")]
+    pub fn default_limits(self) -> serde_json::Value {
+        get_default_limits(self)
+    }
+}
+
+/// Limits that never stay finite for a billing-exempt organization, even on
+/// Team, which bounds them. Every reader treats `-1` as unlimited.
+#[cfg(feature = "postgres")]
+const EXEMPT_UNLIMITED_KEYS: [&str; 19] = [
+    "max_collaborators",
+    "max_environments",
+    "requests_per_30d",
+    "storage_gb",
+    "ai_tokens_per_month",
+    "runner_seconds_per_month",
+    "max_concurrent_runs",
+    "max_tunnel_reservations",
+    "max_custom_domains",
+    "tunnel_bytes_per_month",
+    "max_snapshots",
+    "snapshot_bytes_quota",
+    "log_bytes_per_month",
+    "max_clone_models",
+    "capture_bytes_quota",
+    "max_plugins_per_mock",
+    "max_plugin_invoke_ms_per_month",
+    "max_plugin_memory_mb",
+    "max_projects",
+];
+
+/// Limits for a billing-exempt organization: Team with every quota and count
+/// lifted to `-1` (unlimited). The per-mock body and RPS caps keep their Team
+/// values, because the proxy treats those as infrastructure floors and never
+/// unlocks them with `-1`; retention windows keep Team's durations.
+#[cfg(feature = "postgres")]
+pub fn billing_exempt_limits() -> serde_json::Value {
+    let mut limits = get_default_limits(Plan::Team);
+    if let Some(map) = limits.as_object_mut() {
+        for key in EXEMPT_UNLIMITED_KEYS {
+            map.insert(key.to_string(), serde_json::json!(-1));
+        }
+    }
+    limits
+}
+
 /// Get default limits for a plan
 #[cfg(feature = "postgres")]
 fn get_default_limits(plan: Plan) -> serde_json::Value {
@@ -408,11 +490,11 @@ fn get_default_limits(plan: Plan) -> serde_json::Value {
             "max_templates_published": 3,
             "max_scenarios_published": 1,
             "max_publisher_keys": 3, // ed25519 keys per user (active count)
-            "ai_tokens_per_month": 0, // BYOK only
-            "hosted_mocks": false,
-            "max_hosted_mocks": 0,
-            "mock_request_body_mb": 1, // tight cap even if user is force-upgraded
-            "mock_rps_limit": 10, // 10 RPS — sanity guard if hosted_mocks ever flips on
+            "ai_tokens_per_month": 5000, // capped platform AI evaluation allowance
+            "hosted_mocks": true,
+            "max_hosted_mocks": 1,
+            "mock_request_body_mb": 1, // one-megabyte cap for the free hosted mock
+            "mock_rps_limit": 10, // 10 RPS per free hosted mock
             "runner_seconds_per_month": 0, // no test execution on Free
             "max_concurrent_runs": 0,
             "max_tunnel_reservations": 1, // 1 ephemeral subdomain
@@ -697,6 +779,7 @@ mod tests {
             stripe_customer_id: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
+            billing_exempt: false,
         };
 
         assert_eq!(org.plan(), Plan::Free);
@@ -766,9 +849,9 @@ mod tests {
         assert_eq!(limits["max_plugins_published"], 1);
         assert_eq!(limits["max_templates_published"], 3);
         assert_eq!(limits["max_scenarios_published"], 1);
-        assert_eq!(limits["ai_tokens_per_month"], 0);
-        assert_eq!(limits["hosted_mocks"], false);
-        assert_eq!(limits["max_hosted_mocks"], 0);
+        assert_eq!(limits["ai_tokens_per_month"], 5000);
+        assert_eq!(limits["hosted_mocks"], true);
+        assert_eq!(limits["max_hosted_mocks"], 1);
         assert_eq!(limits["mock_request_body_mb"], 1);
         assert_eq!(limits["mock_rps_limit"], 10);
     }
@@ -823,6 +906,7 @@ mod tests {
             stripe_customer_id: Some("cus_123".to_string()),
             created_at: Utc::now(),
             updated_at: Utc::now(),
+            billing_exempt: false,
         };
 
         let json = serde_json::to_string(&org).unwrap();
@@ -879,12 +963,65 @@ mod tests {
             stripe_customer_id: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
+            billing_exempt: false,
         };
 
         let cloned = org.clone();
         assert_eq!(org.id, cloned.id);
         assert_eq!(org.name, cloned.name);
         assert_eq!(org.slug, cloned.slug);
+    }
+
+    #[test]
+    fn test_billing_exempt_org_limits_are_unlimited() {
+        let org = Organization {
+            id: Uuid::new_v4(),
+            name: "Internal".to_string(),
+            slug: "internal".to_string(),
+            owner_id: Uuid::new_v4(),
+            plan: "free".to_string(),
+            limits_json: get_default_limits(Plan::Free),
+            stripe_customer_id: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            billing_exempt: true,
+        };
+        let limits = org.limits();
+        for key in EXEMPT_UNLIMITED_KEYS {
+            assert_eq!(limits[key], -1, "{key} must be unlimited");
+        }
+        assert_eq!(limits["max_hosted_mocks"], -1);
+        assert_eq!(limits["max_templates_published"], -1);
+        assert_eq!(limits["max_scenarios_published"], -1);
+        assert_eq!(limits["max_publisher_keys"], -1);
+        // Infrastructure floors keep Team values; the proxy ignores -1 there.
+        assert_eq!(limits["mock_request_body_mb"], 50);
+        assert_eq!(limits["mock_rps_limit"], 1000);
+
+        // The same org without the flag keeps its stored Free limits.
+        let free = Organization {
+            billing_exempt: false,
+            ..org
+        };
+        assert_eq!(free.limits()["requests_per_30d"], 10000);
+        assert_eq!(free.limits()["ai_tokens_per_month"], 5000);
+    }
+
+    #[test]
+    fn test_billing_exempt_defaults_false_when_absent() {
+        let org: Organization = serde_json::from_value(serde_json::json!({
+            "id": Uuid::new_v4(),
+            "name": "Legacy",
+            "slug": "legacy",
+            "owner_id": Uuid::new_v4(),
+            "plan": "free",
+            "limits_json": {},
+            "stripe_customer_id": null,
+            "created_at": Utc::now(),
+            "updated_at": Utc::now(),
+        }))
+        .unwrap();
+        assert!(!org.billing_exempt);
     }
 
     #[test]

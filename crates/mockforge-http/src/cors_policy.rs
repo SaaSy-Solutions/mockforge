@@ -186,11 +186,18 @@ pub fn build_cors_layer(config: Option<&HttpCorsConfig>) -> CorsLayer {
     };
     let headers: Vec<http::HeaderName> =
         config.allowed_headers.iter().filter_map(|h| h.parse().ok()).collect();
-    let headers = if headers.is_empty() {
+    let mut headers = if headers.is_empty() {
         vec![http::header::CONTENT_TYPE, http::header::AUTHORIZATION]
     } else {
         headers
     };
+
+    // Configured browser clients must be able to send the control-plane credential.
+    let management_header =
+        http::HeaderName::from_static(crate::management_auth::MANAGEMENT_TOKEN_HEADER);
+    if !headers.contains(&management_header) {
+        headers.push(management_header);
+    }
 
     // Credentials are never combined with a wildcard origin.
     let credentials = config.allow_credentials && !matches!(policy, OriginPolicy::Wildcard);
@@ -278,6 +285,43 @@ mod tests {
             h(header::ACCESS_CONTROL_ALLOW_ORIGIN),
             h(header::ACCESS_CONTROL_ALLOW_CREDENTIALS),
         )
+    }
+
+    #[tokio::test]
+    async fn management_header_preflight_preserves_the_origin_policy() {
+        for allowed_headers in [vec![], vec!["x-request-id".to_string()]] {
+            let mut config = cfg(&["https://app.example.com"], false);
+            config.allowed_headers = allowed_headers;
+            for origin in ["https://app.example.com", "https://evil.example.com"] {
+                let response = app(Some(&config))
+                    .oneshot(
+                        Request::builder()
+                            .method(Method::OPTIONS)
+                            .uri("/r")
+                            .header(header::ORIGIN, origin)
+                            .header(header::ACCESS_CONTROL_REQUEST_METHOD, "POST")
+                            .header(
+                                header::ACCESS_CONTROL_REQUEST_HEADERS,
+                                crate::management_auth::MANAGEMENT_TOKEN_HEADER,
+                            )
+                            .body(Body::empty())
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap();
+                let headers = response.headers();
+                assert!(headers[header::ACCESS_CONTROL_ALLOW_HEADERS]
+                    .to_str()
+                    .unwrap()
+                    .split(',')
+                    .any(|value| value.trim() == crate::management_auth::MANAGEMENT_TOKEN_HEADER));
+                assert_eq!(
+                    headers.get(header::ACCESS_CONTROL_ALLOW_ORIGIN),
+                    (origin == "https://app.example.com")
+                        .then_some(&HeaderValue::from_static("https://app.example.com")),
+                );
+            }
+        }
     }
 
     #[tokio::test]

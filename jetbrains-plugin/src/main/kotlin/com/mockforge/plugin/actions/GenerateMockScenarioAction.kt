@@ -8,7 +8,6 @@ import com.intellij.psi.PsiFile
 import com.intellij.psi.util.PsiUtilBase
 import org.yaml.snakeyaml.Yaml
 import java.io.File
-import javax.swing.Icon
 
 /**
  * Intention action to generate MockForge scenario from OpenAPI specification
@@ -112,8 +111,6 @@ class GenerateMockScenarioAction : IntentionAction, PriorityAction {
     override fun startInWriteAction(): Boolean = false
 
     override fun getPriority(): PriorityAction.Priority = PriorityAction.Priority.NORMAL
-
-    override fun getIcon(): Icon? = null
 
     /**
      * Parse OpenAPI specification

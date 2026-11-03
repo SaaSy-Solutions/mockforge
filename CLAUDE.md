@@ -12,14 +12,14 @@ MockForge is a high-performance mock API server written in Rust. It's a workspac
 ## Quick Start
 
 ```bash
-# Build
-cargo build --workspace
+# Build the changed package (use the CLI package for the example below)
+scripts/dev/cargo build -p mockforge-cli
 
 # Run with example spec (HTTP :3000, WS :3001, gRPC :50051, Admin UI :9080)
 make run-example
 
-# Run tests
-cargo test --workspace
+# Run relevant tests; a successful check alone is not completion
+scripts/dev/cargo test -p mockforge-cli
 
 # UI dev server
 cd crates/mockforge-ui/ui && pnpm install && pnpm dev
@@ -31,14 +31,14 @@ The main binary is `mockforge-cli`. Key environment variables and flags:
 
 ```bash
 # Minimal: serve an OpenAPI spec on HTTP
-cargo run -p mockforge-cli -- serve --spec examples/openapi-demo.json --http-port 3000
+scripts/dev/cargo run -p mockforge-cli -- serve --spec examples/openapi-demo.json --http-port 3000
 
 # Full-featured: all protocols + admin UI
 MOCKFORGE_LATENCY_ENABLED=true \
 MOCKFORGE_FAILURES_ENABLED=false \
 MOCKFORGE_WS_REPLAY_FILE=examples/ws-demo.jsonl \
 MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true \
-cargo run -p mockforge-cli -- serve \
+scripts/dev/cargo run -p mockforge-cli -- serve \
   --spec examples/openapi-demo.json \
   --http-port 3000 --ws-port 3001 --grpc-port 50051 \
   --admin --admin-port 9080
@@ -137,12 +137,13 @@ Key architectural boundaries:
 
 ### Rust
 ```bash
-cargo build --workspace                    # Build all
-cargo test --workspace                     # Test all
-cargo test -p <crate-name>                # Test specific crate
+scripts/dev/cargo check -p <crate>           # First compiler feedback
+scripts/dev/cargo build -p <crate>           # Build an executable when needed
+scripts/dev/cargo test -p <crate>            # Focused tests
+scripts/dev/cargo test -p <crate-name>                # Test specific crate
 cargo fmt --all --check                    # Check formatting
-cargo clippy -p <crate> --all-targets -- -D warnings  # Lint specific crate
-cargo clippy --all-targets --all-features -- -D warnings  # Lint all
+scripts/dev/cargo clippy -p <crate> --all-targets -- -D warnings  # Lint specific crate
+scripts/dev/cargo clippy --workspace --all-targets --all-features -- -D warnings  # Broad gate only
 cargo audit                                # Security audit
 cargo deny check licenses sources bans     # License/dependency check
 ```
@@ -165,13 +166,28 @@ make test             # cargo test --workspace
 make clippy           # Lint all
 make fmt              # Format all
 make check-all        # fmt + clippy + audit + deny + test
-make dev              # Watch mode (check + test + clippy)
+make dev PACKAGE=mockforge-core  # One focused check watcher; tests and clippy explicitly
 make bench            # Performance benchmarks
 make test-coverage    # Coverage with llvm-cov
 make spellcheck       # Typos check
 make test-mutants     # Mutation testing
 make sqlx-prepare     # Regenerate SQLx query cache (mockforge-collab)
 ```
+
+## Local Rust Build Policy
+
+Use `scripts/dev/cargo` for local compilation in Claude, Codex, Cursor, and shell sessions.
+See [the build workflow](docs/development/RUST_BUILD_WORKFLOW.md) for target isolation,
+resource admission, supported commands, and validation tiers. Do not run routine
+`cargo clean`, `cargo update`, release builds, or multiple Cargo watchers. Broad
+`make build`, `make test`, and `make check-all` remain explicit full validation
+commands; they are not the default after a small edit. Required CI, security,
+tenant-isolation, feature, and runtime checks remain mandatory.
+
+The measured native default-feature library recipe is
+`scripts/dev/cargo check -p mockforge-platform-signing --lib`, after compatible
+successful warm-target validation. Optional AWS features and broader commands
+remain ordinary. Warm receipt eligibility never replaces focused tests.
 
 ## Development Guidelines
 

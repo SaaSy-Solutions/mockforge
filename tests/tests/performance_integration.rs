@@ -6,6 +6,7 @@
 //! - Memory usage patterns
 //! - Throughput measurements
 
+use mockforge_http::management_auth::MANAGEMENT_TOKEN_HEADER;
 use mockforge_test::MockForgeServer;
 use reqwest::Client;
 use std::time::{Duration, Instant};
@@ -420,9 +421,10 @@ async fn test_concurrent_mixed_endpoints() {
             let client = client.clone();
             let endpoint = endpoints[i % endpoints.len()];
             let url = format!("{}{}", base_url, endpoint);
+            let token = server.management_token().to_string();
             tokio::spawn(async move {
                 let start = Instant::now();
-                let result = client.get(&url).send().await;
+                let result = client.get(&url).header(MANAGEMENT_TOKEN_HEADER, token).send().await;
                 let elapsed = start.elapsed();
                 (result, elapsed)
             })

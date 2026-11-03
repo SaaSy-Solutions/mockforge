@@ -37,7 +37,7 @@ pub async fn check_org_limits(
     org: &Organization,
     _user_id: Uuid,
 ) -> Result<(), ApiError> {
-    let limits = &org.limits_json;
+    let limits = org.limits();
 
     // Get current month period
     let period = current_month_period();
@@ -97,6 +97,18 @@ pub async fn increment_usage(
     org_id: Uuid,
     request_size_bytes: i64,
 ) -> Result<(), ApiError> {
+    record_proxy_usage(pool, redis, org_id, request_size_bytes, false).await
+}
+
+/// Record proxy egress without counting a request again when hard-quota
+/// admission already persisted it. Other callers retain response metering.
+pub(crate) async fn record_proxy_usage(
+    pool: &sqlx::PgPool,
+    redis: Option<&RedisPool>,
+    org_id: Uuid,
+    request_size_bytes: i64,
+    request_already_counted: bool,
+) -> Result<(), ApiError> {
     // Increment in Redis first (fast path)
     if let Some(redis_pool) = redis {
         let period = current_month_period();
@@ -112,7 +124,9 @@ pub async fn increment_usage(
     // request-path (RLS) pool; bind the org whose counter is bumped.
     with_org_context(pool, org_id, |tx| {
         Box::pin(async move {
-            UsageCounter::increment_requests(tx, org_id, 1).await?;
+            if !request_already_counted {
+                UsageCounter::increment_requests(tx, org_id, 1).await?;
+            }
             if request_size_bytes > 0 {
                 UsageCounter::increment_egress(tx, org_id, request_size_bytes).await?;
             }
@@ -184,7 +198,7 @@ pub async fn org_rate_limit_middleware(
     .await
     .ok();
 
-    let limits = &org_ctx.org.limits_json;
+    let limits = org_ctx.org.limits();
     let requests_limit = limits.get("requests_per_30d").and_then(|v| v.as_i64()).unwrap_or(10000);
 
     let requests_remaining = usage

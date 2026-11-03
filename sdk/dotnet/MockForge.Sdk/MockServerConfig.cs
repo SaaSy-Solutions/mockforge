@@ -24,4 +24,11 @@ public class MockServerConfig
     /// Path to OpenAPI specification
     /// </summary>
     public string? OpenApiSpec { get; set; }
+
+    /// <summary>
+    /// Control-plane credential, passed to the CLI as MOCKFORGE_MANAGEMENT_TOKEN
+    /// and sent as X-MockForge-Management-Token. Default: the
+    /// MOCKFORGE_MANAGEMENT_TOKEN env var, else a random token per server.
+    /// </summary>
+    public string? ManagementToken { get; set; }
 }

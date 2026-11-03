@@ -10,9 +10,10 @@ use tokio::time::{interval, Duration};
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
-use crate::deployment::flyio::{
-    FlyioCheck, FlyioClient, FlyioMachineConfig, FlyioPort, FlyioRegistryAuth, FlyioService,
-};
+use crate::deployment::cloudflare::{self, CloudflareMocks};
+use crate::deployment::fly_services::fly_services;
+use crate::deployment::flyio::{FlyioCheck, FlyioClient, FlyioMachineConfig, FlyioRegistryAuth};
+use crate::deployment::machine_config::hosted_mock_runtime_env;
 use crate::models::{DeploymentLog, DeploymentStatus, HostedMock, HostedMockPlugin};
 
 /// Default OCI image for plugin-disabled hosted-mocks. Same as the
@@ -67,6 +68,22 @@ pub struct DeploymentOrchestrator {
     db: Arc<PgPool>,
     flyio_client: Option<FlyioClient>,
     flyio_org_slug: Option<String>,
+    storage: Option<crate::storage::PluginStorage>,
+    cloudflare: Option<CloudflareMocks>,
+}
+
+fn has_external_backend_intent(deployment: &HostedMock) -> bool {
+    !super::local_runtime::is_local(deployment)
+        && (["hosting_backend", "backend"].iter().any(|key| {
+            matches!(
+                deployment.metadata_json.get(*key).and_then(|value| value.as_str()),
+                Some("flyio" | "cloudflare")
+            )
+        }) || deployment
+            .metadata_json
+            .get("flyio_machine_id")
+            .and_then(|value| value.as_str())
+            .is_some())
 }
 
 impl DeploymentOrchestrator {
@@ -81,22 +98,161 @@ impl DeploymentOrchestrator {
             db,
             flyio_client,
             flyio_org_slug: flyio_org_slug.or_else(|| std::env::var("FLYIO_ORG_SLUG").ok()),
+            storage: None,
+            cloudflare: CloudflareMocks::from_env(),
         }
+    }
+
+    /// Orchestrator configured from the environment: Fly from
+    /// `FLYIO_API_TOKEN`/`FLYIO_ORG_SLUG`, Cloudflare Containers from
+    /// `MOCKFORGE_CF_MOCKS_URL`/`MOCKFORGE_CF_MOCKS_EDGE_TOKEN`.
+    pub fn from_env(db: Arc<PgPool>) -> Self {
+        Self::new(db, std::env::var("FLYIO_API_TOKEN").ok(), std::env::var("FLYIO_ORG_SLUG").ok())
+    }
+
+    /// The Cloudflare backend, when configured and the deployment qualifies.
+    async fn cloudflare_for(&self, deployment: &HostedMock) -> Option<&CloudflareMocks> {
+        cloudflare::require_paid_plan(self.db.as_ref(), deployment.org_id).await.ok()?;
+        let cf = self.cloudflare.as_ref()?;
+        let plugins = HostedMockPlugin::count_active_by_deployment(self.db.as_ref(), deployment.id)
+            .await
+            .map(|n| n > 0)
+            // Plugins need the cloud-plugins image; if we cannot tell, use Fly.
+            .unwrap_or(true);
+        cloudflare::runs_on_cloudflare(deployment, plugins).then_some(cf)
+    }
+
+    /// Use tenant-scoped upload storage for local OpenAPI mocks.
+    pub fn with_storage(mut self, storage: crate::storage::PluginStorage) -> Self {
+        self.storage = Some(storage);
+        self
     }
 
     /// Start the orchestrator background task
     pub fn start(self: Arc<Self>) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
-            let mut interval = interval(Duration::from_secs(10)); // Check every 10 seconds
+            // Slow provider cleanup must not block new deployment polling.
+            // Both loops belong to this task, so aborting it cancels both
+            // futures instead of leaving an orphan cleanup task running.
+            let cleanup = async {
+                let mut interval = interval(Duration::from_secs(10));
+                loop {
+                    interval.tick().await;
+                    if let Err(e) = self.reconcile_downgraded_backends().await {
+                        error!("Error reconciling downgraded hosting: {}", e);
+                    }
+                    if let Err(e) = self.process_requested_deletions().await {
+                        error!("Error reconciling requested deletions: {}", e);
+                    }
+                }
+            };
+            let provisioning = async {
+                let mut interval = interval(Duration::from_secs(10));
+                loop {
+                    interval.tick().await;
+                    if let Err(e) = self.process_pending_deployments().await {
+                        error!("Error processing pending deployments: {}", e);
+                    }
+                }
+            };
+            tokio::join!(cleanup, provisioning);
+        })
+    }
 
-            loop {
-                interval.tick().await;
+    /// Stop externally reachable paid backends after a subscription downgrade.
+    /// Failed confirmations retain status/capacity and are retried next poll.
+    async fn reconcile_downgraded_backends(&self) -> Result<()> {
+        let deployments = sqlx::query_as::<_, HostedMock>("SELECT * FROM hosted_mocks WHERE deleted_at IS NULL AND deletion_requested_at IS NULL AND capacity_reserved AND (metadata_json->>'hosting_backend' IN ('flyio','cloudflare') OR metadata_json->>'backend' IN ('flyio','cloudflare') OR metadata_json ? 'flyio_machine_id') ORDER BY updated_at ASC")
+            .fetch_all(self.db.as_ref()).await?;
+        for deployment in deployments {
+            if let Err(error) = self.stop_downgraded_backend(&deployment).await {
+                warn!(deployment_id = %deployment.id, %error, "Downgraded backend stop remains unconfirmed");
+            }
+        }
+        Ok(())
+    }
 
-                if let Err(e) = self.process_pending_deployments().await {
-                    error!("Error processing pending deployments: {}", e);
+    async fn stop_downgraded_backend(&self, deployment: &HostedMock) -> Result<()> {
+        if !has_external_backend_intent(deployment) {
+            return Ok(());
+        }
+        let pool = self.db.as_ref();
+        let mut lifecycle = crate::handlers::hosted_capacity::LifecycleGuard::acquire(
+            pool,
+            deployment.org_id,
+            deployment.id,
+        )
+        .await?;
+        let Some(current) = lifecycle.find().await? else {
+            return Ok(());
+        };
+        lifecycle.ensure_not_deleting().await?;
+        let reserved: bool = sqlx::query_scalar(
+            "SELECT capacity_reserved FROM hosted_mocks WHERE id=$1 AND org_id=$2",
+        )
+        .bind(current.id)
+        .bind(current.org_id)
+        .fetch_one(pool)
+        .await?;
+        // Display status is owner-editable and cannot prove provider shutdown.
+        if !reserved || !has_external_backend_intent(&current) {
+            return Ok(());
+        }
+        let org = crate::models::Organization::find_by_id(pool, current.org_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Organization not found"))?;
+        let subscription = crate::models::Subscription::find_by_org(pool, current.org_id).await?;
+        if crate::handlers::entitlements::resolve_org_plan(
+            &org,
+            subscription.as_ref(),
+            chrono::Utc::now(),
+        ) != crate::models::Plan::Free
+        {
+            return Ok(());
+        }
+        if cloudflare::is_cloudflare(&current) {
+            self.cloudflare
+                .as_ref()
+                .ok_or_else(|| {
+                    anyhow::anyhow!("Cloudflare is not configured; cannot confirm stop")
+                })?
+                .destroy(&current)
+                .await?;
+        } else {
+            let fly = self
+                .flyio_client
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("Fly is not configured; cannot confirm stop"))?;
+            let app = current.fly_app_name();
+            if let Some(machine) =
+                current.metadata_json.get("flyio_machine_id").and_then(|v| v.as_str())
+            {
+                fly.stop_machine_confirmed(&app, machine).await?;
+            } else {
+                // A timed-out create may have produced machines without returning IDs.
+                for machine in fly.list_machines(&app).await? {
+                    fly.stop_machine_confirmed(&app, &machine.id).await?;
                 }
             }
-        })
+        }
+        HostedMock::update_status(pool, current.id, DeploymentStatus::Stopped, Some("Paid hosting paused after subscription downgrade; create a local Free mock or restore your subscription")).await?;
+        Ok(())
+    }
+
+    /// Retry only durable, authorized deletion intents, including legacy
+    /// soft-deleted rows whose resources were never confirmed absent.
+    async fn process_requested_deletions(&self) -> Result<()> {
+        let ids: Vec<Uuid> = sqlx::query_scalar(
+            "SELECT id FROM hosted_mocks WHERE (capacity_reserved OR deleted_at IS NULL) AND deletion_requested_at IS NOT NULL ORDER BY updated_at ASC LIMIT 10",
+        )
+        .fetch_all(self.db.as_ref())
+        .await?;
+        for id in ids {
+            if let Err(error) = self.cleanup_deployment(id, false).await {
+                warn!("Cleanup remains unconfirmed for {}: {}", id, error);
+            }
+        }
+        Ok(())
     }
 
     /// Process pending deployments
@@ -112,6 +268,7 @@ impl DeploymentOrchestrator {
             WHERE status IN ('pending', 'deploying')
             AND deployment_url IS NULL
             AND deleted_at IS NULL
+            AND deletion_requested_at IS NULL
             ORDER BY created_at ASC
             LIMIT 10
             "#,
@@ -156,6 +313,30 @@ impl DeploymentOrchestrator {
 
         let pool = self.db.as_ref();
 
+        let mut lifecycle = match crate::handlers::hosted_capacity::LifecycleGuard::acquire(
+            pool,
+            deployment.org_id,
+            deployment.id,
+        )
+        .await
+        {
+            Ok(guard) => guard,
+            Err(crate::error::ApiError::Conflict(_)) => return Ok(()),
+            Err(error) => return Err(error.into()),
+        };
+        let Some(current) = lifecycle.find().await? else {
+            return Ok(());
+        };
+        if lifecycle.deletion_requested().await? {
+            return Ok(());
+        }
+        if !matches!(current.status(), DeploymentStatus::Pending | DeploymentStatus::Deploying)
+            || current.deployment_url.is_some()
+        {
+            return Ok(());
+        }
+        let deployment = &current;
+
         // Update status to deploying
         HostedMock::update_status(pool, deployment.id, DeploymentStatus::Deploying, None)
             .await
@@ -165,9 +346,38 @@ impl DeploymentOrchestrator {
             .await
             .context("Failed to create deployment log")?;
 
-        // Deploy using Fly.io if configured
-        if let Some(ref flyio_client) = self.flyio_client {
-            self.deploy_to_flyio(flyio_client, deployment).await?;
+        // Record the selected backend before the first provider request. A
+        // missing machine ID after a timeout must not imply a local deployment.
+        let org = crate::models::Organization::find_by_id(pool, deployment.org_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Organization not found"))?;
+        let subscription =
+            crate::models::Subscription::find_by_org(pool, deployment.org_id).await?;
+        let plan = crate::handlers::entitlements::resolve_org_plan(
+            &org,
+            subscription.as_ref(),
+            chrono::Utc::now(),
+        );
+        // Free mocks have no externally reachable backend that bypasses the
+        // registry's hard request cap. Paid isolated hosting is unchanged.
+        // Free deployments never reach a configured provider.
+        let cf = if plan == crate::models::Plan::Free {
+            None
+        } else {
+            self.cloudflare_for(deployment).await
+        };
+        let fly = self.flyio_client.as_ref().filter(|_| plan != crate::models::Plan::Free);
+        let backend = if cf.is_some() {
+            "cloudflare"
+        } else {
+            fly.map_or("multitenant", |_| "flyio")
+        };
+        sqlx::query("UPDATE hosted_mocks SET metadata_json = COALESCE(metadata_json, '{}'::jsonb) || jsonb_build_object('hosting_backend', $2::text, 'backend', $2::text) WHERE id = $1 AND org_id = $3")
+            .bind(deployment.id).bind(backend).bind(deployment.org_id).execute(pool).await?;
+        if let Some(cf) = cf {
+            self.deploy_to_cloudflare(cf, deployment).await?;
+        } else if let Some(fly) = fly {
+            self.deploy_to_flyio(fly, deployment).await?;
         } else {
             // Fallback: use multitenant router (single process routing)
             self.deploy_to_multitenant_router(deployment).await?;
@@ -190,6 +400,84 @@ impl DeploymentOrchestrator {
 
         info!("Successfully deployed mock service: {}", deployment.id);
 
+        Ok(())
+    }
+
+    /// Redeploy on the backend the deployment already uses. Fly deployments
+    /// stay on Fly; a Cloudflare deployment that gained a raw-TCP protocol
+    /// moves to Fly and its container is stopped.
+    pub(crate) async fn redeploy_on_backend(&self, deployment: &HostedMock) -> Result<()> {
+        if super::local_runtime::is_local(deployment) {
+            return self.deploy_to_multitenant_router(deployment).await;
+        }
+        if !super::local_runtime::is_local(deployment) {
+            cloudflare::require_paid_plan(self.db.as_ref(), deployment.org_id).await?;
+        }
+        if !cloudflare::is_cloudflare(deployment) {
+            return match self.flyio_client {
+                Some(ref flyio_client) => self.redeploy_to_flyio(flyio_client, deployment).await,
+                None => self.deploy_to_multitenant_router(deployment).await,
+            };
+        }
+        if let Some(cf) = self.cloudflare_for(deployment).await {
+            return self.deploy_to_cloudflare(cf, deployment).await;
+        }
+        let flyio_client = self.flyio_client.as_ref().ok_or_else(|| {
+            anyhow::anyhow!(
+                "deployment needs a protocol Cloudflare cannot serve and Fly is not configured"
+            )
+        })?;
+        let cf = self.cloudflare.as_ref().ok_or_else(|| {
+            anyhow::anyhow!("Cloudflare is not configured; cannot confirm migration cleanup")
+        })?;
+        cf.destroy(deployment).await?;
+        // Persist the new provider before provisioning: a timeout must leave
+        // cleanup targeting Fly, without an orphaned Cloudflare container.
+        sqlx::query("UPDATE hosted_mocks SET metadata_json = COALESCE(metadata_json, '{}'::jsonb) || '{\"backend\":\"flyio\",\"hosting_backend\":\"flyio\"}'::jsonb WHERE id=$1 AND org_id=$2")
+            .bind(deployment.id).bind(deployment.org_id).execute(self.db.as_ref()).await?;
+        self.deploy_to_flyio(flyio_client, deployment).await
+    }
+
+    /// Serve a deployment from Cloudflare Containers. Nothing is provisioned up
+    /// front: the Worker starts the container on the first request with the
+    /// environment from [`hosted_mock_runtime_env`]. Restarting here makes a
+    /// redeploy take effect on the next request.
+    async fn deploy_to_cloudflare(
+        &self,
+        cf: &CloudflareMocks,
+        deployment: &HostedMock,
+    ) -> Result<()> {
+        let pool = self.db.as_ref();
+        cf.restart(deployment).await.context("Failed to reset Cloudflare container")?;
+
+        let deployment_url = cf.public_url(deployment);
+        sqlx::query(
+            r#"
+            UPDATE hosted_mocks
+            SET deployment_url = $1,
+                internal_url = NULL,
+                health_check_url = NULL,
+                metadata_json = COALESCE(metadata_json, '{}'::jsonb) || jsonb_build_object($2::text, $3::text),
+                updated_at = NOW()
+            WHERE id = $4
+            "#,
+        )
+        .bind(&deployment_url)
+        .bind(cloudflare::BACKEND_KEY)
+        .bind(cloudflare::BACKEND_CLOUDFLARE)
+        .bind(deployment.id)
+        .execute(pool)
+        .await
+        .context("Failed to record Cloudflare deployment")?;
+
+        DeploymentLog::create(
+            pool,
+            deployment.id,
+            "info",
+            &format!("Serving from Cloudflare Containers at {}", deployment_url),
+            None,
+        )
+        .await?;
         Ok(())
     }
 
@@ -248,166 +536,18 @@ impl DeploymentOrchestrator {
                 .await?;
         }
 
-        // Build machine config
-        let mut env = HashMap::new();
-        env.insert("MOCKFORGE_DEPLOYMENT_ID".to_string(), deployment.id.to_string());
-        env.insert("MOCKFORGE_ORG_ID".to_string(), deployment.org_id.to_string());
-        env.insert("MOCKFORGE_CONFIG".to_string(), serde_json::to_string(&deployment.config_json)?);
-        env.insert("PORT".to_string(), "3000".to_string());
-        // Admin server hosts `/api/resilience/*` (#468 Phase 2) and other
-        // internal endpoints the registry proxies over Fly 6PN. It binds on
-        // 0.0.0.0:9080 inside the container (Docker default for AdminConfig)
-        // and isn't published as a public Fly service, so it's reachable
-        // only on `{app}.internal:9080` from sibling apps in the same org.
-        env.insert("MOCKFORGE_ADMIN_ENABLED".to_string(), "true".to_string());
-        env.extend(hosted_mock_cors_env());
-        env.extend(crate::handlers::management_token::env_entry(deployment.id));
-        env.extend(crate::handlers::hosted_mock_overrides::overrides_env(deployment));
-
-        if let Some(ref spec_url) = deployment.openapi_spec_url {
-            env.insert("MOCKFORGE_OPENAPI_SPEC_URL".to_string(), spec_url.clone());
-        }
-
-        // Inject env vars + extra Fly services for any protocols the
-        // deployment opted into beyond HTTP. HTTP/WS/GraphQL all share port
-        // 3000 (router merge happens in mockforge-cli/src/serve.rs) so they
-        // never produce a Fly service entry; gRPC and the broker family do.
-        let enabled_protocols = deployment.enabled_protocols();
-        for protocol in &enabled_protocols {
-            if let Some((key, value)) = protocol.enable_env() {
-                env.insert(key.to_string(), value);
-            }
-        }
-
-        // Kafka clients respect the broker's advertised listener over the
-        // bootstrap address — without this env var they'd loop on the
-        // internal Fly address and fail. The mockforge-kafka broker must
-        // honor `config.kafka.advertised_host` for this to be functional
-        // end-to-end (#231 broker-side todo).
-        if enabled_protocols.contains(&crate::models::Protocol::Kafka) {
-            let advertised_host = if let Ok(domain) = std::env::var("MOCKFORGE_MOCKS_DOMAIN") {
-                format!("{}.{}", deployment.slug, domain)
-            } else {
-                format!("{}.fly.dev", app_name)
-            };
-            env.insert("MOCKFORGE_KAFKA_ADVERTISED_HOST".to_string(), advertised_host);
-            env.insert("MOCKFORGE_KAFKA_ADVERTISED_PORT".to_string(), "9092".to_string());
-        }
-
-        // Wire the in-container request log shipper (#232) and the recorder
-        // capture cloud-sync (#234 part 2) to forward to MockForge Cloud.
-        // We only set the env vars when:
-        //   * a JWT secret is available (production deploys always have one)
-        //   * a public ingest base URL is configured via MOCKFORGE_LOG_INGEST_BASE_URL
-        // Both shippers reuse the same deployment-scoped JWT — they're
-        // ingest-only, so a single token with the deployment subject
-        // suffices for both. When the base URL is absent the shippers
-        // auto-disable and the deployment runs without cloud forwarding.
-        if let Ok(jwt_secret) = std::env::var("JWT_SECRET") {
-            if let Ok(ingest_base) = std::env::var("MOCKFORGE_LOG_INGEST_BASE_URL") {
-                let trimmed_base = ingest_base.trim_end_matches('/');
-                let token = mockforge_registry_core::auth::create_deployment_ingest_token(
-                    deployment.id,
-                    &jwt_secret,
-                    30, // 30 days; rotated on every redeploy
-                )
-                .ok();
-                if let Some(token) = token {
-                    env.insert(
-                        "MOCKFORGE_LOG_INGEST_URL".to_string(),
-                        format!(
-                            "{}/api/v1/hosted-mocks/{}/log-ingest",
-                            trimmed_base, deployment.id
-                        ),
-                    );
-                    env.insert("MOCKFORGE_LOG_INGEST_TOKEN".to_string(), token.clone());
-                    env.insert(
-                        "MOCKFORGE_CAPTURE_INGEST_URL".to_string(),
-                        format!(
-                            "{}/api/v1/hosted-mocks/{}/captures/ingest",
-                            trimmed_base, deployment.id
-                        ),
-                    );
-                    env.insert("MOCKFORGE_CAPTURE_INGEST_TOKEN".to_string(), token);
-                }
-            }
-        }
-
-        // OTLP tracing export (#233). When the registry server has a
-        // collector reachable at `MOCKFORGE_OTLP_INGEST_ENDPOINT` we tell
-        // the deployment to ship spans there. Identifying labels (deployment
-        // id, org id) are already set above as MOCKFORGE_DEPLOYMENT_ID /
-        // _ORG_ID; the receiver uses those for multi-tenant routing.
-        if let Ok(otlp_endpoint) = std::env::var("MOCKFORGE_OTLP_INGEST_ENDPOINT") {
-            if !otlp_endpoint.trim().is_empty() {
-                env.insert("MOCKFORGE_OTLP_ENDPOINT".to_string(), otlp_endpoint);
-                // Deployment-scoped service name keeps spans separable when
-                // multiple hosted mocks share a backend.
-                env.insert(
-                    "MOCKFORGE_OTLP_SERVICE_NAME".to_string(),
-                    format!("hosted-mock/{}", deployment.slug),
-                );
-            }
-        }
-
-        // Sentry error capture (#713). Forwarded after OTLP so both
-        // observability sinks share the same injection point.
-        apply_sentry_env(&mut env);
-
-        // Reality-driven proxy upstream (#222). When set, the deployed
-        // mockforge-cli's `reality_proxy` middleware forwards a per-request
-        // probabilistic share of traffic to this URL based on the
-        // workspace's reality_continuum_ratio. Unset = always-mock,
-        // current behaviour preserved.
-        if let Some(upstream) = deployment.upstream_url() {
-            env.insert("MOCKFORGE_PROXY_UPSTREAM".to_string(), upstream);
-        }
+        // Kafka clients follow the broker's advertised listener, so it must be
+        // the public name of this app rather than its internal Fly address.
+        let kafka_host = match std::env::var("MOCKFORGE_MOCKS_DOMAIN") {
+            Ok(domain) => format!("{}.{}", deployment.slug, domain),
+            Err(_) => format!("{}.fly.dev", app_name),
+        };
+        let env = hosted_mock_runtime_env(deployment, Some(kafka_host))?;
 
         // Use MockForge Docker image
         let image = resolve_image_for_deployment(pool, deployment.id).await;
 
-        // Always-on HTTP service (also serves WS upgrade and /graphql).
-        let mut services = vec![FlyioService {
-            protocol: "tcp".to_string(),
-            internal_port: 3000,
-            ports: vec![
-                FlyioPort {
-                    port: 80,
-                    handlers: vec!["http".to_string()],
-                },
-                FlyioPort {
-                    port: 443,
-                    handlers: vec!["tls".to_string(), "http".to_string()],
-                },
-            ],
-        }];
-
-        // Per-protocol Fly services. Skip protocols already covered by the
-        // HTTP listener above and skip duplicates; the orchestrator is the
-        // one place we synthesize Fly machine configs, so we keep this
-        // verbose for clarity.
-        let mut bound_internal_ports: std::collections::HashSet<u16> =
-            std::collections::HashSet::new();
-        bound_internal_ports.insert(3000);
-        for protocol in deployment.enabled_protocols() {
-            let Some(internal) = protocol.internal_port() else {
-                continue; // HTTP / WS / GraphQL — share 3000.
-            };
-            if !bound_internal_ports.insert(internal) {
-                continue;
-            }
-            let public = protocol.public_port().unwrap_or(internal);
-            let handlers: Vec<String> =
-                protocol.fly_handlers().iter().map(|s| (*s).to_string()).collect();
-            services.push(FlyioService {
-                protocol: "tcp".to_string(),
-                internal_port: internal,
-                ports: vec![FlyioPort {
-                    port: public,
-                    handlers,
-                }],
-            });
-        }
+        let services = fly_services(deployment);
 
         let mut checks = HashMap::new();
         checks.insert(
@@ -543,6 +683,17 @@ impl DeploymentOrchestrator {
 
         let pool = self.db.as_ref();
 
+        let mut lifecycle = crate::handlers::hosted_capacity::LifecycleGuard::acquire(
+            pool,
+            deployment.org_id,
+            deployment.id,
+        )
+        .await?;
+        let current =
+            lifecycle.find().await?.ok_or_else(|| anyhow::anyhow!("Deployment not found"))?;
+        lifecycle.ensure_not_deleting().await?;
+        let deployment = &current;
+
         HostedMock::update_status(pool, deployment.id, DeploymentStatus::Deploying, None)
             .await
             .context("Failed to update deployment status")?;
@@ -551,12 +702,7 @@ impl DeploymentOrchestrator {
             .await
             .context("Failed to create deployment log")?;
 
-        if let Some(ref flyio_client) = self.flyio_client {
-            self.redeploy_to_flyio(flyio_client, deployment).await?;
-        } else {
-            // For multitenant router, just restart
-            self.deploy_to_multitenant_router(deployment).await?;
-        }
+        self.redeploy_on_backend(deployment).await?;
 
         HostedMock::update_status(pool, deployment.id, DeploymentStatus::Active, None)
             .await
@@ -588,17 +734,7 @@ impl DeploymentOrchestrator {
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow::anyhow!("No Fly.io machine ID found in deployment metadata"))?;
 
-        let app_name = format!(
-            "mockforge-{}-{}",
-            deployment
-                .org_id
-                .to_string()
-                .replace('-', "")
-                .chars()
-                .take(8)
-                .collect::<String>(),
-            deployment.slug
-        );
+        let app_name = deployment.fly_app_name();
 
         DeploymentLog::create(
             pool,
@@ -609,40 +745,17 @@ impl DeploymentOrchestrator {
         )
         .await?;
 
-        let mut env = HashMap::new();
-        env.insert("MOCKFORGE_DEPLOYMENT_ID".to_string(), deployment.id.to_string());
-        env.insert("MOCKFORGE_ORG_ID".to_string(), deployment.org_id.to_string());
-        env.insert("MOCKFORGE_CONFIG".to_string(), serde_json::to_string(&deployment.config_json)?);
-        env.insert("PORT".to_string(), "3000".to_string());
-        // Same admin-server enable rationale as `deploy_to_flyio` above —
-        // gives the resilience proxy something to reach over 6PN.
-        env.insert("MOCKFORGE_ADMIN_ENABLED".to_string(), "true".to_string());
-        env.extend(hosted_mock_cors_env());
-        env.extend(crate::handlers::management_token::env_entry(deployment.id));
-        env.extend(crate::handlers::hosted_mock_overrides::overrides_env(deployment));
-        // Sentry error capture (#713) — same forwarding as `deploy_to_flyio`.
-        apply_sentry_env(&mut env);
-
-        if let Some(ref spec_url) = deployment.openapi_spec_url {
-            env.insert("MOCKFORGE_OPENAPI_SPEC_URL".to_string(), spec_url.clone());
-        }
+        // Same environment as the first deploy. This used to be a shorter copy
+        // that dropped protocol, ingest, tracing and upstream settings.
+        let kafka_host = match std::env::var("MOCKFORGE_MOCKS_DOMAIN") {
+            Ok(domain) => format!("{}.{}", deployment.slug, domain),
+            Err(_) => format!("{}.fly.dev", app_name),
+        };
+        let env = hosted_mock_runtime_env(deployment, Some(kafka_host))?;
 
         let image = resolve_image_for_deployment(pool, deployment.id).await;
 
-        let services = vec![FlyioService {
-            protocol: "tcp".to_string(),
-            internal_port: 3000,
-            ports: vec![
-                FlyioPort {
-                    port: 80,
-                    handlers: vec!["http".to_string()],
-                },
-                FlyioPort {
-                    port: 443,
-                    handlers: vec!["tls".to_string(), "http".to_string()],
-                },
-            ],
-        }];
+        let services = fly_services(deployment);
 
         let mut checks = HashMap::new();
         checks.insert(
@@ -722,10 +835,25 @@ impl DeploymentOrchestrator {
     async fn deploy_to_multitenant_router(&self, deployment: &HostedMock) -> Result<()> {
         let pool = self.db.as_ref();
 
+        let refreshed = if deployment.openapi_spec_url.is_some() {
+            let storage = self
+                .storage
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("Uploaded specification storage is unavailable"))?;
+            super::spec_source::refresh(pool, storage, deployment).await?
+        } else {
+            deployment.clone()
+        };
+        let deployment = &refreshed;
+
+        // Invalid configuration cannot be reported as an active deployment.
+        let _router = super::local_runtime::prepare(deployment).map_err(anyhow::Error::msg)?;
+
         // For multitenant router, we just need to set the deployment URL
         // The router will handle routing based on org/project/env
         let base_url = std::env::var("MOCKFORGE_BASE_URL")
-            .unwrap_or_else(|_| "https://mocks.mockforge.dev".to_string());
+            .unwrap_or_else(|_| "https://registry.mockforge.dev".to_string());
+        let base_url = base_url.trim_end_matches('/');
 
         let deployment_url =
             format!("{}/mocks/{}/{}", base_url, deployment.org_id, deployment.slug);
@@ -762,57 +890,74 @@ impl DeploymentOrchestrator {
 
     /// Delete a deployment
     pub async fn delete_deployment(&self, deployment_id: Uuid) -> Result<()> {
+        self.cleanup_deployment(deployment_id, true).await
+    }
+
+    async fn cleanup_deployment(&self, deployment_id: Uuid, request_new: bool) -> Result<()> {
         let pool = self.db.as_ref();
 
-        let deployment = HostedMock::find_by_id(pool, deployment_id)
-            .await
-            .context("Failed to find deployment")?
+        let deployment =
+            sqlx::query_as::<_, HostedMock>("SELECT * FROM hosted_mocks WHERE id = $1")
+                .bind(deployment_id)
+                .fetch_optional(pool)
+                .await
+                .context("Failed to find deployment")?
+                .ok_or_else(|| anyhow::anyhow!("Deployment not found"))?;
+
+        let mut lifecycle = crate::handlers::hosted_capacity::LifecycleGuard::acquire(
+            pool,
+            deployment.org_id,
+            deployment.id,
+        )
+        .await?;
+        let deployment = lifecycle
+            .find_for_cleanup()
+            .await?
             .ok_or_else(|| anyhow::anyhow!("Deployment not found"))?;
 
-        // Update status to deleting
-        HostedMock::update_status(pool, deployment_id, DeploymentStatus::Deleting, None).await?;
+        if !request_new && !lifecycle.deletion_requested().await? {
+            return Ok(());
+        }
+        if deployment.deleted_at.is_some() {
+            let reserved: bool = sqlx::query_scalar(
+                "SELECT capacity_reserved FROM hosted_mocks WHERE id = $1 AND org_id = $2",
+            )
+            .bind(deployment_id)
+            .bind(deployment.org_id)
+            .fetch_one(pool)
+            .await?;
+            if !reserved {
+                return Ok(());
+            }
+        }
+        // This also rotates unsuccessful attempts behind other queued intents.
+        lifecycle.request_deletion().await?;
 
         DeploymentLog::create(pool, deployment_id, "info", "Starting deletion", None).await?;
 
-        // Delete from Fly.io if deployed there
-        if let Some(ref flyio_client) = self.flyio_client {
-            if let Some(machine_id) =
-                deployment.metadata_json.get("flyio_machine_id").and_then(|v| v.as_str())
-            {
-                // Reconstruct app name from org_id + slug (same logic as deploy)
-                let app_name = format!(
-                    "mockforge-{}-{}",
-                    deployment
-                        .org_id
-                        .to_string()
-                        .replace('-', "")
-                        .chars()
-                        .take(8)
-                        .collect::<String>(),
-                    deployment.slug
-                );
-
-                if let Err(e) = flyio_client.delete_machine(&app_name, machine_id).await {
-                    warn!("Failed to delete Fly.io machine: {}", e);
-                }
-                // Delete the Fly.io app after removing the machine
-                if let Err(e) = flyio_client.delete_app(&app_name).await {
-                    warn!("Failed to delete Fly.io app {}: {}", app_name, e);
-                }
-            }
+        let local =
+            deployment.metadata_json.get("hosting_backend").and_then(|value| value.as_str())
+                == Some("multitenant");
+        if cloudflare::is_cloudflare(&deployment) {
+            let cf = self.cloudflare.as_ref().ok_or_else(|| {
+                anyhow::anyhow!("Cloudflare is not configured; cannot confirm cleanup")
+            })?;
+            cf.destroy(&deployment).await?;
+        } else if !local {
+            let flyio_client = self.flyio_client.as_ref().ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Hosted deployment provider is not configured; cannot confirm cleanup"
+                )
+            })?;
+            let app_name = format!(
+                "mockforge-{}-{}",
+                &deployment.org_id.simple().to_string()[..8],
+                deployment.slug
+            );
+            flyio_client.delete_app_confirmed(&app_name).await?;
         }
 
-        // Soft delete in database
-        sqlx::query(
-            r#"
-            UPDATE hosted_mocks
-            SET deleted_at = NOW()
-            WHERE id = $1
-            "#,
-        )
-        .bind(deployment_id)
-        .execute(pool)
-        .await?;
+        lifecycle.complete_deletion().await?;
 
         DeploymentLog::create(pool, deployment_id, "info", "Deletion completed", None).await?;
 
@@ -820,42 +965,41 @@ impl DeploymentOrchestrator {
     }
 }
 
-/// CORS origins for hosted mocks (#1017). The mock server now denies
-/// cross-origin requests unless origins are configured. Hosted mocks are public,
-/// credential-free APIs that tenants call from their own front-ends, so they keep
-/// the wildcard explicitly; the server never combines it with credentials.
-fn hosted_mock_cors_env() -> [(String, String); 1] {
-    [("MOCKFORGE_CORS_ALLOWED_ORIGINS".to_string(), "*".to_string())]
-}
-
-/// Forward Sentry config (#643/#664) into a hosted-mock's Fly machine env so
-/// tenant machines report errors to the same Sentry project as the registry
-/// server. `SENTRY_DSN` is required for capture (empty/unset disables it);
-/// environment and trace sampling are passed through when the operator sets
-/// them, so per-tenant events stay separable without extra config. Release is
-/// intentionally NOT forwarded: tenant machines run the mockforge-cli image,
-/// whose own crate version is the accurate release identifier.
-fn apply_sentry_env(env: &mut HashMap<String, String>) {
-    if let Ok(dsn) = std::env::var("SENTRY_DSN") {
-        if !dsn.trim().is_empty() {
-            env.insert("SENTRY_DSN".to_string(), dsn);
-            if let Ok(environment) = std::env::var("SENTRY_ENVIRONMENT") {
-                if !environment.trim().is_empty() {
-                    env.insert("SENTRY_ENVIRONMENT".to_string(), environment);
-                }
-            }
-            if let Ok(sample_rate) = std::env::var("SENTRY_TRACES_SAMPLE_RATE") {
-                if !sample_rate.trim().is_empty() {
-                    env.insert("SENTRY_TRACES_SAMPLE_RATE".to_string(), sample_rate);
-                }
-            }
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::deployment::cloudflare::tests::deployment;
+    use crate::deployment::machine_config::{apply_sentry_env, hosted_mock_cors_env};
+
+    #[test]
+    fn every_fly_service_stops_when_idle_and_starts_on_demand() {
+        let services = fly_services(&deployment(&["http", "grpc", "kafka"], serde_json::json!({})));
+        assert_eq!(services.len(), 3, "HTTP plus one service per TCP protocol");
+        for service in &services {
+            assert_eq!(service.autostop.as_deref(), Some("stop"));
+            assert_eq!(service.autostart, Some(true));
+            assert_eq!(service.min_machines_running, Some(0));
+        }
+        let json = serde_json::to_value(&services[0]).unwrap();
+        assert_eq!(json["autostop"], "stop");
+        assert_eq!(json["autostart"], true);
+    }
+
+    #[test]
+    fn runtime_env_carries_protocols_and_kafka_host_for_every_deploy_path() {
+        let d = deployment(&["http", "kafka"], serde_json::json!({}));
+        let env = hosted_mock_runtime_env(&d, Some("shop.example".into())).unwrap();
+        assert_eq!(env["MOCKFORGE_DEPLOYMENT_ID"], d.id.to_string());
+        assert_eq!(env["PORT"], "3000");
+        assert_eq!(env["MOCKFORGE_KAFKA_ADVERTISED_HOST"], "shop.example");
+        for protocol in d.enabled_protocols() {
+            if let Some((key, value)) = protocol.enable_env() {
+                assert_eq!(env.get(key), Some(&value), "{key}");
+            }
+        }
+        let without_host = hosted_mock_runtime_env(&d, None).unwrap();
+        assert!(!without_host.contains_key("MOCKFORGE_KAFKA_ADVERTISED_HOST"));
+    }
 
     #[test]
     fn hosted_mocks_configure_cors_origins_explicitly() {
@@ -881,3 +1025,15 @@ mod tests {
         assert!(!env.contains_key("SENTRY_DSN"));
     }
 }
+
+#[cfg(test)]
+#[path = "orchestrator_cleanup_tests.rs"]
+mod cleanup_reconciliation_tests;
+
+#[cfg(test)]
+#[path = "orchestrator_free_boundary_tests.rs"]
+mod free_provider_boundary_tests;
+
+#[cfg(test)]
+#[path = "downgrade_tests.rs"]
+mod downgrade_tests;

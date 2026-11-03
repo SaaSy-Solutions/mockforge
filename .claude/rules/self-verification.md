@@ -29,7 +29,7 @@ If it fails, run `cargo fmt --all` and include the formatting fix.
 
 For EACH affected crate, run:
 ```bash
-cargo clippy -p <crate-name> --all-targets -- -D warnings
+scripts/dev/cargo clippy -p <crate-name> --all-targets -- -D warnings
 ```
 Do NOT run `cargo clippy --workspace` unless changes span 10+ crates. Fix all warnings before proceeding.
 
@@ -37,7 +37,7 @@ Do NOT run `cargo clippy --workspace` unless changes span 10+ crates. Fix all wa
 
 For EACH affected crate, run:
 ```bash
-cargo test -p <crate-name>
+scripts/dev/cargo test -p <crate-name>
 ```
 All tests must pass. If a test fails:
 1. Read the failure output carefully
@@ -99,8 +99,8 @@ Do not skip a failing check and move on. Fix it first.
 ## 11. Completion Report
 
 Before telling the user the task is done, confirm:
-- [ ] All changed crates pass `cargo clippy -p <crate> -- -D warnings`
-- [ ] All changed crates pass `cargo test -p <crate>`
+- [ ] All changed crates pass `scripts/dev/cargo clippy -p <crate> -- -D warnings`
+- [ ] All changed crates pass `scripts/dev/cargo test -p <crate>`
 - [ ] `cargo fmt --all --check` passes
 - [ ] No new `unsafe` without `// SAFETY:` comments
 - [ ] Template variables are consistent across all render paths (if applicable)

@@ -23,6 +23,7 @@ export function InstallPluginModal({ onClose }: InstallPluginModalProps) {
   const [installMethod, setInstallMethod] = useState<'file' | 'url'>('file');
   const [filePath, setFilePath] = useState('');
   const [url, setUrl] = useState('');
+  const [allowUnsigned, setAllowUnsigned] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -38,6 +39,7 @@ export function InstallPluginModal({ onClose }: InstallPluginModalProps) {
     try {
       setLoading(true);
       setError(null);
+      setSuccess(null);
 
       const response = await authenticatedFetch('/__mockforge/plugins/install', {
         method: 'POST',
@@ -45,6 +47,7 @@ export function InstallPluginModal({ onClose }: InstallPluginModalProps) {
         body: JSON.stringify({
           source: source.trim(),
           force: false, // For now, don't force
+          allow_unsigned: allowUnsigned,
         }),
       });
 
@@ -57,7 +60,7 @@ export function InstallPluginModal({ onClose }: InstallPluginModalProps) {
           window.location.reload(); // Refresh to show new plugin
         }, 2000);
       } else {
-        setError(data.error);
+        setError(data.error || 'Plugin installation failed');
       }
     } catch {
       setError('Failed to install plugin');
@@ -149,6 +152,24 @@ export function InstallPluginModal({ onClose }: InstallPluginModalProps) {
             </div>
           </TabsContent>
         </Tabs>
+
+        <div className="flex items-start gap-2 mt-4 text-sm">
+          <input
+            id="allow-unsigned-plugin"
+            type="checkbox"
+            checked={allowUnsigned}
+            onChange={(event) => setAllowUnsigned(event.target.checked)}
+            disabled={loading}
+            aria-describedby="unsigned-plugin-description"
+            className="mt-1"
+          />
+          <div>
+            <Label htmlFor="allow-unsigned-plugin">Allow unsigned plugin for local development</Label>
+            <p id="unsigned-plugin-description" className="text-muted-foreground">
+              Use only for plugins you built yourself. Invalid signatures are always rejected.
+            </p>
+          </div>
+        </div>
 
         {error && (
           <Alert variant="destructive" className="mt-4">

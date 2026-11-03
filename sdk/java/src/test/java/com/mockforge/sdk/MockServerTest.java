@@ -4,6 +4,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.AfterEach;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -33,7 +37,7 @@ public class MockServerTest {
     }
 
     @Test
-    void testStubResponse() throws MockServerException {
+    void testStubResponse() throws Exception {
         MockServerConfig config = MockServerConfig.builder()
             .port(0)
             .build();
@@ -46,13 +50,15 @@ public class MockServerTest {
 
         server.stubResponse("GET", "/api/users/123", responseBody);
 
-        // Verify stub was added
-        // In a real test, you would make an HTTP request here
-        assertThat(server.isRunning()).isTrue();
+        HttpResponse<String> response = HttpClient.newHttpClient().send(
+            HttpRequest.newBuilder(URI.create(server.getUrl() + "/api/users/123")).build(),
+            HttpResponse.BodyHandlers.ofString());
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(response.body()).contains("John Doe", "123");
     }
 
     @Test
-    void testStubResponseWithOptions() throws MockServerException {
+    void testStubResponseWithOptions() throws Exception {
         MockServerConfig config = MockServerConfig.builder()
             .port(0)
             .build();
@@ -71,11 +77,17 @@ public class MockServerTest {
             500 // 500ms latency
         );
 
-        assertThat(server.isRunning()).isTrue();
+        HttpResponse<String> response = HttpClient.newHttpClient().send(
+            HttpRequest.newBuilder(URI.create(server.getUrl() + "/api/users"))
+                .POST(HttpRequest.BodyPublishers.ofString("{}")).build(),
+            HttpResponse.BodyHandlers.ofString());
+        assertThat(response.statusCode()).isEqualTo(201);
+        assertThat(response.headers().firstValue("X-Custom-Header")).hasValue("value");
+        assertThat(response.body()).contains("created");
     }
 
     @Test
-    void testClearStubs() throws MockServerException {
+    void testClearStubs() throws Exception {
         MockServerConfig config = MockServerConfig.builder()
             .port(0)
             .build();
@@ -85,7 +97,10 @@ public class MockServerTest {
         server.stubResponse("GET", "/api/test", Map.of("data", "test"));
         server.clearStubs();
 
-        assertThat(server.isRunning()).isTrue();
+        HttpResponse<String> response = HttpClient.newHttpClient().send(
+            HttpRequest.newBuilder(URI.create(server.getUrl() + "/api/test")).build(),
+            HttpResponse.BodyHandlers.ofString());
+        assertThat(response.statusCode()).isEqualTo(404);
     }
 
     @Test
@@ -95,7 +110,7 @@ public class MockServerTest {
             .host("127.0.0.1")
             .build();
 
-        server = MockServer.start(config);
+        server = new MockServer(config);
         assertThat(server.getUrl()).isEqualTo("http://127.0.0.1:3000");
     }
 }

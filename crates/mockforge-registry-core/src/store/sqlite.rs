@@ -185,6 +185,8 @@ fn row_to_organization(row: &sqlx::sqlite::SqliteRow) -> StoreResult<Organizatio
         stripe_customer_id: row.try_get("stripe_customer_id")?,
         created_at: parse_dt(&created_at_str)?,
         updated_at: parse_dt(&updated_at_str)?,
+        // The SQLite (self-hosted) store has no billing; nothing is exempt.
+        billing_exempt: false,
     })
 }
 

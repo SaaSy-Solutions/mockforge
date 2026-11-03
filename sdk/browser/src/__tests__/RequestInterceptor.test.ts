@@ -1,3 +1,4 @@
+import { vi, describe, it, beforeEach, afterEach, expect, type Mock } from 'vitest';
 /**
  * Unit tests for RequestInterceptor
  */
@@ -6,14 +7,14 @@ import { RequestInterceptor } from '../core/RequestInterceptor';
 
 describe('RequestInterceptor', () => {
     let interceptor: RequestInterceptor;
-    let captureCallback: jest.Mock;
+    let captureCallback: Mock;
+    let originalFetch: Mock;
 
     beforeEach(() => {
+        originalFetch = vi.fn();
+        global.fetch = originalFetch;
         interceptor = new RequestInterceptor();
-        captureCallback = jest.fn();
-
-        // Reset fetch
-        (global.fetch as jest.Mock).mockClear();
+        captureCallback = vi.fn();
     });
 
     afterEach(() => {
@@ -37,12 +38,9 @@ describe('RequestInterceptor', () => {
         it('should capture successful fetch requests', async () => {
             interceptor.start(captureCallback);
 
-            (global.fetch as jest.Mock).mockResolvedValueOnce({
-                ok: true,
-                status: 200,
-                headers: new Headers({ 'Content-Type': 'application/json' }),
-                json: async () => ({ data: 'test' }),
-            });
+            originalFetch.mockResolvedValueOnce(new Response(JSON.stringify({ data: 'test' }), {
+                status: 200, headers: { 'Content-Type': 'application/json' },
+            }));
 
             await fetch('http://localhost:3000/api/test', {
                 method: 'GET',
@@ -55,12 +53,15 @@ describe('RequestInterceptor', () => {
             const captured = captureCallback.mock.calls[0][0];
             expect(captured.method).toBe('GET');
             expect(captured.url).toBe('http://localhost:3000/api/test');
+            expect(captured.error).toBeUndefined();
+            expect(captured.statusCode).toBe(200);
+            expect(captured.responseBody).toEqual({ data: 'test' });
         });
 
         it('should capture failed fetch requests', async () => {
             interceptor.start(captureCallback);
 
-            (global.fetch as jest.Mock).mockRejectedValueOnce(
+            originalFetch.mockRejectedValueOnce(
                 new TypeError('Failed to fetch')
             );
 

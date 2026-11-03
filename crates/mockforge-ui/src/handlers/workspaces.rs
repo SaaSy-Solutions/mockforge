@@ -208,9 +208,23 @@ pub struct CreateWorkspaceRequest {
 /// Workspace update request
 #[derive(Debug, Clone, Deserialize)]
 pub struct UpdateWorkspaceRequest {
+    /// Set an AI mode; explicit null restores the server default.
+    #[serde(default, deserialize_with = "present_value")]
+    pub ai_mode: Option<Option<mockforge_core::ai_studio::config::AiMode>>,
+    /// Set workspace seed/snapshot settings; explicit null removes the override.
+    #[serde(default, deserialize_with = "present_value")]
+    pub ai_generation: Option<Option<mockforge_core::ai_studio::config::AiGenerationConfig>>,
     pub name: Option<String>,
     pub description: Option<String>,
     pub enabled: Option<bool>,
+}
+
+fn present_value<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    T::deserialize(deserializer).map(Some)
 }
 
 /// List all workspaces
@@ -594,6 +608,12 @@ pub async fn update_workspace(
     };
 
     // Update workspace fields
+    if let Some(mode) = request.ai_mode {
+        tenant_ws.workspace.config.ai_mode = mode;
+    }
+    if let Some(policy) = request.ai_generation {
+        tenant_ws.workspace.config.ai_generation = policy;
+    }
     if let Some(name) = request.name {
         tenant_ws.workspace.name = name;
     }
@@ -1962,6 +1982,8 @@ mod tests {
     #[test]
     fn test_update_workspace_request_empty() {
         let request = UpdateWorkspaceRequest {
+            ai_mode: None,
+            ai_generation: None,
             name: None,
             description: None,
             enabled: None,
@@ -1975,6 +1997,8 @@ mod tests {
     #[test]
     fn test_update_workspace_request_partial() {
         let request = UpdateWorkspaceRequest {
+            ai_mode: None,
+            ai_generation: None,
             name: Some("New Name".to_string()),
             description: None,
             enabled: Some(false),
@@ -2310,6 +2334,8 @@ mod tests {
 
         // Update the workspace
         let update_request = UpdateWorkspaceRequest {
+            ai_mode: None,
+            ai_generation: None,
             name: Some("Updated Name".to_string()),
             description: Some("New description".to_string()),
             enabled: Some(false),

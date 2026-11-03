@@ -1,0 +1,22 @@
+{
+  "name": "mockforge-hosted-mocks",
+  "private": true,
+  "description": "Cloudflare Worker + Containers that serve MockForge hosted mocks at mocks.mockforge.dev",
+  "type": "module",
+  "packageManager": "pnpm@9.15.9",
+  "scripts": {
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "@cloudflare/containers": "0.3.7"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20261005.1",
+    "typescript": "5.9.3",
+    "vitest": "5.0.3",
+    "wrangler": "4.147.0"
+  }
+}

@@ -203,6 +203,9 @@ pub struct WorkspaceConfig {
     /// Controls how AI-generated artifacts are used at runtime
     #[serde(default)]
     pub ai_mode: Option<crate::ai_studio::config::AiMode>,
+    /// Seed and snapshot settings for AI authoring in this workspace.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ai_generation: Option<crate::ai_studio::config::AiGenerationConfig>,
 }
 
 /// Authentication configuration for export
@@ -1254,7 +1257,8 @@ impl WorkspacePersistence {
             base_url: workspace.config.base_url.clone(),
             variables: workspace.config.global_environment.variables.clone(),
             reality_level: workspace.config.reality_level,
-            ai_mode: None, // Default to None for exported workspaces
+            ai_mode: workspace.config.ai_mode,
+            ai_generation: workspace.config.ai_generation.clone(),
         };
 
         Ok(WorkspaceExport {
@@ -1502,6 +1506,8 @@ impl WorkspacePersistence {
         }
 
         // Restore configuration
+        workspace.config.ai_mode = export.config.ai_mode;
+        workspace.config.ai_generation = export.config.ai_generation.clone();
         workspace.config.global_environment.variables = export.config.variables.clone();
 
         Ok(workspace)
@@ -2174,6 +2180,7 @@ mod tests {
                 variables: HashMap::new(),
                 reality_level: None,
                 ai_mode: None,
+                ai_generation: None,
             },
             requests: HashMap::new(),
         };
@@ -2207,6 +2214,7 @@ mod tests {
             variables: HashMap::new(),
             reality_level: None,
             ai_mode: None,
+            ai_generation: None,
         };
 
         assert_eq!(config.base_url, Some("http://localhost:8080".to_string()));
@@ -2391,6 +2399,7 @@ mod tests {
                 variables: HashMap::new(),
                 reality_level: None,
                 ai_mode: None,
+                ai_generation: None,
             },
             requests: HashMap::new(),
         };
@@ -2420,6 +2429,7 @@ mod tests {
             variables: HashMap::new(),
             reality_level: None,
             ai_mode: None,
+            ai_generation: None,
         };
         let config2 = config1.clone();
         assert_eq!(config1.base_url, config2.base_url);
@@ -2547,6 +2557,7 @@ mod tests {
                 variables: HashMap::new(),
                 reality_level: None,
                 ai_mode: None,
+                ai_generation: None,
             },
             requests: HashMap::new(),
         };
@@ -2576,6 +2587,7 @@ mod tests {
             variables: HashMap::new(),
             reality_level: None,
             ai_mode: None,
+            ai_generation: None,
         };
         let debug_str = format!("{:?}", config);
         assert!(debug_str.contains("WorkspaceConfig"));
@@ -2623,5 +2635,24 @@ mod tests {
         let structure = DirectoryStructure::Flat;
         let debug_str = format!("{:?}", structure);
         assert!(debug_str.contains("Flat") || debug_str.contains("DirectoryStructure"));
+    }
+    #[tokio::test]
+    async fn ai_generation_policy_survives_workspace_storage_and_export() {
+        let temp_dir = TempDir::new().unwrap();
+        let persistence = WorkspacePersistence::new(temp_dir.path());
+        let mut workspace = Workspace::new("AI policy".into());
+        let mut config = serde_json::to_value(&workspace.config).unwrap();
+        let policy = serde_json::json!({"seed":42,"deterministic_mode":{"freeze_directory":"fixtures/ai","freeze_format":"json","track_metadata":false,"enabled":false,"mode":"manual","auto_freeze":true}});
+        config["ai_generation"] = policy.clone();
+        config["ai_mode"] = serde_json::json!("generate_once_freeze");
+        workspace.config = serde_json::from_value(config).unwrap();
+        persistence.save_workspace(&workspace).await.unwrap();
+        let saved = persistence.load_workspace(&workspace.id).await.unwrap();
+        assert_eq!(serde_json::to_value(&saved.config).unwrap()["ai_generation"], policy);
+        let export = persistence.create_workspace_export(&saved).await.unwrap();
+        assert_eq!(serde_json::to_value(&export.config).unwrap()["ai_generation"], policy);
+        let imported = persistence.convert_export_to_workspace(&export, None).unwrap();
+        assert_eq!(serde_json::to_value(&imported.config).unwrap()["ai_generation"], policy);
+        assert_eq!(imported.config.ai_mode, workspace.config.ai_mode);
     }
 }

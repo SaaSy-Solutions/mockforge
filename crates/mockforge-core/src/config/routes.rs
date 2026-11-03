@@ -41,7 +41,60 @@ pub struct RouteResponseConfig {
     #[serde(default)]
     pub headers: HashMap<String, String>,
     /// Response body
+    #[serde(
+        default,
+        deserialize_with = "deserialize_response_body",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub body: Option<serde_json::Value>,
+}
+
+// Missing body retains the default response; an explicitly configured JSON
+// null is a real response value and must survive configuration round trips.
+fn deserialize_response_body<'de, D>(deserializer: D) -> Result<Option<serde_json::Value>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    serde_json::Value::deserialize(deserializer).map(Some)
+}
+
+#[cfg(test)]
+mod response_body_tests {
+    use super::RouteResponseConfig;
+    use serde_json::{json, Value};
+
+    #[test]
+    fn explicit_null_and_missing_body_are_distinct() {
+        let null: RouteResponseConfig =
+            serde_json::from_value(json!({"status":200,"body":null})).unwrap();
+        assert_eq!(null.body, Some(Value::Null));
+        let missing: RouteResponseConfig = serde_json::from_value(json!({"status":200})).unwrap();
+        assert_eq!(missing.body, None);
+    }
+
+    #[test]
+    fn json_and_yaml_preserve_every_json_body_type() {
+        for value in [
+            json!(null),
+            json!(true),
+            json!(42),
+            json!("{{uuid}}"),
+            json!([1, 2]),
+            json!({"id":1}),
+        ] {
+            let config = RouteResponseConfig {
+                status: 200,
+                headers: Default::default(),
+                body: Some(value.clone()),
+            };
+            let json: RouteResponseConfig =
+                serde_json::from_str(&serde_json::to_string(&config).unwrap()).unwrap();
+            let yaml: RouteResponseConfig =
+                serde_yaml::from_str(&serde_yaml::to_string(&config).unwrap()).unwrap();
+            assert_eq!(json.body, Some(value.clone()));
+            assert_eq!(yaml.body, Some(value));
+        }
+    }
 }
 
 /// Validation configuration for routes

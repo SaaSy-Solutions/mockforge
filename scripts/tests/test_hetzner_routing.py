@@ -13,10 +13,11 @@ WORKFLOWS = ROOT / '.github/workflows'
 LABELS = ['self-hosted', 'linux', 'x64', 'rust']
 ROUTE = '${{ (github.event_name != \'pull_request\' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON(\'["self-hosted","linux","x64","rust"]\') || \'ubuntu-latest\' }}'
 HETZNER = '[self-hosted, linux, x64, rust]'
+RELEASE_HETZNER = "[self-hosted, linux, x64, \"${{ vars.MOCKFORGE_RELEASE_RUNNER_LABEL || 'rust' }}\"]"
 PLUGIN_MATRIX_ROUTE = '${{ matrix.os == \'ubuntu-latest\' && fromJSON(\'["self-hosted","linux","x64","rust"]\') || matrix.os }}'
 TARGETS = {
     'ci.yml': ['changes', 'test', 'ui-test', 'warning-gate',
-               'warning-ratchet-preview', 'security-audit', 'msrv'],
+               'security-audit', 'msrv'],
     'registry-e2e.yml': ['changes', 'registry-e2e', 'registry-e2e-rls'],
 }
 
@@ -138,7 +139,7 @@ class HetznerRoutingTest(unittest.TestCase):
                                       f'{filename}:{job_id}')
 
     def test_native_preflight_is_read_only_and_fails_closed(self):
-        expected = {'ci.yml': ['test', 'warning-gate', 'warning-ratchet-preview', 'msrv']}
+        expected = {'ci.yml': ['test', 'warning-gate', 'msrv']}
         for filename, ids in expected.items():
             for job_id in ids:
                 block = jobs(filename)[job_id]
@@ -167,7 +168,10 @@ class HetznerRoutingTest(unittest.TestCase):
     def test_release_and_publish_jobs_run_on_hetzner_except_other_os(self):
         self.assertEqual(route(jobs('release.yml')['release-windows']), 'windows-latest')
         for job_id in ('release', 'publish', 'helm'):
-            self.assertEqual(route(jobs('release.yml')[job_id]), HETZNER, job_id)
+            self.assertEqual(route(jobs('release.yml')[job_id]), RELEASE_HETZNER, job_id)
+        release = (WORKFLOWS / 'release.yml').read_text()
+        self.assertNotIn('  pull_request:', release)
+        self.assertIn("      - 'v*.*.*'", release)
         plugin = jobs('plugin-publish.yml')
         self.assertEqual(route(plugin['build']), PLUGIN_MATRIX_ROUTE)
         self.assertIn('os: [ubuntu-latest, macos-latest, windows-latest]', plugin['build'])
@@ -221,6 +225,9 @@ class HetznerRoutingTest(unittest.TestCase):
         exceptions = {('runner-health.yml', 'check'): 'ubuntu-latest',
                       ('docs-check.yml', 'docs'): 'ubuntu-latest',
                       ('release.yml', 'release-windows'): 'windows-latest',
+                      ('release.yml', 'release'): RELEASE_HETZNER,
+                      ('release.yml', 'publish'): RELEASE_HETZNER,
+                      ('release.yml', 'helm'): RELEASE_HETZNER,
                       ('plugin-publish.yml', 'build'): PLUGIN_MATRIX_ROUTE}
         for wf in sorted(WORKFLOWS.glob('*.yml')):
             for job_id, block in jobs(wf.name).items():

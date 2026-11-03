@@ -1,0 +1,31 @@
+{
+  "image": "qdrant/qdrant:v1.19.2",
+  "phases": [
+    {
+      "test": "qdrant_lifecycle_and_snapshot",
+      "phase": null,
+      "exit_code": 0,
+      "one_test_executed": true
+    },
+    {
+      "test": "qdrant_metrics_and_vector_validation",
+      "phase": null,
+      "exit_code": 0,
+      "one_test_executed": true
+    },
+    {
+      "test": "qdrant_persistence_across_restart",
+      "phase": "seed",
+      "exit_code": 0,
+      "one_test_executed": true
+    },
+    {
+      "test": "qdrant_persistence_across_restart",
+      "phase": "verify",
+      "exit_code": 0,
+      "one_test_executed": true
+    }
+  ],
+  "owned_resources_removed": true,
+  "all_passed": true
+}

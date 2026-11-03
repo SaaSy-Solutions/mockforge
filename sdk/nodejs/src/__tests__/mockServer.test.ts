@@ -1,4 +1,14 @@
-import { MockServer } from '../mockServer';
+import * as http from 'http';
+import { AddressInfo } from 'net';
+import { EventEmitter } from 'events';
+import * as childProcess from 'child_process';
+import { MockServer, resolveManagementToken } from '../mockServer';
+
+jest.mock('child_process', () => {
+  const actual = jest.requireActual('child_process');
+  // Pass through to the real spawn (integration tests) unless overridden.
+  return { ...actual, spawn: jest.fn((...args: unknown[]) => actual.spawn(...args)) };
+});
 
 describe('MockServer', () => {
   describe('constructor', () => {
@@ -23,6 +33,70 @@ describe('MockServer', () => {
     it('should return correct URL', () => {
       const server = new MockServer({ port: 3000, host: '127.0.0.1' });
       expect(server.url()).toBe('http://127.0.0.1:3000');
+    });
+  });
+
+  describe('management token', () => {
+    const saved = process.env.MOCKFORGE_MANAGEMENT_TOKEN;
+    afterEach(() => {
+      if (saved === undefined) delete process.env.MOCKFORGE_MANAGEMENT_TOKEN;
+      else process.env.MOCKFORGE_MANAGEMENT_TOKEN = saved;
+    });
+
+    it('prefers the explicit option, then env, then a random token', () => {
+      process.env.MOCKFORGE_MANAGEMENT_TOKEN = 'e'.repeat(40);
+      expect(resolveManagementToken('x'.repeat(40))).toBe('x'.repeat(40));
+      expect(resolveManagementToken()).toBe('e'.repeat(40));
+      delete process.env.MOCKFORGE_MANAGEMENT_TOKEN;
+      const a = resolveManagementToken();
+      const b = resolveManagementToken();
+      expect(a).toMatch(/^[0-9a-f]{64}$/);
+      expect(a).not.toBe(b);
+    });
+
+    it('passes the token to the spawned CLI via env', async () => {
+      const spawnMock = childProcess.spawn as unknown as jest.Mock;
+      const fake = Object.assign(new EventEmitter(), {
+        stdout: new EventEmitter(),
+        stderr: new EventEmitter(),
+        killed: false,
+        kill: jest.fn(),
+      });
+      spawnMock.mockReturnValueOnce(fake);
+      const token = 't'.repeat(40);
+      const pending = MockServer.start({ managementToken: token, startupTimeoutMs: 1000 });
+      setImmediate(() => fake.emit('exit', 1, null));
+      await expect(pending).rejects.toBeDefined();
+      expect(spawnMock).toHaveBeenCalledTimes(1);
+      const opts = spawnMock.mock.calls[0][2];
+      expect(opts.env.MOCKFORGE_MANAGEMENT_TOKEN).toBe(token);
+    });
+
+    it('sends the header on mock creation and verification requests', async () => {
+      const seen: Array<{ url?: string; token?: string | string[] }> = [];
+      const srv = http.createServer((req, res) => {
+        seen.push({ url: req.url, token: req.headers['x-mockforge-management-token'] });
+        req.resume();
+        req.on('end', () => {
+          res.setHeader('content-type', 'application/json');
+          res.end(JSON.stringify({ id: 'm1', matched: true, count: 0, matches: [] }));
+        });
+      });
+      await new Promise<void>((r) => srv.listen(0, '127.0.0.1', () => r()));
+      try {
+        const port = (srv.address() as AddressInfo).port;
+        const token = 'k'.repeat(48);
+        const server = new MockServer({ port, managementToken: token });
+        await server.stubResponse('GET', '/x', { ok: true });
+        await server.verify({ path: '/x' }, { type: 'never' });
+        expect(seen.map((s) => s.url)).toEqual([
+          '/__mockforge/api/mocks',
+          '/api/verification/verify',
+        ]);
+        expect(seen.every((s) => s.token === token)).toBe(true);
+      } finally {
+        await new Promise<void>((r) => srv.close(() => r()));
+      }
     });
   });
 

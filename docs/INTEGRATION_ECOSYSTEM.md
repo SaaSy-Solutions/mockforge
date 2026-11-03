@@ -445,8 +445,8 @@ cargo add --dev mockforge-sdk
 # Node.js
 npm install @mockforge/sdk
 
-# Python
-pip install mockforge-sdk
+# Python (not yet on PyPI; installs from the repository)
+pip install "mockforge-sdk @ git+https://github.com/SaaSy-Solutions/mockforge.git#subdirectory=sdk/python"
 
 # Go
 go get github.com/SaaSy-Solutions/mockforge/sdk/go

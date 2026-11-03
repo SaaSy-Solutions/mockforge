@@ -25,7 +25,7 @@ class MockForgeCompletionContributor : CompletionContributor() {
     private class MockForgeCompletionProvider : com.intellij.codeInsight.completion.CompletionProvider<CompletionParameters>() {
         override fun addCompletions(
             parameters: CompletionParameters,
-            context: com.intellij.codeInsight.completion.CompletionContext,
+            context: com.intellij.util.ProcessingContext,
             result: CompletionResultSet
         ) {
             val file = parameters.originalFile

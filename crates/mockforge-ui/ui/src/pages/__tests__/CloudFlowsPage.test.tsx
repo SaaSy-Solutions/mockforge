@@ -77,4 +77,14 @@ describe('Cloud flow row actions', () => {
         expect(cloudFlowsApi.triggerRun).toHaveBeenCalledWith('flow-1');
         expect(screen.queryByText('Config (JSON — saving creates a new version)')).not.toBeInTheDocument();
     });
+
+    it('offers only chain for new flows while retaining historic kinds in the list', async () => {
+        showPage();
+        expect(await screen.findByText('QA flow')).toBeInTheDocument();
+        expect(screen.getAllByText('scenario').length).toBeGreaterThan(0);
+
+        fireEvent.click(screen.getByRole('button', { name: 'New Flow' }));
+        const kind = screen.getByLabelText('Kind') as HTMLSelectElement;
+        expect(Array.from(kind.options, (option) => option.value)).toEqual(['chain']);
+    });
 });

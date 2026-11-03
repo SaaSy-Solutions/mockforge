@@ -159,6 +159,11 @@ impl OpenApiRoute {
             }
         }
 
+        Self::parse_spec_response_selection_mode(operation)
+    }
+
+    fn parse_spec_response_selection_mode(operation: &Operation) -> ResponseSelectionMode {
+        let op_id = operation.operation_id.as_deref().unwrap_or("unknown");
         // Check for x-mockforge-response-selection extension
         if let Some(selection_value) = operation.extensions.get("x-mockforge-response-selection") {
             // Try to parse as string first
@@ -432,6 +437,27 @@ impl OpenApiRoute {
         scenario: Option<&str>,
     ) -> (u16, serde_json::Value) {
         self.mock_response_with_status_and_scenario_and_override(scenario, None)
+    }
+
+    /// Generate tenant responses without process environment or global recording.
+    pub(crate) fn hosted_response(
+        &self,
+        scenario: Option<&str>,
+        status_override: Option<u16>,
+    ) -> (u16, serde_json::Value) {
+        let status = status_override
+            .filter(|code| self.has_response_for_status(*code))
+            .unwrap_or_else(|| self.find_first_available_status_code());
+        let body = crate::response::ResponseGenerator::generate_hosted_response(
+            &self.spec,
+            &self.operation,
+            status,
+            scenario,
+            Self::parse_spec_response_selection_mode(&self.operation),
+            &self.response_selector,
+        )
+        .unwrap_or_else(|_| serde_json::json!({}));
+        (status, body)
     }
 
     /// Generate a mock response with status code, scenario, and optional status override

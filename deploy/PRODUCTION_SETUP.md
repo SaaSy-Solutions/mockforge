@@ -283,12 +283,11 @@ Set these in Settings > Secrets and variables > Actions:
 
 | Secret            | Description              |
 |-------------------|--------------------------|
-| `FLY_API_TOKEN`   | Fly.io deploy token      |
 | `DOCKER_USERNAME` | Docker Hub username      |
 | `DOCKER_PASSWORD` | Docker Hub password/token|
 | `CRATES_IO_TOKEN` | crates.io API token      |
 
-The `release.yml` workflow automatically deploys to Fly.io on version tags (non-prerelease).
+The `release.yml` workflow publishes release artifacts on version tags; it does not deploy to Fly.io.
 
 ## 7. Verification Checklist
 

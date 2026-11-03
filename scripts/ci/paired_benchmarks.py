@@ -2,6 +2,7 @@
 """Measure immutable base/head sources together instead of mixing host loads."""
 
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -92,6 +93,8 @@ def run(root, base_sha, output):
                     {
                         "base_sha": base_sha,
                         "head_sha": head,
+                        "base_binary_sha256": hashlib.sha256(base_binary.read_bytes()).hexdigest(),
+                        "head_binary_sha256": hashlib.sha256(head_binary.read_bytes()).hexdigest(),
                         "order": "ABBA",
                         "base_samples_per_case": 2,
                         "head_samples_per_case": 2,

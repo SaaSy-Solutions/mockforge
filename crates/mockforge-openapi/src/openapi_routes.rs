@@ -11,13 +11,15 @@
 
 pub mod builder;
 pub mod generation;
+mod parameter_schema;
 #[doc(hidden)]
 pub mod registry;
 pub mod validation;
+mod validation_policy;
 
 use crate::response::AiGenerator;
 use crate::response_rewriter::{OverrideHook, OverrideRequest, ResponseRewriter};
-use crate::{OpenApiOperation, OpenApiRoute, OpenApiSchema, OpenApiSpec};
+use crate::{OpenApiOperation, OpenApiRoute, OpenApiSpec};
 use axum::extract::{DefaultBodyLimit, Path as AxumPath, RawQuery};
 use axum::http::HeaderMap;
 use axum::response::IntoResponse;
@@ -32,7 +34,6 @@ use mockforge_foundation::latency::LatencyInjector;
 use mockforge_foundation::response_generation_trace::ResponseGenerationTrace;
 use mockforge_foundation::schema_diff::validation_diff;
 use once_cell::sync::Lazy;
-use openapiv3::ParameterSchemaOrContent;
 use serde_json::{json, Map, Value};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::{Arc, Mutex};
@@ -48,10 +49,13 @@ pub struct OpenApiRouteRegistry {
     routes: Vec<OpenApiRoute>,
     /// Validation options
     options: ValidationOptions,
+    /// Whether request validation follows serve-time overrides and shadow mode.
+    honor_serve_validation_policy: bool,
     /// Custom fixture loader (optional)
     custom_fixture_loader: Option<Arc<crate::custom_fixture::CustomFixtureLoader>>,
     /// Override rules applied to every generated response (optional)
     overrides: Option<Arc<dyn OverrideHook>>,
+    isolated: bool,
 }
 
 /// Validation mode for request/response validation
@@ -231,9 +235,26 @@ impl OpenApiRouteRegistry {
             spec,
             routes,
             options,
+            honor_serve_validation_policy: true,
             custom_fixture_loader: None,
             overrides: None,
+            isolated: false,
         }
+    }
+
+    /// Construct a registry for offline contract checks and CI gates.
+    ///
+    /// Always enforces request contracts with aggregated errors and status 400,
+    /// independently of server validation modes, route overrides, skip prefixes,
+    /// status overrides and shadow mode. Does not change process environment.
+    pub fn new_for_contract_verification(spec: OpenApiSpec) -> Self {
+        let options = ValidationOptions {
+            validation_status: Some(400),
+            ..Default::default()
+        };
+        let mut registry = Self::new_with_options(spec, options);
+        registry.honor_serve_validation_policy = false;
+        registry
     }
 
     /// Construct with explicit options
@@ -254,8 +275,10 @@ impl OpenApiRouteRegistry {
             spec,
             routes,
             options,
+            honor_serve_validation_policy: true,
             custom_fixture_loader: None,
             overrides: None,
+            isolated: false,
         }
     }
 
@@ -283,8 +306,10 @@ impl OpenApiRouteRegistry {
             spec: self.spec.clone(),
             routes: self.routes.clone(),
             options: self.options.clone(),
+            honor_serve_validation_policy: self.honor_serve_validation_policy,
             custom_fixture_loader: self.custom_fixture_loader.clone(),
             overrides: self.overrides.clone(),
+            isolated: self.isolated,
         }
     }
 
@@ -415,6 +440,30 @@ impl OpenApiRouteRegistry {
             ..Default::default()
         };
         self.build_router_with_context(ctx)
+    }
+
+    /// Build only this specification's operations for a hosted tenant.
+    /// Does not inherit process environment, fixture files, override hooks,
+    /// management endpoints, AI providers or global conformance recording.
+    pub fn build_hosted_router(mut self) -> Router {
+        self.isolated = true;
+        self.options = ValidationOptions::default();
+        self.custom_fixture_loader = None;
+        self.overrides = None;
+        let ctx = RouterContext {
+            enable_full_validation: true,
+            add_spec_endpoint: false,
+            ..Default::default()
+        };
+        self.build_router_with_context(ctx)
+    }
+
+    fn environment_value(&self, name: &str) -> Option<String> {
+        if self.isolated {
+            None
+        } else {
+            std::env::var(name).ok()
+        }
     }
 
     /// Build an Axum router using a shared RouterContext.
@@ -597,7 +646,7 @@ impl OpenApiRouteRegistry {
                     .get("X-Mockforge-Scenario")
                     .and_then(|v| v.to_str().ok())
                     .map(|s| s.to_string())
-                    .or_else(|| std::env::var("MOCKFORGE_HTTP_SCENARIO").ok());
+                    .or_else(|| validator.environment_value("MOCKFORGE_HTTP_SCENARIO"));
 
                 let status_override = headers
                     .get("X-Mockforge-Response-Status")
@@ -605,11 +654,14 @@ impl OpenApiRouteRegistry {
                     .and_then(|s| s.parse::<u16>().ok());
 
                 // (e) Generate mock response for this request with scenario support
-                let (selected_status, mock_response) = route_clone
-                    .mock_response_with_status_and_scenario_and_override(
+                let (selected_status, mock_response) = if validator.isolated {
+                    route_clone.hosted_response(scenario.as_deref(), status_override)
+                } else {
+                    route_clone.mock_response_with_status_and_scenario_and_override(
                         scenario.as_deref(),
                         status_override,
-                    );
+                    )
+                };
 
                 // (f) Validation (if full validation is enabled)
                 if ctx.enable_full_validation {
@@ -720,8 +772,8 @@ impl OpenApiRouteRegistry {
                     {
                         let status_code =
                             validator.options.validation_status.unwrap_or_else(|| {
-                                std::env::var("MOCKFORGE_VALIDATION_STATUS")
-                                    .ok()
+                                validator
+                                    .environment_value("MOCKFORGE_VALIDATION_STATUS")
                                     .and_then(|s| s.parse::<u16>().ok())
                                     .unwrap_or(415)
                             });
@@ -734,7 +786,8 @@ impl OpenApiRouteRegistry {
                                         .map(|s| s.to_string())
                                 },
                             );
-                        mockforge_foundation::conformance_violations::record(
+                        if !validator.isolated {
+                            mockforge_foundation::conformance_violations::record(
                             mockforge_foundation::conformance_violations::ServerConformanceViolation {
                                 timestamp: Utc::now(),
                                 method: method.to_string(),
@@ -750,6 +803,7 @@ impl OpenApiRouteRegistry {
                                 categories: Vec::new(),
                             },
                         );
+                        }
                         let status = axum::http::StatusCode::from_u16(status_code)
                             .unwrap_or(axum::http::StatusCode::UNSUPPORTED_MEDIA_TYPE);
                         let payload = serde_json::json!({
@@ -786,8 +840,8 @@ impl OpenApiRouteRegistry {
                         // Choose status: prefer options.validation_status, fallback to env, else 400
                         let status_code =
                             validator.options.validation_status.unwrap_or_else(|| {
-                                std::env::var("MOCKFORGE_VALIDATION_STATUS")
-                                    .ok()
+                                validator
+                                    .environment_value("MOCKFORGE_VALIDATION_STATUS")
                                     .and_then(|s| s.parse::<u16>().ok())
                                     .unwrap_or(400)
                             });
@@ -818,7 +872,9 @@ impl OpenApiRouteRegistry {
                             })
                         };
 
-                        record_validation_error(&payload);
+                        if !validator.isolated {
+                            record_validation_error(&payload);
+                        }
 
                         // Issue #79 round 12 — also push to the workspace-wide
                         // server-conformance violation ring buffer so the TUI's
@@ -852,7 +908,8 @@ impl OpenApiRouteRegistry {
                                         .map(|s| s.to_string())
                                 },
                             );
-                        mockforge_foundation::conformance_violations::record(
+                        if !validator.isolated {
+                            mockforge_foundation::conformance_violations::record(
                             mockforge_foundation::conformance_violations::ServerConformanceViolation {
                                 timestamp: Utc::now(),
                                 method: method.to_string(),
@@ -868,6 +925,7 @@ impl OpenApiRouteRegistry {
                                 categories: Vec::new(),
                             },
                         );
+                        }
 
                         let status = axum::http::StatusCode::from_u16(status_code)
                             .unwrap_or(axum::http::StatusCode::BAD_REQUEST);
@@ -893,8 +951,8 @@ impl OpenApiRouteRegistry {
                 // Treating it as a forcing override (not just OR) lets tests and
                 // ad-hoc operator overrides disable token expansion explicitly.
                 let mut final_response = mock_response.clone();
-                let env_expand: Option<bool> = std::env::var("MOCKFORGE_RESPONSE_TEMPLATE_EXPAND")
-                    .ok()
+                let env_expand: Option<bool> = validator
+                    .environment_value("MOCKFORGE_RESPONSE_TEMPLATE_EXPAND")
                     .map(|v| v == "1" || v.eq_ignore_ascii_case("true"));
                 let expand = match env_expand {
                     Some(v) => v,
@@ -1041,7 +1099,12 @@ impl OpenApiRouteRegistry {
         // Issue #79 — raise the body-size cap above axum's 2 MiB default so
         // large chunked uploads don't get truncated mid-extraction. See
         // `openapi_body_limit_bytes` for the rationale.
-        router.layer(DefaultBodyLimit::max(openapi_body_limit_bytes()))
+        let body_limit = if self.isolated {
+            10 * 1024 * 1024
+        } else {
+            openapi_body_limit_bytes()
+        };
+        router.layer(DefaultBodyLimit::max(body_limit))
     }
 
     /// Build an Axum router from the OpenAPI spec with latency injection support
@@ -1394,7 +1457,9 @@ impl OpenApiRouteRegistry {
         // proceeds to synthesise a normal 2xx response. Lets a proxy
         // replay run flow through non-blocking while capturing every
         // violation.
-        if mockforge_foundation::unknown_paths::shadow_mode_enabled() {
+        if self.honor_serve_validation_policy
+            && mockforge_foundation::unknown_paths::shadow_mode_enabled()
+        {
             return Ok(());
         }
 
@@ -1454,48 +1519,9 @@ impl OpenApiRouteRegistry {
         body: Option<&Value>,
         body_present: bool,
     ) -> Result<()> {
-        // Skip validation for any configured admin prefixes
-        for pref in &self.options.admin_skip_prefixes {
-            if !pref.is_empty() && path.starts_with(pref) {
-                return Ok(());
-            }
-        }
-        // Runtime env overrides
-        let env_mode = std::env::var("MOCKFORGE_REQUEST_VALIDATION").ok().map(|v| {
-            match v.to_ascii_lowercase().as_str() {
-                "off" | "disable" | "disabled" => ValidationMode::Disabled,
-                "warn" | "warning" => ValidationMode::Warn,
-                _ => ValidationMode::Enforce,
-            }
-        });
-        let aggregate = std::env::var("MOCKFORGE_AGGREGATE_ERRORS")
-            .ok()
-            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-            .unwrap_or(self.options.aggregate_errors);
-        // Per-route runtime overrides via JSON env var
-        let env_overrides: Option<Map<String, Value>> =
-            std::env::var("MOCKFORGE_VALIDATION_OVERRIDES_JSON")
-                .ok()
-                .and_then(|s| serde_json::from_str::<Value>(&s).ok())
-                .and_then(|v| v.as_object().cloned());
-        // Response validation is handled in HTTP layer now
-        let mut effective_mode = env_mode.unwrap_or(self.options.request_mode.clone());
-        // Apply runtime overrides first if present
-        if let Some(map) = &env_overrides {
-            if let Some(v) = map.get(&format!("{} {}", method, path)) {
-                if let Some(m) = v.as_str() {
-                    effective_mode = match m {
-                        "off" => ValidationMode::Disabled,
-                        "warn" => ValidationMode::Warn,
-                        _ => ValidationMode::Enforce,
-                    };
-                }
-            }
-        }
-        // Then static options overrides
-        if let Some(override_mode) = self.options.overrides.get(&format!("{} {}", method, path)) {
-            effective_mode = override_mode.clone();
-        }
+        let Some((aggregate, effective_mode)) = self.request_validation_policy(path, method) else {
+            return Ok(());
+        };
         if matches!(effective_mode, ValidationMode::Disabled) {
             return Ok(());
         }
@@ -1624,6 +1650,7 @@ impl OpenApiRouteRegistry {
                                 aggregate,
                                 &mut errors,
                                 &mut details,
+                                &self.spec,
                             );
                         }
                         openapiv3::Parameter::Query {
@@ -1666,6 +1693,7 @@ impl OpenApiRouteRegistry {
                                 aggregate,
                                 &mut errors,
                                 &mut details,
+                                &self.spec,
                             );
                         }
                         openapiv3::Parameter::Header { parameter_data, .. } => {
@@ -1676,6 +1704,7 @@ impl OpenApiRouteRegistry {
                                 aggregate,
                                 &mut errors,
                                 &mut details,
+                                &self.spec,
                             );
                         }
                         openapiv3::Parameter::Cookie { parameter_data, .. } => {
@@ -1686,6 +1715,7 @@ impl OpenApiRouteRegistry {
                                 aggregate,
                                 &mut errors,
                                 &mut details,
+                                &self.spec,
                             );
                         }
                     }
@@ -2896,9 +2926,10 @@ fn coerce_value_for_schema(value: &Value, schema: &openapiv3::Schema) -> Value {
                 openapiv3::SchemaKind::Type(openapiv3::Type::Integer(_)) => {
                     // Schema expects integer, try to parse
                     if let Ok(n) = s.parse::<i64>() {
-                        if let Some(num) = serde_json::Number::from_f64(n as f64) {
-                            return Value::Number(num);
-                        }
+                        return Value::Number(n.into());
+                    }
+                    if let Ok(n) = s.parse::<u64>() {
+                        return Value::Number(n.into());
                     }
                     value.clone()
                 }
@@ -2915,67 +2946,6 @@ fn coerce_value_for_schema(value: &Value, schema: &openapiv3::Schema) -> Value {
                     value.clone()
                 }
             }
-        }
-        _ => value.clone(),
-    }
-}
-
-/// Apply style-aware coercion for query params
-fn coerce_by_style(value: &Value, schema: &openapiv3::Schema, style: Option<&str>) -> Value {
-    // Style-aware coercion for query parameters
-    match value {
-        Value::String(s) => {
-            // Check if schema expects an array and we have a delimited string
-            if let openapiv3::SchemaKind::Type(openapiv3::Type::Array(array_type)) =
-                &schema.schema_kind
-            {
-                let delimiter = match style {
-                    Some("spaceDelimited") => " ",
-                    Some("pipeDelimited") => "|",
-                    Some("form") | None => ",", // Default to form style (comma-separated)
-                    _ => ",",                   // Fallback to comma
-                };
-
-                if s.contains(delimiter) {
-                    // Split delimited string into array
-                    let parts: Vec<&str> = s.split(delimiter).map(|s| s.trim()).collect();
-                    let mut array_values = Vec::new();
-
-                    for part in parts {
-                        // Coerce each part based on array item type
-                        if let Some(items_schema) = &array_type.items {
-                            if let Some(items_schema_obj) = items_schema.as_item() {
-                                let part_value = Value::String(part.to_string());
-                                let coerced_part =
-                                    coerce_by_style(&part_value, items_schema_obj, style);
-                                array_values.push(coerced_part);
-                            } else {
-                                // If items schema is a reference or not available, keep as string
-                                array_values.push(Value::String(part.to_string()));
-                            }
-                        } else {
-                            // No items schema defined, keep as string
-                            array_values.push(Value::String(part.to_string()));
-                        }
-                    }
-                    return Value::Array(array_values);
-                }
-            }
-
-            // Try to parse as number first
-            if let Ok(n) = s.parse::<f64>() {
-                if let Some(num) = serde_json::Number::from_f64(n) {
-                    return Value::Number(num);
-                }
-            }
-            // Try to parse as boolean
-            match s.to_lowercase().as_str() {
-                "true" | "1" | "yes" | "on" => return Value::Bool(true),
-                "false" | "0" | "no" | "off" => return Value::Bool(false),
-                _ => {}
-            }
-            // Keep as string
-            value.clone()
         }
         _ => value.clone(),
     }
@@ -3056,10 +3026,15 @@ fn generate_enhanced_422_response(
                             "path",
                             "path parameter",
                             &mut field_errors,
+                            &validator.spec,
                         );
                     }
-                    openapiv3::Parameter::Query { parameter_data, .. } => {
-                        let deep_value = if Some("form") == Some("deepObject") {
+                    openapiv3::Parameter::Query {
+                        parameter_data,
+                        style,
+                        ..
+                    } => {
+                        let deep_value = if matches!(style, openapiv3::QueryStyle::DeepObject) {
                             build_deep_object(&parameter_data.name, query_params)
                         } else {
                             None
@@ -3071,6 +3046,8 @@ fn generate_enhanced_422_response(
                             "query parameter",
                             deep_value,
                             &mut field_errors,
+                            Some(query_style_name(style)),
+                            &validator.spec,
                         );
                     }
                     openapiv3::Parameter::Header { parameter_data, .. } => {
@@ -3080,6 +3057,7 @@ fn generate_enhanced_422_response(
                             "header",
                             "header parameter",
                             &mut field_errors,
+                            &validator.spec,
                         );
                     }
                     openapiv3::Parameter::Cookie { parameter_data, .. } => {
@@ -3089,6 +3067,7 @@ fn generate_enhanced_422_response(
                             "cookie",
                             "cookie parameter",
                             &mut field_errors,
+                            &validator.spec,
                         );
                     }
                 }
@@ -3107,7 +3086,49 @@ fn generate_enhanced_422_response(
     })
 }
 
-/// Helper function to validate a parameter
+/// HTTP header names are ASCII case-insensitive; other parameter names are not.
+/// Prefer the exact spelling so serving's preselected header map stays fast.
+fn parameter_value<'a>(
+    params_map: &'a Map<String, Value>,
+    name: &str,
+    location: &str,
+) -> Option<&'a Value> {
+    params_map.get(name).or_else(|| {
+        if location == "header" {
+            params_map
+                .iter()
+                .find(|(key, _)| key.eq_ignore_ascii_case(name))
+                .map(|(_, value)| value)
+        } else {
+            None
+        }
+    })
+}
+
+fn query_style_name(style: &openapiv3::QueryStyle) -> &'static str {
+    match style {
+        openapiv3::QueryStyle::Form => "form",
+        openapiv3::QueryStyle::SpaceDelimited => "spaceDelimited",
+        openapiv3::QueryStyle::PipeDelimited => "pipeDelimited",
+        openapiv3::QueryStyle::DeepObject => "deepObject",
+    }
+}
+
+fn parameter_failure(
+    data: &openapiv3::ParameterData,
+    location: &str,
+    message: String,
+    aggregate: bool,
+    errors: &mut Vec<String>,
+    details: &mut Vec<Value>,
+) {
+    errors.push(format!("{} parameter '{}' validation failed: {}", location, data.name, message));
+    if aggregate {
+        details.push(json!({"path":format!("{}.{}",location,data.name),"code":"schema_validation","message":message}));
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 fn validate_parameter(
     parameter_data: &openapiv3::ParameterData,
     params_map: &Map<String, Value>,
@@ -3115,41 +3136,35 @@ fn validate_parameter(
     aggregate: bool,
     errors: &mut Vec<String>,
     details: &mut Vec<Value>,
+    spec: &OpenApiSpec,
 ) {
-    match params_map.get(&parameter_data.name) {
-        Some(v) => {
-            if let ParameterSchemaOrContent::Schema(s) = &parameter_data.format {
-                if let Some(schema) = s.as_item() {
-                    let coerced = coerce_value_for_schema(v, schema);
-                    // Validate the coerced value against the schema
-                    if let Err(validation_error) =
-                        OpenApiSchema::new(schema.clone()).validate(&coerced)
-                    {
-                        let error_msg = validation_error.to_string();
-                        errors.push(format!(
-                            "{} parameter '{}' validation failed: {}",
-                            prefix, parameter_data.name, error_msg
-                        ));
-                        if aggregate {
-                            details.push(serde_json::json!({"path":format!("{}.{}", prefix, parameter_data.name),"code":"schema_validation","message":error_msg}));
-                        }
-                    }
-                }
+    let schema = match parameter_schema::schema(parameter_data, spec) {
+        Ok(schema) => schema,
+        Err(message) => {
+            parameter_failure(parameter_data, prefix, message, aggregate, errors, details);
+            return;
+        }
+    };
+    match parameter_value(params_map, &parameter_data.name, prefix) {
+        Some(value) => {
+            if let Err((_, message)) = parameter_schema::validate_parameter_value(
+                value,
+                schema,
+                parameter_data,
+                spec,
+                None,
+            ) {
+                parameter_failure(parameter_data, prefix, message, aggregate, errors, details);
             }
         }
-        None => {
-            if parameter_data.required {
-                errors.push(format!(
-                    "missing required {} parameter '{}'",
-                    prefix, parameter_data.name
-                ));
-                details.push(serde_json::json!({"path":format!("{}.{}", prefix, parameter_data.name),"code":"required","message":"Missing required parameter"}));
-            }
+        None if parameter_data.required => {
+            errors.push(format!("missing required {} parameter '{}'", prefix, parameter_data.name));
+            details.push(json!({"path":format!("{}.{}",prefix,parameter_data.name),"code":"required","message":"Missing required parameter"}));
         }
+        None => {}
     }
 }
 
-/// Helper function to validate a parameter with deep object support
 #[allow(clippy::too_many_arguments)]
 fn validate_parameter_with_deep_object(
     parameter_data: &openapiv3::ParameterData,
@@ -3160,95 +3175,75 @@ fn validate_parameter_with_deep_object(
     aggregate: bool,
     errors: &mut Vec<String>,
     details: &mut Vec<Value>,
+    spec: &OpenApiSpec,
 ) {
-    match deep_value.as_ref().or_else(|| params_map.get(&parameter_data.name)) {
-        Some(v) => {
-            if let ParameterSchemaOrContent::Schema(s) = &parameter_data.format {
-                if let Some(schema) = s.as_item() {
-                    let coerced = coerce_by_style(v, schema, style); // Use the actual style
-                                                                     // Validate the coerced value against the schema
-                    if let Err(validation_error) =
-                        OpenApiSchema::new(schema.clone()).validate(&coerced)
-                    {
-                        let error_msg = validation_error.to_string();
-                        errors.push(format!(
-                            "{} parameter '{}' validation failed: {}",
-                            prefix, parameter_data.name, error_msg
-                        ));
-                        if aggregate {
-                            details.push(serde_json::json!({"path":format!("{}.{}", prefix, parameter_data.name),"code":"schema_validation","message":error_msg}));
-                        }
-                    }
-                }
+    let schema = match parameter_schema::schema(parameter_data, spec) {
+        Ok(schema) => schema,
+        Err(message) => {
+            parameter_failure(parameter_data, prefix, message, aggregate, errors, details);
+            return;
+        }
+    };
+    match deep_value
+        .as_ref()
+        .or_else(|| parameter_value(params_map, &parameter_data.name, prefix))
+    {
+        Some(value) => {
+            if let Err((_, message)) = parameter_schema::validate_parameter_value(
+                value,
+                schema,
+                parameter_data,
+                spec,
+                style,
+            ) {
+                parameter_failure(parameter_data, prefix, message, aggregate, errors, details);
             }
         }
-        None => {
-            if parameter_data.required {
-                errors.push(format!(
-                    "missing required {} parameter '{}'",
-                    prefix, parameter_data.name
-                ));
-                details.push(serde_json::json!({"path":format!("{}.{}", prefix, parameter_data.name),"code":"required","message":"Missing required parameter"}));
-            }
+        None if parameter_data.required => {
+            errors.push(format!("missing required {} parameter '{}'", prefix, parameter_data.name));
+            details.push(json!({"path":format!("{}.{}",prefix,parameter_data.name),"code":"required","message":"Missing required parameter"}));
         }
+        None => {}
     }
 }
 
-/// Helper function to validate a parameter with detailed error collection
+#[allow(clippy::too_many_arguments)]
 fn validate_parameter_detailed(
     parameter_data: &openapiv3::ParameterData,
     params_map: &Map<String, Value>,
     location: &str,
     value_type: &str,
     field_errors: &mut Vec<Value>,
+    spec: &OpenApiSpec,
 ) {
-    match params_map.get(&parameter_data.name) {
+    let path = format!("{}.{}", location, parameter_data.name);
+    let schema = match parameter_schema::schema(parameter_data, spec) {
+        Ok(schema) => schema,
+        Err(message) => {
+            field_errors.push(json!({"path":path,"expected":"resolvable schema","found":"unresolved","message":message}));
+            return;
+        }
+    };
+    match parameter_value(params_map, &parameter_data.name, location) {
         Some(value) => {
-            if let ParameterSchemaOrContent::Schema(schema) = &parameter_data.format {
-                // Collect detailed validation errors for this parameter
-                let details: Vec<Value> = Vec::new();
-                let param_path = format!("{}.{}", location, parameter_data.name);
-
-                // Apply coercion before validation
-                if let Some(schema_ref) = schema.as_item() {
-                    let coerced_value = coerce_value_for_schema(value, schema_ref);
-                    // Validate the coerced value against the schema
-                    if let Err(validation_error) =
-                        OpenApiSchema::new(schema_ref.clone()).validate(&coerced_value)
-                    {
-                        field_errors.push(json!({
-                            "path": param_path,
-                            "expected": "valid according to schema",
-                            "found": coerced_value,
-                            "message": validation_error.to_string()
-                        }));
-                    }
-                }
-
-                for detail in details {
-                    field_errors.push(json!({
-                        "path": detail["path"],
-                        "expected": detail["expected_type"],
-                        "found": detail["value"],
-                        "message": detail["message"]
-                    }));
-                }
+            if let Err((found, message)) = parameter_schema::validate_parameter_value(
+                value,
+                schema,
+                parameter_data,
+                spec,
+                None,
+            ) {
+                field_errors.push(json!({"path":path,"expected":"valid according to schema","found":found,"message":message}));
             }
         }
-        None => {
-            if parameter_data.required {
-                field_errors.push(json!({
-                    "path": format!("{}.{}", location, parameter_data.name),
-                    "expected": "value",
-                    "found": "missing",
-                    "message": format!("Missing required {} '{}'", value_type, parameter_data.name)
-                }));
-            }
+        None if parameter_data.required => {
+            field_errors.push(json!({"path":path,"expected":"value","found":"missing","message":format!("Missing required {} '{}'",value_type,parameter_data.name)}));
         }
+        None => {}
     }
 }
 
-/// Helper function to validate a parameter with deep object support and detailed errors
+#[allow(clippy::too_many_arguments)]
 fn validate_parameter_detailed_with_deep(
     parameter_data: &openapiv3::ParameterData,
     params_map: &Map<String, Value>,
@@ -3256,50 +3251,36 @@ fn validate_parameter_detailed_with_deep(
     value_type: &str,
     deep_value: Option<Value>,
     field_errors: &mut Vec<Value>,
+    style: Option<&str>,
+    spec: &OpenApiSpec,
 ) {
-    match deep_value.as_ref().or_else(|| params_map.get(&parameter_data.name)) {
+    let path = format!("{}.{}", location, parameter_data.name);
+    let schema = match parameter_schema::schema(parameter_data, spec) {
+        Ok(schema) => schema,
+        Err(message) => {
+            field_errors.push(json!({"path":path,"expected":"resolvable schema","found":"unresolved","message":message}));
+            return;
+        }
+    };
+    match deep_value
+        .as_ref()
+        .or_else(|| parameter_value(params_map, &parameter_data.name, location))
+    {
         Some(value) => {
-            if let ParameterSchemaOrContent::Schema(schema) = &parameter_data.format {
-                // Collect detailed validation errors for this parameter
-                let details: Vec<Value> = Vec::new();
-                let param_path = format!("{}.{}", location, parameter_data.name);
-
-                // Apply coercion before validation
-                if let Some(schema_ref) = schema.as_item() {
-                    let coerced_value = coerce_by_style(value, schema_ref, Some("form")); // Default to form style for now
-                                                                                          // Validate the coerced value against the schema
-                    if let Err(validation_error) =
-                        OpenApiSchema::new(schema_ref.clone()).validate(&coerced_value)
-                    {
-                        field_errors.push(json!({
-                            "path": param_path,
-                            "expected": "valid according to schema",
-                            "found": coerced_value,
-                            "message": validation_error.to_string()
-                        }));
-                    }
-                }
-
-                for detail in details {
-                    field_errors.push(json!({
-                        "path": detail["path"],
-                        "expected": detail["expected_type"],
-                        "found": detail["value"],
-                        "message": detail["message"]
-                    }));
-                }
+            if let Err((found, message)) = parameter_schema::validate_parameter_value(
+                value,
+                schema,
+                parameter_data,
+                spec,
+                style,
+            ) {
+                field_errors.push(json!({"path":path,"expected":"valid according to schema","found":found,"message":message}));
             }
         }
-        None => {
-            if parameter_data.required {
-                field_errors.push(json!({
-                    "path": format!("{}.{}", location, parameter_data.name),
-                    "expected": "value",
-                    "found": "missing",
-                    "message": format!("Missing required {} '{}'", value_type, parameter_data.name)
-                }));
-            }
+        None if parameter_data.required => {
+            field_errors.push(json!({"path":path,"expected":"value","found":"missing","message":format!("Missing required {} '{}'",value_type,parameter_data.name)}));
         }
+        None => {}
     }
 }
 
@@ -3318,6 +3299,11 @@ pub fn create_registry_from_json(json: Value) -> Result<OpenApiRouteRegistry> {
     spec.validate()?;
     Ok(OpenApiRouteRegistry::new(spec))
 }
+
+#[cfg(test)]
+mod parameter_lookup_tests;
+#[cfg(test)]
+mod parameter_schema_tests;
 
 #[cfg(test)]
 mod tests {

@@ -23,6 +23,11 @@ function isAbsoluteWsUrl(url: string): boolean {
 
 interface UseWebSocketOptions {
   autoConnect?: boolean;
+  /**
+   * WebSocket subprotocols to offer. Hosted mocks authenticate the
+   * management stream this way because browsers can't set WS headers.
+   */
+  protocols?: string[];
   reconnect?: {
     enabled: boolean;
     maxAttempts?: number;
@@ -44,6 +49,7 @@ export function useWebSocket(
 ): UseWebSocketReturn {
   const {
     autoConnect = true,
+    protocols,
     reconnect = {
       enabled: true,
       maxAttempts: 5,
@@ -58,6 +64,9 @@ export function useWebSocket(
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const shouldReconnectRef = useRef(true);
   const mountedRef = useRef(true);
+  // Key the protocol list by value so callers can pass a fresh array each
+  // render without forcing a reconnect.
+  const protocolsKey = protocols && protocols.length > 0 ? JSON.stringify(protocols) : '';
 
   const connect = useCallback(() => {
     // In cloud mode, skip relative WS paths (they don't exist on the registry
@@ -76,7 +85,9 @@ export function useWebSocket(
         ? url
         : `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}${url}`;
 
-      const ws = new WebSocket(wsUrl);
+      const ws = protocolsKey
+        ? new WebSocket(wsUrl, JSON.parse(protocolsKey) as string[])
+        : new WebSocket(wsUrl);
 
       ws.onopen = () => {
         logger.info('WebSocket connected', { url });
@@ -122,7 +133,7 @@ export function useWebSocket(
       logger.error('Failed to create WebSocket connection', error);
       if (mountedRef.current) setConnected(false);
     }
-  }, [url, reconnect]);
+  }, [url, reconnect, protocolsKey]);
 
   const disconnect = useCallback(() => {
     shouldReconnectRef.current = false;

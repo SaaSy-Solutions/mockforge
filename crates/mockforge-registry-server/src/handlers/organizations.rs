@@ -5,15 +5,15 @@
 use axum::{
     extract::{Path, State},
     http::HeaderMap,
-    Json,
+    Extension, Json,
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
     error::{ApiError, ApiResult},
-    middleware::AuthUser,
-    models::{AuditEventType, OrgRole, Plan},
+    middleware::{AuthType, AuthUser},
+    models::{ApiToken, AuditEventType, OrgRole, Plan},
     AppState,
 };
 
@@ -102,9 +102,31 @@ pub async fn create_organization(
 pub async fn list_organizations(
     State(state): State<AppState>,
     AuthUser(user_id): AuthUser,
+    Extension(auth_type): Extension<AuthType>,
+    token: Option<Extension<ApiToken>>,
 ) -> ApiResult<Json<Vec<OrganizationResponse>>> {
-    // Get all organizations where user is owner or member
-    let orgs = state.store.list_organizations_by_user(user_id).await?;
+    // PAT identity is organization-bound even when its user belongs to other organizations.
+    // Keep interactive sessions' existing user-wide inventory separate.
+    let orgs = if matches!(auth_type, AuthType::ApiToken) {
+        let Extension(token) = token.ok_or(ApiError::AuthRequired)?;
+        if token.user_id.is_some_and(|id| id != user_id) {
+            return Err(ApiError::AuthRequired);
+        }
+        match state.store.find_organization_by_id(token.org_id).await? {
+            Some(org) => {
+                if org.owner_id == user_id
+                    || state.store.find_org_member(org.id, user_id).await?.is_some()
+                {
+                    vec![org]
+                } else {
+                    Vec::new()
+                }
+            }
+            None => Vec::new(),
+        }
+    } else {
+        state.store.list_organizations_by_user(user_id).await?
+    };
 
     // Convert to response format
     let responses: Vec<OrganizationResponse> = orgs
@@ -313,7 +335,7 @@ pub async fn add_organization_member(
     // Enforce max_collaborators from plan limits. -1 means unlimited. The owner
     // is counted as the first seat; members beyond that draw from the quota.
     let max_collaborators =
-        org.limits_json.get("max_collaborators").and_then(|v| v.as_i64()).unwrap_or(1);
+        org.limits().get("max_collaborators").and_then(|v| v.as_i64()).unwrap_or(1);
     if max_collaborators >= 0 {
         let current_members = state.store.list_org_members(org_id).await?;
         // current_members includes everyone in org_members. Owner may or may not
@@ -714,6 +736,32 @@ pub async fn delete_organization(
     if state.store.organization_has_active_subscription(org_id).await? {
         return Err(ApiError::InvalidRequest(
             "Cannot delete organization with active subscription. Please cancel subscription first.".to_string()
+        ));
+    }
+
+    // Completed provider cleanup must precede the organization's cascading
+    // delete. The database trigger repeats this check under the parent-row
+    // lock, covering concurrent admission and direct store callers too.
+    let unfinished_hosted = crate::store::with_org_context(
+        state.db.runtime_pool(),
+        org_id,
+        |tx| {
+            Box::pin(async move {
+                sqlx::query_scalar::<_, bool>(
+                    "SELECT EXISTS(SELECT 1 FROM hosted_mocks WHERE org_id = $1 AND (capacity_reserved OR deleted_at IS NULL))",
+                )
+                .bind(org_id)
+                .fetch_one(&mut **tx)
+                .await
+                .map_err(Into::into)
+            })
+        },
+    )
+    .await?;
+    if unfinished_hosted {
+        return Err(ApiError::Conflict(
+            "Delete hosted deployments and wait for cleanup before deleting the organization."
+                .into(),
         ));
     }
 

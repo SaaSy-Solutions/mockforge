@@ -51,7 +51,7 @@ try:
     FASTAPI_AVAILABLE = True
 except ImportError:
     FASTAPI_AVAILABLE = False
-    print("Warning: FastAPI not installed. Install with: pip install mockforge-plugin[fastapi]")
+    print("Warning: FastAPI not installed. Install with: pip install fastapi uvicorn")
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -287,7 +287,7 @@ class RemotePlugin(ABC):
         if not FASTAPI_AVAILABLE:
             raise ImportError(
                 "FastAPI is required for remote plugins. "
-                "Install with: pip install mockforge-plugin[fastapi]"
+                "Install with: pip install fastapi uvicorn"
             )
 
         self._setup_app()

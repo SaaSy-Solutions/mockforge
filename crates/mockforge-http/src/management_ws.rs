@@ -252,12 +252,19 @@ impl Default for WsManagementState {
     }
 }
 
-/// WebSocket upgrade handler
+/// WebSocket upgrade handler.
+///
+/// Browsers cannot set headers on a WebSocket, so they send the management
+/// token as a `mockforge-token.<token>` subprotocol next to
+/// [`crate::management_auth::WS_PROTOCOL`]. Selecting that protocol here is
+/// what lets the browser accept the upgrade; the token itself is checked by
+/// the control-plane gate before this handler runs.
 async fn ws_handler(
     ws: WebSocketUpgrade,
     State(state): State<WsManagementState>,
 ) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| handle_socket(socket, state))
+    ws.protocols([crate::management_auth::WS_PROTOCOL])
+        .on_upgrade(move |socket| handle_socket(socket, state))
 }
 
 /// Handle a WebSocket connection

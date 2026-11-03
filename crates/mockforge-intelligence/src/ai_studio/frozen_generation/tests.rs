@@ -227,3 +227,61 @@ async fn concurrent_publishers_return_one_complete_immutable_snapshot() {
     assert_eq!(one.content, two.content);
     assert_eq!(snapshot.load("mock").await.unwrap().unwrap().content, one.content);
 }
+
+#[tokio::test]
+async fn chat_uses_the_configured_provider_and_seed() {
+    use crate::ai_studio::{ChatOrchestrator, ChatRequest};
+    for message in ["Create a user API", "Generate a user persona"] {
+        let provider = Provider::start().await;
+        let request = ChatRequest {
+            message: message.into(),
+            context: None,
+            workspace_id: Some("chat-workspace".into()),
+            org_id: None,
+            user_id: None,
+        };
+        let result = ChatOrchestrator::new(provider.config()).process(&request).await.unwrap();
+        assert!(result.error.is_none(), "configured provider should succeed: {:?}", result.error);
+        let requests = provider.requests.lock().unwrap();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0]["seed"], 42);
+        assert_eq!(requests[0]["model"], "fixture-model-v1");
+    }
+}
+
+#[tokio::test]
+async fn chat_replays_mock_and_persona_with_provider_offline() {
+    use crate::ai_studio::{ChatOrchestrator, ChatRequest};
+    for message in ["Create a user API", "Generate a user persona"] {
+        let fixture = Fixture::new();
+        let provider = Provider::start().await;
+        let behavior = provider.config();
+        let policy = fixture.config("json", false);
+        let request = ChatRequest {
+            message: message.into(),
+            context: None,
+            workspace_id: Some("chat-workspace".into()),
+            org_id: None,
+            user_id: None,
+        };
+        let first = ChatOrchestrator::new(behavior.clone())
+            .with_generation_policy(Some(AiMode::GenerateOnceFreeze), Some(policy.clone()))
+            .process(&request)
+            .await
+            .unwrap();
+        assert!(first.error.is_none(), "{:?}", first.error);
+        assert!(first.data.is_some());
+        assert_eq!(provider.requests.lock().unwrap().len(), 1);
+        provider.task.abort();
+        let second = ChatOrchestrator::new(behavior)
+            .with_generation_policy(Some(AiMode::GenerateOnceFreeze), Some(policy))
+            .process(&request)
+            .await
+            .unwrap();
+        assert!(second.error.is_none(), "{:?}", second.error);
+        assert_eq!(first.data, second.data);
+        assert_eq!(second.tokens_used, Some(0));
+        assert_eq!(second.cost_usd, Some(0.0));
+        assert_eq!(provider.requests.lock().unwrap().len(), 1);
+    }
+}

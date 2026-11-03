@@ -62,7 +62,21 @@ where
         &'t mut Transaction<'a, Postgres>,
     ) -> Pin<Box<dyn Future<Output = StoreResult<T>> + Send + 't>>,
 {
-    let mut tx = pool.begin().await.map_err(StoreError::Database)?;
+    with_org_transaction(pool, org_id, f).await
+}
+
+/// [`with_org_context`] for callers with their own error type, such as API
+/// handlers that must keep validation and permission errors intact. Same
+/// transaction-local `app.current_org_id` binding; commits on `Ok`, rolls
+/// back on `Err`.
+pub async fn with_org_transaction<'a, T, E, F>(pool: &'a PgPool, org_id: Uuid, f: F) -> Result<T, E>
+where
+    E: From<sqlx::Error>,
+    F: for<'t> FnOnce(
+        &'t mut Transaction<'a, Postgres>,
+    ) -> Pin<Box<dyn Future<Output = Result<T, E>> + Send + 't>>,
+{
+    let mut tx = pool.begin().await?;
 
     // Bind the tenant for the lifetime of this transaction. `true` =>
     // is_local, so the setting resets on COMMIT/ROLLBACK and cannot bleed
@@ -70,14 +84,13 @@ where
     sqlx::query("SELECT set_config('app.current_org_id', $1, true)")
         .bind(org_id.to_string())
         .execute(&mut *tx)
-        .await
-        .map_err(StoreError::Database)?;
+        .await?;
 
     let result = f(&mut tx).await;
 
     match result {
         Ok(value) => {
-            tx.commit().await.map_err(StoreError::Database)?;
+            tx.commit().await?;
             Ok(value)
         }
         Err(err) => {

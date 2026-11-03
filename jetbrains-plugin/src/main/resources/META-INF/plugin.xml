@@ -28,11 +28,11 @@
     <!-- Plugin dependencies -->
     <depends>com.intellij.modules.platform</depends>
     <depends>org.jetbrains.plugins.yaml</depends>
-    <depends>com.intellij.toml</depends>
+    <depends>org.toml.lang</depends>
 
     <extensions defaultExtensionNs="com.intellij">
         <!-- File type registration for MockForge config files -->
-        <fileType name="MockForge Config" implementationClass="com.mockforge.plugin.MockForgeConfigFileType" extensions="mockforge.yaml;mockforge.yml;mockforge.toml" />
+        <fileType name="MockForge Config" implementationClass="com.mockforge.plugin.MockForgeConfigFileType" fieldName="INSTANCE" language="MockForge" extensions="mockforge.yaml;mockforge.yml;mockforge.toml" />
 
         <!-- Config validation inspection -->
         <localInspection
@@ -63,17 +63,13 @@
         <codeInsight.lineMarkerProvider language="JavaScript" implementationClass="com.mockforge.plugin.MockForgeLineMarkerProvider" />
         <codeInsight.lineMarkerProvider language="TypeScript" implementationClass="com.mockforge.plugin.MockForgeLineMarkerProvider" />
         <codeInsight.lineMarkerProvider language="Python" implementationClass="com.mockforge.plugin.MockForgeLineMarkerProvider" />
+
+        <!-- Generate Mock Scenario (Alt+Enter on an OpenAPI spec). It is an
+             IntentionAction, so it registers here rather than under <actions>. -->
+        <intentionAction>
+            <className>com.mockforge.plugin.actions.GenerateMockScenarioAction</className>
+            <category>MockForge</category>
+        </intentionAction>
     </extensions>
 
-    <actions>
-        <!-- Generate Mock Scenario intention action -->
-        <action
-            id="MockForge.GenerateMockScenario"
-            class="com.mockforge.plugin.actions.GenerateMockScenarioAction"
-            text="Generate MockForge Scenario"
-            description="Generate MockForge scenario file from OpenAPI specification">
-            <add-to-group group-id="EditorPopupMenu" anchor="first"/>
-            <add-to-group group-id="CodeMenu" anchor="first"/>
-        </action>
-    </actions>
 </idea-plugin>

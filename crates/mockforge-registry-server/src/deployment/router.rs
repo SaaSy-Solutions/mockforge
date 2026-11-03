@@ -4,6 +4,7 @@
 //! Also handles custom-domain routing for `*.mocks.mockforge.dev`.
 
 use axum::{
+    body::HttpBody,
     extract::{Path, State},
     http::{HeaderMap, Method, StatusCode, Uri},
     response::{IntoResponse, Response},
@@ -13,8 +14,8 @@ use axum::{
 use uuid::Uuid;
 
 use crate::error::ApiError;
-use crate::middleware::org_rate_limit::increment_usage;
-use crate::models::{HostedMock, Organization, UsageCounter};
+use crate::middleware::org_rate_limit::record_proxy_usage;
+use crate::models::{HostedMock, Organization, Plan, UsageCounter};
 use crate::redis::{current_month_period, RedisPool};
 use crate::AppState;
 
@@ -47,6 +48,23 @@ const DEFAULT_MOCK_RPS_LIMIT: i64 = 100;
 /// off proxy traffic once monthly usage reaches `N ×` the plan limit.
 const DEFAULT_OVERAGE_CEILING_MULT: i64 = 0;
 
+/// Path-based hosted-mock URL with nothing after the slug.
+const MOCK_ROUTE: &str = "/mocks/{org_id}/{slug}";
+/// The same with a trailing slash; the wildcard below needs a non-empty path.
+const MOCK_ROUTE_SLASH: &str = "/mocks/{org_id}/{slug}/";
+/// Path-based hosted-mock URL with a sub-path proxied to the deployment.
+const MOCK_SUBPATH_ROUTE: &str = "/mocks/{org_id}/{slug}/{*path}";
+
+/// Captures shared by both mock routes. Extracted by name, so the wildcard
+/// `path` capture is ignored here: a 2-tuple extractor rejected every
+/// sub-path request with a 500 before the handler ran (#1280). The proxied
+/// path comes from the raw URI so percent-encoding survives.
+#[derive(serde::Deserialize)]
+struct MockRoute {
+    org_id: String,
+    slug: String,
+}
+
 /// Multitenant router that routes requests to deployed mock services
 pub struct MultitenantRouter;
 
@@ -55,15 +73,19 @@ impl MultitenantRouter {
     /// Routes are nested under `/mocks/` to avoid conflicts with API routes
     pub fn create_router() -> Router<AppState> {
         Router::new()
-            .route("/mocks/{org_id}/{slug}/{*path}", any(Self::route_request))
-            .route("/mocks/{org_id}/{slug}", any(Self::route_request))
+            .route(MOCK_SUBPATH_ROUTE, any(Self::route_request))
+            .route(MOCK_ROUTE_SLASH, any(Self::route_request))
+            .route(MOCK_ROUTE, any(Self::route_request))
     }
 
     /// Route request to the appropriate mock service
     async fn route_request(
         State(state): State<AppState>,
         method: Method,
-        Path((org_id_str, slug)): Path<(String, String)>,
+        Path(MockRoute {
+            org_id: org_id_str,
+            slug,
+        }): Path<MockRoute>,
         uri: Uri,
         headers: HeaderMap,
         body: axum::body::Body,
@@ -88,19 +110,70 @@ impl MultitenantRouter {
             return Err(StatusCode::SERVICE_UNAVAILABLE);
         }
 
-        // Soft-enforce the org's monthly `requests_per_30d` plan limit (#449,
-        // #748). Default policy is "no cutoff" — mocks keep responding past the
-        // allotment; only an opt-in abuse ceiling
-        // (MOCKFORGE_HOSTED_OVERAGE_CEILING_MULT) produces a 429.
-        if let Err(response) = enforce_monthly_quota(&state, deployment.org_id).await {
-            return Ok(response);
+        // Cloudflare-served mocks are metered and rate limited at the edge.
+        // Proxying them here would count every request twice and drop
+        // WebSocket upgrades, so send the client to the edge URL instead.
+        if crate::deployment::cloudflare::is_cloudflare(&deployment) {
+            if let Err(error) =
+                super::cloudflare::require_paid_plan(state.db.pool(), deployment.org_id).await
+            {
+                return Ok(error.into_response());
+            }
+            if let Some(ref edge_url) = deployment.deployment_url {
+                let path = uri.path();
+                let rest =
+                    path.strip_prefix(&format!("/mocks/{}/{}", org_id_str, slug)).unwrap_or("");
+                let location = build_target_url(edge_url, rest, uri.query());
+                return Ok((
+                    StatusCode::TEMPORARY_REDIRECT,
+                    [(axum::http::header::LOCATION, location)],
+                )
+                    .into_response());
+            }
         }
+
+        // Admit Free requests under their hard monthly cap. Paid requests keep
+        // the existing soft-overage policy and optional abuse ceiling.
+        let admission = match enforce_monthly_quota(&state, deployment.org_id).await {
+            Ok(counted) => counted,
+            Err(response) => return Ok(response),
+        };
 
         // Resolve plan-derived per-deployment caps (#450) and enforce the RPS
         // bucket before we touch the body. Body cap is applied inside
         // `proxy_request`.
-        let limits = resolve_proxy_limits(state.db.pool(), deployment.org_id).await;
+        let limits = admission.limits;
         enforce_rps(state.redis.as_ref(), deployment.id, limits.rps).await?;
+
+        let path_after_slug = uri
+            .path()
+            .strip_prefix(&format!("/mocks/{}/{}", org_id_str, slug))
+            .unwrap_or("/");
+        let path_after_slug = if path_after_slug.is_empty() {
+            "/"
+        } else {
+            path_after_slug
+        };
+        if super::local_runtime::is_local(&deployment) {
+            ensure_local_reservation(&state, &deployment).await?;
+            let response = super::local_runtime::serve(
+                &deployment,
+                method,
+                path_after_slug,
+                uri.query(),
+                headers,
+                body,
+                limits.max_body_bytes,
+            )
+            .await?;
+            bump_proxy_usage(
+                &state,
+                deployment.org_id,
+                &response,
+                admission.request_already_counted,
+            );
+            return Ok(response);
+        }
 
         // Get the target base URL (prefer internal_url for Fly.io internal routing)
         let base_url = deployment
@@ -119,7 +192,7 @@ impl MultitenantRouter {
 
         let response =
             proxy_request(method, headers, body, &target_url, limits.max_body_bytes).await?;
-        bump_proxy_usage(&state, deployment.org_id, &response);
+        bump_proxy_usage(&state, deployment.org_id, &response, admission.request_already_counted);
         Ok(response)
     }
 }
@@ -165,16 +238,40 @@ pub async fn custom_domain_fallback(
         })?
         .ok_or(StatusCode::NOT_FOUND)?;
 
-    // Soft-enforce the org's monthly `requests_per_30d` plan limit before
-    // forwarding (#748: no cutoff by default; opt-in abuse ceiling only).
-    if let Err(response) = enforce_monthly_quota(&state, deployment.org_id).await {
-        return Ok(response);
+    if super::cloudflare::is_cloudflare(&deployment) {
+        if let Err(error) =
+            super::cloudflare::require_paid_plan(state.db.pool(), deployment.org_id).await
+        {
+            return Ok(error.into_response());
+        }
     }
+
+    // Apply the same Free hard cap and paid overage policy as path routing.
+    let admission = match enforce_monthly_quota(&state, deployment.org_id).await {
+        Ok(counted) => counted,
+        Err(response) => return Ok(response),
+    };
 
     // Resolve plan-derived per-deployment caps (#450); body cap is applied
     // inside `proxy_request`, RPS check fires here.
-    let limits = resolve_proxy_limits(state.db.pool(), deployment.org_id).await;
+    let limits = admission.limits;
     enforce_rps(state.redis.as_ref(), deployment.id, limits.rps).await?;
+
+    if super::local_runtime::is_local(&deployment) {
+        ensure_local_reservation(&state, &deployment).await?;
+        let response = super::local_runtime::serve(
+            &deployment,
+            method,
+            uri.path(),
+            uri.query(),
+            headers,
+            body,
+            limits.max_body_bytes,
+        )
+        .await?;
+        bump_proxy_usage(&state, deployment.org_id, &response, admission.request_already_counted);
+        return Ok(response);
+    }
 
     // Get the target base URL (prefer internal_url for Fly.io internal routing)
     let base_url = deployment
@@ -186,7 +283,7 @@ pub async fn custom_domain_fallback(
     let target_url = build_target_url(base_url, uri.path(), uri.query());
 
     let response = proxy_request(method, headers, body, &target_url, limits.max_body_bytes).await?;
-    bump_proxy_usage(&state, deployment.org_id, &response);
+    bump_proxy_usage(&state, deployment.org_id, &response, admission.request_already_counted);
     Ok(response)
 }
 
@@ -197,6 +294,20 @@ fn build_target_url(base_url: &str, path: &str, query: Option<&str>) -> String {
         url = format!("{}?{}", url, q);
     }
     url
+}
+
+async fn ensure_local_reservation(
+    state: &AppState,
+    deployment: &HostedMock,
+) -> Result<(), StatusCode> {
+    let authorized: bool = sqlx::query_scalar("SELECT capacity_reserved AND deletion_requested_at IS NULL FROM hosted_mocks WHERE id = $1 AND org_id = $2")
+        .bind(deployment.id).bind(deployment.org_id).fetch_optional(state.db.pool()).await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?.unwrap_or(false);
+    if authorized {
+        Ok(())
+    } else {
+        Err(StatusCode::SERVICE_UNAVAILABLE)
+    }
 }
 
 /// Proxy an HTTP request to a target URL and return the response.
@@ -355,54 +466,74 @@ fn overage_cutoff(limit: i64, ceiling_mult: i64) -> Option<i64> {
     }
 }
 
-/// Soft-enforce the owning org's `requests_per_30d` plan limit on a hosted-mock
-/// proxy request.
-///
-/// Per the public pricing promise — "mocks keep responding if you exceed your
-/// request limit (notification sent but no cutoff)" — the monthly plan quota is
-/// a **soft limit by default**: traffic is metered (so the usage dashboard and
-/// the 75/90/100% threshold alerts work) but is **not** cut off when the org
-/// passes its allotment. A hard cutoff is only applied when an operator opts in
-/// via `MOCKFORGE_HOSTED_OVERAGE_CEILING_MULT > 0`, at which point this returns
-/// a 429 `usage_limit_exceeded` response (#449 body shape) once usage reaches
-/// `mult ×` the plan limit — an abuse ceiling, not the plan limit itself.
-///
-/// Fail-open semantics on DB/Redis hiccups: a transient infra failure must not
-/// take the proxy offline. The body cap and per-second RPS check (added in
-/// #450) remain absolute safety floors regardless of this soft quota.
-async fn enforce_monthly_quota(state: &AppState, org_id: Uuid) -> Result<(), Response> {
-    // No ceiling configured → no cutoff, and no need to touch the DB on the
-    // hot path. This is the default that matches the pricing copy.
-    let mult = overage_ceiling_mult();
-    if mult <= 0 {
-        return Ok(());
+/// Free plans have a hard monthly quota: admission is counted atomically
+/// before forwarding, including accepted attempts that return upstream errors.
+/// Paid plans retain response metering and optional overage ceilings.
+/// Returns the effective body/RPS caps and whether admission counted the request.
+async fn enforce_monthly_quota(state: &AppState, org_id: Uuid) -> Result<QuotaAdmission, Response> {
+    let org = Organization::find_by_id(state.db.pool(), org_id)
+        .await
+        .map_err(|_| StatusCode::SERVICE_UNAVAILABLE.into_response())?
+        .ok_or_else(|| StatusCode::SERVICE_UNAVAILABLE.into_response())?;
+    let plan = crate::handlers::entitlements::effective_plan(state, &org)
+        .await
+        .map_err(|_| StatusCode::SERVICE_UNAVAILABLE.into_response())?;
+    let limits = crate::handlers::usage::limits_for_plan(state, &org, plan)
+        .await
+        .map_err(|_| StatusCode::SERVICE_UNAVAILABLE.into_response())?;
+    let admission = QuotaAdmission {
+        request_already_counted: false,
+        limits: proxy_limits_from_json(&limits),
+    };
+    // Free administrator overrides may explicitly disable requests with 0.
+    let limit = if plan == Plan::Free {
+        match limits.get("requests_per_30d").and_then(|v| v.as_i64()) {
+            Some(-1) => None,
+            Some(n) if n >= 0 => Some(n),
+            _ => Some(DEFAULT_REQUESTS_PER_30D),
+        }
+    } else {
+        monthly_request_limit(&limits)
+    };
+    if plan == Plan::Free {
+        let limit = limit.unwrap_or(-1);
+        let (admitted, used) =
+            crate::store::with_org_context(state.db.runtime_pool(), org_id, |tx| {
+                Box::pin(
+                    async move { super::account_allowance::admit_request(tx, org_id, limit).await },
+                )
+            })
+            .await
+            .map_err(|_| StatusCode::SERVICE_UNAVAILABLE.into_response())?;
+        if !admitted {
+            return Err(ApiError::UsageLimitExceeded {
+                limit_type: "requests".into(),
+                current: used,
+                max: limit,
+                period: current_month_period(),
+            }
+            .into_response());
+        }
+        return Ok(QuotaAdmission {
+            request_already_counted: true,
+            ..admission
+        });
     }
 
-    let org = match Organization::find_by_id(state.db.pool(), org_id).await {
-        Ok(Some(org)) => org,
-        Ok(None) => {
-            tracing::warn!("Org {} not found while enforcing monthly quota", org_id);
-            return Ok(());
-        }
-        Err(e) => {
-            tracing::error!("DB error loading org {} for monthly quota check: {}", org_id, e);
-            return Ok(());
-        }
+    let Some(limit) = limit else {
+        return Ok(admission);
     };
 
-    let Some(limit) = monthly_request_limit(&org.limits_json) else {
-        return Ok(()); // unlimited plan (Team)
-    };
-
+    let mult = overage_ceiling_mult();
     let Some(cutoff) = overage_cutoff(limit, mult) else {
-        return Ok(());
+        return Ok(admission);
     };
 
     let used = match UsageCounter::get_or_create_current(state.db.pool(), org_id).await {
         Ok(counter) => counter.requests,
         Err(e) => {
             tracing::error!("Failed to read usage counter for org {}: {}", org_id, e);
-            return Ok(()); // fail open on DB read errors
+            return Ok(admission); // fail open on DB read errors
         }
     };
 
@@ -423,13 +554,62 @@ async fn enforce_monthly_quota(state: &AppState, org_id: Uuid) -> Result<(), Res
         }
         .into_response())
     } else {
-        Ok(())
+        Ok(admission)
+    }
+}
+
+/// `Some((used, cutoff))` when the org has hit the opt-in hosted-mock overage
+/// ceiling (`MOCKFORGE_HOSTED_OVERAGE_CEILING_MULT`), otherwise `None`. Fails
+/// open on database errors, like the rest of the hot path.
+pub(crate) async fn quota_ceiling_reached(pool: &sqlx::PgPool, org_id: Uuid) -> Option<(i64, i64)> {
+    // No ceiling configured → no cutoff, and no need to touch the DB on the
+    // hot path. This is the default that matches the pricing copy.
+    let mult = overage_ceiling_mult();
+    if mult <= 0 {
+        return None;
+    }
+
+    let org = match Organization::find_by_id(pool, org_id).await {
+        Ok(Some(org)) => org,
+        Ok(None) => {
+            tracing::warn!("Org {} not found while enforcing monthly quota", org_id);
+            return None;
+        }
+        Err(e) => {
+            tracing::error!("DB error loading org {} for monthly quota check: {}", org_id, e);
+            return None;
+        }
+    };
+
+    // Unlimited plan (Team), or a multiplier that yields no cutoff.
+    let cutoff = overage_cutoff(monthly_request_limit(&org.limits())?, mult)?;
+
+    let used = match UsageCounter::get_or_create_current(pool, org_id).await {
+        Ok(counter) => counter.requests,
+        Err(e) => {
+            tracing::error!("Failed to read usage counter for org {}: {}", org_id, e);
+            return None; // fail open on DB read errors
+        }
+    };
+
+    if used >= cutoff {
+        tracing::warn!(
+            "Hosted-mock overage ceiling reached for org {}: {}/{} ({}x plan limit)",
+            org_id,
+            used,
+            cutoff,
+            mult
+        );
+        Some((used, cutoff))
+    } else {
+        None
     }
 }
 
 /// Bump the org's monthly request counter after a successful proxy response.
 ///
-/// Only counts 2xx — matches the convention in the auth-route rate-limit
+/// Only response-metered requests count 2xx; Free admission was already
+/// persisted. This matches the convention in the auth-route rate-limit
 /// middleware so error responses don't burn quota for the customer. Spawned
 /// detached so the response isn't blocked on the counter write.
 ///
@@ -437,7 +617,12 @@ async fn enforce_monthly_quota(state: &AppState, org_id: Uuid) -> Result<(), Res
 /// returning it — the upstream `axum::body::Body` is not `Sync`, and holding
 /// the reference across a suspension point would break the `Handler` Send
 /// bound on `route_request`.
-fn bump_proxy_usage(state: &AppState, org_id: Uuid, response: &Response) {
+fn bump_proxy_usage(
+    state: &AppState,
+    org_id: Uuid,
+    response: &Response,
+    request_already_counted: bool,
+) {
     if !response.status().is_success() {
         return;
     }
@@ -447,12 +632,21 @@ fn bump_proxy_usage(state: &AppState, org_id: Uuid, response: &Response) {
         .get("content-length")
         .and_then(|h| h.to_str().ok())
         .and_then(|s| s.parse::<i64>().ok())
+        .or_else(|| response.body().size_hint().exact().and_then(|size| i64::try_from(size).ok()))
         .unwrap_or(256);
 
-    let pool = state.db.pool().clone();
+    let pool = state.db.runtime_pool().clone();
     let redis = state.redis.clone();
     tokio::spawn(async move {
-        if let Err(e) = increment_usage(&pool, redis.as_ref(), org_id, response_size).await {
+        if let Err(e) = record_proxy_usage(
+            &pool,
+            redis.as_ref(),
+            org_id,
+            response_size,
+            request_already_counted,
+        )
+        .await
+        {
             tracing::error!("Failed to increment proxy usage for org {}: {:?}", org_id, e);
         }
     });
@@ -462,15 +656,21 @@ fn bump_proxy_usage(state: &AppState, org_id: Uuid, response: &Response) {
 /// `limits_json`. See `get_default_limits` in mockforge-registry-core for the
 /// per-plan defaults.
 #[derive(Debug, Clone, Copy)]
-struct ProxyLimits {
+struct QuotaAdmission {
+    request_already_counted: bool,
+    limits: ProxyLimits,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ProxyLimits {
     /// Max inbound request body size in bytes (cap → HTTP 413)
-    max_body_bytes: usize,
+    pub(crate) max_body_bytes: usize,
     /// Per-deployment requests-per-second cap (overage → HTTP 429)
-    rps: i64,
+    pub(crate) rps: i64,
 }
 
 /// Derive proxy caps from a raw `limits_json` value. Pure helper — extracted
-/// from `resolve_proxy_limits` so the parsing rules can be unit-tested without
+/// so the parsing rules can be unit-tested without
 /// a Postgres fixture.
 ///
 /// Missing, non-integer, or non-positive entries fall back to the conservative
@@ -501,9 +701,9 @@ fn proxy_limits_from_json(limits_json: &serde_json::Value) -> ProxyLimits {
 /// On any DB error or missing org we return the conservative built-in defaults
 /// rather than failing the request — the caps exist to *prevent* runaway cost,
 /// so an unavailable database shouldn't open the floodgates.
-async fn resolve_proxy_limits(pool: &sqlx::PgPool, org_id: Uuid) -> ProxyLimits {
+pub(crate) async fn resolve_proxy_limits(pool: &sqlx::PgPool, org_id: Uuid) -> ProxyLimits {
     let limits_json = match Organization::find_by_id(pool, org_id).await {
-        Ok(Some(org)) => org.limits_json,
+        Ok(Some(org)) => org.limits(),
         Ok(None) => {
             tracing::warn!("Org {} not found while resolving proxy limits", org_id);
             serde_json::Value::Null
@@ -558,6 +758,35 @@ async fn enforce_rps(
 mod tests {
     use super::*;
     use serde_json::json;
+
+    /// Both mock routes, with the real patterns, reach a handler using the
+    /// real extractor (#1280).
+    #[tokio::test]
+    async fn mock_routes_extract_org_and_slug_with_and_without_a_subpath() {
+        use tower::ServiceExt;
+        async fn echo(Path(route): Path<MockRoute>) -> String {
+            format!("{}|{}", route.org_id, route.slug)
+        }
+        let app = Router::new()
+            .route(MOCK_SUBPATH_ROUTE, any(echo))
+            .route(MOCK_ROUTE_SLASH, any(echo))
+            .route(MOCK_ROUTE, any(echo));
+        for uri in [
+            "/mocks/org-1/shop",
+            "/mocks/org-1/shop/",
+            "/mocks/org-1/shop/__mockforge/health",
+            "/mocks/org-1/shop/api/v1/users/42?x=1",
+        ] {
+            let response = app
+                .clone()
+                .oneshot(axum::http::Request::get(uri).body(axum::body::Body::empty()).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK, "{uri}");
+            let body = axum::body::to_bytes(response.into_body(), 1024).await.unwrap();
+            assert_eq!(&body[..], b"org-1|shop", "{uri}");
+        }
+    }
 
     #[test]
     fn monthly_limit_pro_plan_default() {
@@ -626,6 +855,21 @@ mod tests {
         assert_eq!(overage_cutoff(10_000, 10), Some(100_000));
         assert_eq!(overage_cutoff(250_000, 2), Some(500_000));
         assert_eq!(overage_cutoff(1_000_000, 1), Some(1_000_000));
+    }
+
+    #[test]
+    fn billing_exempt_org_has_no_monthly_limit_or_overage_cutoff() {
+        let free = Plan::Free.default_limits();
+        let exempt = mockforge_registry_core::models::organization::billing_exempt_limits();
+        // Free has a finite monthly limit, so a positive ceiling cuts it off.
+        let free_limit = monthly_request_limit(&free).expect("Free is metered");
+        assert_eq!(overage_cutoff(free_limit, 2), Some(20_000));
+        // Exempt has none, so no ceiling multiplier can produce a cutoff.
+        assert_eq!(monthly_request_limit(&exempt), None);
+        // The body and RPS caps stay at Team's values for exempt orgs.
+        let caps = proxy_limits_from_json(&exempt);
+        assert_eq!(caps.max_body_bytes, 50 * 1024 * 1024);
+        assert_eq!(caps.rps, 1000);
     }
 
     #[test]

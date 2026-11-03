@@ -32,15 +32,14 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::{
-    ai::{provider::pick_provider, quota::check_ai_quota},
+    ai::{provider::resolve_provider, quota::check_ai_quota},
     error::{ApiError, ApiResult},
-    handlers::{ai_studio::load_byok_config, entitlements::effective_plan},
+    handlers::ai_studio::load_byok_config,
     middleware::{resolve_org_context, AuthUser},
     store::with_org_context,
     AppState,
 };
 use mockforge_registry_core::models::{
-    organization::Plan,
     test_generation_job::{CreateTestGenerationJob, TestGenerationJob},
     CloudWorkspace, Organization,
 };
@@ -388,7 +387,7 @@ async fn advance_job_stream(
 ///      flood the queue (429-style: `RateLimitExceeded`).
 ///   2. **AI quota / availability** — replicate the worker's pre-call check
 ///      (`pick_provider` → `check_ai_quota`) so a job that the worker would
-///      immediately fail (Disabled provider, i.e. Free without BYOK; or
+///      immediately fail (Disabled provider, i.e. no platform allowance or enabled BYOK; or
 ///      Platform quota exhausted) is never enqueued in the first place
 ///      (403-style: `ResourceLimitExceeded`, via `QuotaCheck::into_error`).
 ///
@@ -414,13 +413,11 @@ async fn enforce_pre_enqueue_gates(state: &AppState, org_id: Uuid) -> ApiResult<
     let org = Organization::find_by_id(state.db.pool(), org_id)
         .await?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".into()))?;
-    let effective = effective_plan(state, &org).await?;
-    let is_paid_plan = matches!(effective, Plan::Pro | Plan::Team);
     let byok = load_byok_config(state, org_id).await?;
-    let provider = pick_provider(is_paid_plan, byok);
+    let provider = resolve_provider(state, &org, byok).await?;
     let quota = check_ai_quota(state, &org, provider.selection()).await?;
     if !quota.allowed {
-        // Disabled (Free w/o BYOK) or Platform quota exhausted → don't enqueue.
+        // Disabled (no platform allowance or enabled BYOK) or Platform quota exhausted → don't enqueue.
         return Err(quota.into_error());
     }
     Ok(())

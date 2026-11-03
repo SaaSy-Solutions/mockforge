@@ -85,12 +85,27 @@ class FixtureIsolationTests(unittest.TestCase):
             "cloud_verification_e2e", "cloud_ai_contract_diff_e2e", "cloud_conformance_e2e",
             "paid_flow_e2e", "hosted_mock_overrides_e2e", "audit_integrity_e2e",
             "rls_coverage_e2e", "hosted_mock_rls_routes_e2e", "rls_join_coverage_e2e",
-            "cross_tenant_chaos_capture_e2e",
+            "cross_tenant_chaos_capture_e2e", "query_token_e2e",
         }
-        base = original.union({"hosted_capture_workspaces_e2e", "diff_finding_incident_e2e"})
-        self.assertEqual(set(re.findall(r"--test ([a-z0-9_]+)", step_script("Run E2E tests"))), base)
+        # Scope containment must run on both database roles. The baseline also
+        # exercises seed-credential neutralization added on main.
+        common = original.union({"token_scope_e2e"})
+        base = common.union({
+            "hosted_capture_workspaces_e2e", "diff_finding_incident_e2e",
+            "seed_credentials_neutralised",
+        })
+        # Every target is a module of the single tests/integration binary
+        # (#1451), selected by a `module::` libtest filter. A filter that names
+        # no module would silently match nothing, so each must be declared.
+        modules = set(re.findall(r"(?m)^mod ([a-z0-9_]+);$", (ROOT / "crates/mockforge-registry-server/tests/integration/main.rs").read_text()))
+        step = step_script("Run E2E tests")
+        self.assertIn("cargo test -p mockforge-registry-server --test integration", step)
+        self.assertNotRegex(step, r"--test (?!integration)")
+        self.assertEqual(set(re.findall(r"(?m)^\s*([a-z0-9_]+)::", step)), base)
         array = RLS.split("E2E_TESTS=(", 1)[1].split(")", 1)[0]
-        self.assertEqual(set(re.findall(r"--test ([a-z0-9_]+)", array)), original)
+        self.assertEqual(set(re.findall(r"(?m)^\s*([a-z0-9_]+)::$", array)), common)
+        self.assertIn('-p mockforge-registry-server --test integration', RLS)
+        self.assertLessEqual(base, modules)
         self.assertIn("workers::contract_probe::postgres_tests::due_claims_serialize_and_failed_timestamp_rolls_back_run", WORKFLOW)
         self.assertIn("-- --ignored --nocapture --test-threads=1", WORKFLOW)
         self.assertIn("--no-fail-fast", RLS)

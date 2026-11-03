@@ -71,6 +71,7 @@ pub async fn trigger_run(
 
     // Suite is workspace-scoped; verify the workspace belongs to caller's org.
     authorize_suite_workspace(&state, ctx.org_id, suite.workspace_id).await?;
+    crate::run_queue::validate_runnable_test_run_kind(&suite.kind)?;
 
     // 2. Plan gate. The concurrency cap itself is checked in the same
     // transaction as the insert (step 5).
@@ -144,8 +145,8 @@ pub async fn trigger_run(
 
     // 6. Push onto the Redis queue so mockforge-test-runner picks it up.
     // We pass the suite's config straight through as the payload — the
-    // executor reads kind-specific knobs from there (synthetic_steps,
-    // target URL, etc.) so the user's authored config actually drives
+    // executor reads kind-specific knobs from there (steps, target URL,
+    // etc.) so the user's authored config actually drives
     // the run instead of every job hitting executor defaults.
     if let Err(e) = crate::run_queue::enqueue(
         state.redis.as_ref(),

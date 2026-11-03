@@ -6,7 +6,12 @@
  */
 
 import { ExtensionMessage, CapturedRequest, ConnectionStatus, Environment } from '../shared/types';
-import { MockForgeApiClient } from '../shared/api-client';
+import {
+    MANAGEMENT_TOKEN_STORAGE_KEY,
+    MockForgeApiClient,
+    loadManagementToken,
+    managementHeaders,
+} from '../shared/api-client';
 
 // Connection state
 let mockForgeUrl: string | null = null;
@@ -58,13 +63,20 @@ async function initializeConnection() {
     }
 
     if (mockForgeUrl) {
-        apiClient = new MockForgeApiClient(mockForgeUrl);
+        apiClient = new MockForgeApiClient(mockForgeUrl, await loadManagementToken());
         connected = await apiClient.healthCheck();
     }
 
     // Broadcast connection status
     broadcastConnectionStatus();
 }
+
+// Reconnect with the new credential when the management token changes.
+chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === 'local' && changes[MANAGEMENT_TOKEN_STORAGE_KEY]) {
+        void initializeConnection();
+    }
+});
 
 function broadcastConnectionStatus() {
     const status: ConnectionStatus = {
@@ -130,10 +142,10 @@ chrome.runtime.onMessage.addListener(
                         }
                         if (apiClient && connected) {
                             const { mock, reverse_inject, generate_types, generate_client_stubs, update_openapi, create_scenario } = message.payload;
-                            
+
                             // Create the mock first
                             const createdMock = await apiClient.createMock(mock);
-                            
+
                             // If reverse injection is enabled, trigger runtime daemon auto-generation
                             if (reverse_inject && mockForgeUrl) {
                                 try {
@@ -144,6 +156,7 @@ chrome.runtime.onMessage.addListener(
                                         method: 'POST',
                                         headers: {
                                             'Content-Type': 'application/json',
+                                            ...managementHeaders(apiClient.getManagementToken()),
                                         },
                                         body: JSON.stringify({
                                             mock_id: createdMock.id,
@@ -347,6 +360,7 @@ chrome.runtime.onMessage.addListener(
                                 method: 'POST',
                                 headers: {
                                     'Content-Type': 'application/json',
+                                    ...managementHeaders(apiClient.getManagementToken()),
                                 },
                                 body: JSON.stringify(message.payload),
                             });
@@ -395,7 +409,7 @@ initializeConnection();
  */
 
 // Extract query parameters from URL
-function extractQueryParams(url: string): Record<string, string> {
+function extractQueryParams(url: string): Record<string, string> | undefined {
     const urlObj = new URL(url);
     const params: Record<string, string> = {};
     urlObj.searchParams.forEach((value, key) => {
@@ -463,21 +477,14 @@ chrome.webRequest.onBeforeRequest.addListener(
         const queryParams = extractQueryParams(url);
         const body = parseRequestBody(details);
 
-        // Extract headers
-        const headers: Record<string, string> = {};
-        if (details.requestHeaders) {
-            details.requestHeaders.forEach((header) => {
-                headers[header.name.toLowerCase()] = header.value || '';
-            });
-        }
-
+        // Headers are not part of onBeforeRequest; onBeforeSendHeaders below
+        // fills them in.
         const pendingRequest: PendingRequest = {
             requestId: details.requestId,
             method,
             url,
             path,
             queryParams,
-            headers: Object.keys(headers).length > 0 ? headers : undefined,
             body,
             timestamp: details.timeStamp,
             tabId: details.tabId,
@@ -489,9 +496,26 @@ chrome.webRequest.onBeforeRequest.addListener(
     ['requestBody']
 );
 
+// Request headers are only delivered to onBeforeSendHeaders.
+chrome.webRequest.onBeforeSendHeaders.addListener(
+    (details: chrome.webRequest.WebRequestHeadersDetails) => {
+        const pendingRequest = pendingRequests.get(details.requestId);
+        if (!pendingRequest || !details.requestHeaders) {
+            return;
+        }
+        const headers: Record<string, string> = {};
+        details.requestHeaders.forEach((header) => {
+            headers[header.name.toLowerCase()] = header.value || '';
+        });
+        pendingRequest.headers = Object.keys(headers).length > 0 ? headers : undefined;
+    },
+    { urls: ['<all_urls>'] },
+    ['requestHeaders']
+);
+
 // Capture response when request completes
 chrome.webRequest.onCompleted.addListener(
-    async (details: chrome.webRequest.WebResponseDetails) => {
+    async (details: chrome.webRequest.WebResponseCacheDetails) => {
         const pendingRequest = pendingRequests.get(details.requestId);
         if (!pendingRequest) {
             return;

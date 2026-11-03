@@ -1,6 +1,7 @@
 //! API handlers
 
 pub mod admin;
+pub mod ai_credit_reconciliation;
 pub mod ai_studio;
 pub mod analytics;
 pub mod auth;
@@ -21,10 +22,12 @@ pub mod federations;
 pub mod flows;
 pub mod graph;
 pub mod health;
+pub(crate) mod hosted_capacity;
 pub mod hosted_mock_overrides;
 pub mod hosted_mocks;
 pub mod incidents;
 pub mod internal_contract_diff;
+pub mod internal_hosted_mocks;
 pub mod internal_test_runs;
 pub mod legal;
 pub mod management_token;

@@ -117,6 +117,8 @@ These variables configure the MockForge Plugin Registry server.
 | `MOCKFORGE_BASE_URL` | None | MockForge API base URL |
 | `FLYIO_API_TOKEN` | None | Fly.io API token for deployments |
 | `FLYIO_ORG_SLUG` | None | Fly.io organization slug |
+| `MOCKFORGE_CF_MOCKS_URL` | None | Public base of the hosted-mocks Worker (e.g. `https://mocks.mockforge.dev`). With `MOCKFORGE_CF_MOCKS_EDGE_TOKEN`, HTTP/WebSocket/GraphQL hosted mocks without plugins run on Cloudflare Containers; others stay on Fly. See `deploy/cloudflare/hosted-mocks/README.md` |
+| `MOCKFORGE_CF_MOCKS_EDGE_TOKEN` | None | Shared secret the registry sends to the hosted-mocks Worker's admin endpoints; must equal the Worker's `EDGE_TOKEN` |
 | `MOCKFORGE_DOCKER_IMAGE` | None | Docker image for deployments |
 
 ---
@@ -130,7 +132,7 @@ These variables configure the core MockForge mock server functionality.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `MOCKFORGE_HTTP_PORT` | `3000` | HTTP server port |
-| `MOCKFORGE_HTTP_HOST` | `0.0.0.0` | HTTP server bind host |
+| `MOCKFORGE_HTTP_HOST` | `0.0.0.0` | HTTP server bind host (an IP address or `localhost`; other hostnames bind `0.0.0.0`) |
 | `MOCKFORGE_WS_PORT` | None | WebSocket server port |
 | `MOCKFORGE_GRPC_PORT` | None | gRPC server port |
 | `MOCKFORGE_ADMIN_PORT` | None | Admin interface port |
@@ -233,6 +235,8 @@ These variables configure the core MockForge mock server functionality.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `MOCKFORGE_MANAGEMENT_API_URL` | `http://localhost:3000/management` | Management API URL |
+| `MOCKFORGE_MANAGEMENT_TOKEN` | None | Credential (32+ characters) for MockForge's control routes on the HTTP port (`/__mockforge/*`, `/api/chaos`, `/api/recorder`, `/api/verification` and the other management APIs), reads and writes. Send it as `X-MockForge-Management-Token`. Unset, the control plane answers 401 |
+| `MOCKFORGE_INSECURE_MANAGEMENT` | None | `1` opens the control plane without a credential. Only with a loopback `MOCKFORGE_HTTP_HOST`; otherwise the server refuses to start |
 
 ### Recording
 

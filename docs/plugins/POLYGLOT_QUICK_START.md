@@ -175,8 +175,9 @@ endpoints:
 # Python 3.9+ required
 python --version
 
-# Install MockForge Python SDK
-pip install mockforge-plugin[fastapi]
+# The Python plugin SDK is not on PyPI yet: vendor its single source file
+# as mockforge_plugin.py in your plugin directory (Step 2)
+pip install fastapi uvicorn
 ```
 
 ### Step 2: Create Your Plugin
@@ -186,9 +187,14 @@ pip install mockforge-plugin[fastapi]
 mkdir my-python-plugin
 cd my-python-plugin
 
+# Vendor the plugin SDK (not yet on PyPI)
+curl -fsSL -o mockforge_plugin.py \
+  https://raw.githubusercontent.com/SaaSy-Solutions/mockforge/main/sdk/python/mockforge_plugin/sdk.py
+
 # Create requirements file
 cat > requirements.txt << EOF
-mockforge-plugin[fastapi]>=0.1.0
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
 requests>=2.31.0
 EOF
 

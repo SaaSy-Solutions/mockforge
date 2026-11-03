@@ -122,6 +122,45 @@ ELEVATED_PATH_PREFIXES = {
     ),
 }
 
+# Types that own one dedicated connection and bind `app.current_org_id` on it at
+# session level in their constructor, because they hold a session lock across a
+# provider call that a transaction-scoped helper cannot span. Statements on that
+# connection inside the type's impl are COVERED, but only while the constructor
+# still binds the GUC on it: path suffix -> (type, connection field, constructor).
+SESSION_BOUND_GUARDS = {
+    "mockforge-registry-server/src/handlers/hosted_capacity.rs": ("LifecycleGuard", "connection", "acquire"),
+}
+SESSION_BIND_RE = r"set_config\('app\.current_org_id',\s*\$1,\s*false\)"
+
+
+def session_guard_covers(rel: str, lines: list[str], i: int, fn: str, body: str, snippet: str) -> bool:
+    """True when the statement runs on a SESSION_BOUND_GUARDS connection."""
+    guard = next((g for suffix, g in SESSION_BOUND_GUARDS.items() if rel.endswith(suffix)), None)
+    if not guard:
+        return False
+    typ, field, ctor = guard
+    impl = next((m.group(1) for line in reversed(lines[: i + 1]) if (m := IMPL_RE.match(line))), None)
+    if impl != typ:
+        return False
+    text = "\n".join(lines)
+    ctor_start = re.search(rf"fn {ctor}\s*\(", text)
+    if not ctor_start:
+        return False
+    ctor_body = text[ctor_start.end():]
+    ctor_body = ctor_body[: ctor_body.find("\n    }")]
+    bind = re.search(SESSION_BIND_RE + rf"[^;]*?\.execute\(&mut {field}\)", ctor_body, re.S)
+    if not bind:
+        return False
+    if fn == ctor:
+        # Inside the constructor: only statements after the binding, on the local.
+        return re.search(rf"&mut {field}\b", snippet) is not None and body.find(snippet.strip()[:40]) > body.find("set_config")
+    if f"&mut self.{field}" in snippet:
+        return True
+    # A transaction opened on the bound connection inherits its session GUC.
+    tx = re.search(r"&mut \*{1,2}(\w+)\b", snippet)
+    return bool(tx and re.search(rf"let\s+(?:mut\s+)?{re.escape(tx.group(1))}\s*=\s*self\.{field}\.begin\(\)", body))
+
+
 # Individual functions that must stay on the owner pool. Keyed by
 # "<path suffix>::<fn name>". The reason has to be about the code path not
 # having an org to bind (or legitimately spanning orgs) -- not convenience.
@@ -178,6 +217,9 @@ ELEVATED_ALLOWLIST = {
     "handlers/internal_test_runs.rs::proxy_chaos_toggle": "internal shared-token API, no user org context",
     "handlers/internal_test_runs.rs::run_started": "internal shared-token runner callback, no user org context",
     "handlers/internal_test_runs.rs::run_finished": "internal shared-token runner callback, no user org context",
+    "handlers/internal_hosted_mocks.rs::get_runtime": "Cloudflare hosted-mocks Worker callback (internal token), no user org context",
+    "handlers/internal_hosted_mocks.rs::apply_usage_batch": "Authenticated Cloudflare Worker usage; org resolved from deployment, atomic receipt and counters on owner pool",
+    "handlers/internal_hosted_mocks.rs::report_usage": "Cloudflare hosted-mocks Worker callback (internal token); org taken from the deployment row",
     "handlers/internal_test_runs.rs::mirror_kind_status": "internal shared-token runner callback, no user org context",
     "handlers/internal_test_runs.rs::maybe_raise_finding_incident": "internal shared-token runner callback, no user org context",
     "handlers/internal_test_runs.rs::get_capture_exchanges": "internal shared-token replay callback, no user org context; SQL constrains captures to the session's org",
@@ -236,6 +278,7 @@ BINDING_HELPERS = (
     "with_current_org",
     "with_optional_org",
     "with_org_context",
+    "with_org_transaction",
     "with_org_or_elevated",
     "with_current_user",
     "with_user_context",
@@ -249,6 +292,7 @@ HELPER_GUCS = {
     "with_current_org": {"org"},
     "with_optional_org": {"org"},
     "with_org_context": {"org"},
+    "with_org_transaction": {"org"},
     "with_org_or_elevated": {"org"},
     "with_current_user": {"user"},
     "with_user_context": {"user"},
@@ -661,6 +705,10 @@ def scan_file(path: Path, table_pattern: re.Pattern, methods: dict, free: dict) 
                 kind = "UNBOUND"
                 need = set().union(*(TABLE_GUCS_NEEDED.get(t, TABLE_GUCS[t]) for t in wrong))
                 reason = f"{helper_span[0]} binds {sorted(bound)}, but {','.join(wrong)} need {sorted(need)}"
+        if kind == "UNKNOWN" and session_guard_covers(rel, lines, i, fn, body, snippet):
+            needs_other = sorted(t for t in tables if TABLE_GUCS.get(t) and "org" not in TABLE_GUCS[t])
+            kind = "UNBOUND" if needs_other else "COVERED"
+            reason = "session-bound org on the guard's dedicated connection"
         if kind in ("UNCOVERED", "UNKNOWN"):
             for prefix, why in ELEVATED_PATH_PREFIXES.items():
                 if prefix in rel:

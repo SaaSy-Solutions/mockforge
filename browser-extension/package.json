@@ -4,6 +4,8 @@
   "description": "Browser extension for ForgeConnect - MockForge browser integration",
   "scripts": {
     "build": "npm run build:background && npm run build:content && npm run build:devtools && npm run build:popup",
+    "type-check": "tsc --noEmit -p .",
+    "test": "npm run type-check && npm run build",
     "build:background": "esbuild src/background/service-worker.ts --bundle --outfile=dist/background/service-worker.js --format=esm --platform=browser --target=es2020",
     "build:content": "esbuild src/content/content-script.ts --bundle --outfile=dist/content/content-script.js --format=iife --platform=browser --target=es2020",
     "build:devtools": "npm run build:devtools:ts && npm run build:devtools:html",

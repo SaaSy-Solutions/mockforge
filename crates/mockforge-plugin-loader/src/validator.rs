@@ -272,14 +272,10 @@ impl PluginValidator {
 
     /// Validate WebAssembly module structure
     async fn validate_wasm_module(&self, wasm_path: &Path) -> LoaderResult<()> {
-        // Load the WASM module to validate its structure
-        let module = wasmtime::Module::from_file(&wasmtime::Engine::default(), wasm_path)
-            .map_err(|e| PluginLoaderError::wasm(format!("Invalid WASM module: {}", e)))?;
-
-        // Validate module against security policies
-        self.security_policies.validate_wasm_module(&module)?;
-
-        Ok(())
+        let bytes = tokio::fs::read(wasm_path)
+            .await
+            .map_err(|e| PluginLoaderError::fs(format!("Cannot read WASM module: {e}")))?;
+        self.security_policies.validate_wasm_binary(&bytes)
     }
 
     /// Check if plugin is signed (if signing is required)
@@ -948,7 +944,17 @@ impl SecurityPolicies {
         Ok(())
     }
 
-    /// Validate WebAssembly module
+    /// Validate the original WebAssembly binary, including its data segments.
+    pub fn validate_wasm_binary(&self, bytes: &[u8]) -> LoaderResult<()> {
+        let module = wasmtime::Module::new(&wasmtime::Engine::default(), bytes)
+            .map_err(|e| PluginLoaderError::wasm(format!("Invalid WASM module: {e}")))?;
+        self.validate_wasm_module(&module)?;
+        self.validate_data_segments(bytes)
+    }
+
+    /// Validate a compiled module's structure and limits. Use
+    /// [`Self::validate_wasm_binary`] to check the original data segments too;
+    /// Wasmtime serialization contains native compiled code, not WASM bytes.
     pub fn validate_wasm_module(&self, module: &wasmtime::Module) -> LoaderResult<()> {
         // Perform sophisticated WASM module validation
 
@@ -966,9 +972,6 @@ impl SecurityPolicies {
 
         // 5. Verify function count limits
         self.validate_function_limits(module)?;
-
-        // 6. Check data segments for malicious content
-        self.validate_data_segments(module)?;
 
         Ok(())
     }
@@ -1275,19 +1278,14 @@ impl SecurityPolicies {
     }
 
     /// Validate data segments for malicious content
-    fn validate_data_segments(&self, module: &wasmtime::Module) -> LoaderResult<()> {
+    fn validate_data_segments(&self, wasm_bytes: &[u8]) -> LoaderResult<()> {
         // Check data segments for potentially malicious content
         // Scan for suspicious strings, URLs, shell commands, etc.
-
-        // Serialize the module to get WASM bytes
-        let wasm_bytes = module.serialize().map_err(|e| PluginLoaderError::ValidationError {
-            message: format!("Failed to serialize WASM module: {}", e),
-        })?;
 
         // Parse the WASM binary to extract data segments
         let parser = Parser::new(0);
         let payloads =
-            parser.parse_all(&wasm_bytes).collect::<Result<Vec<_>, _>>().map_err(|e| {
+            parser.parse_all(wasm_bytes).collect::<Result<Vec<_>, _>>().map_err(|e| {
                 PluginLoaderError::ValidationError {
                     message: format!("Failed to parse WASM module: {}", e),
                 }
@@ -1487,5 +1485,45 @@ mod tests {
         let _validator = PluginValidator::new(config);
         // Basic smoke test - validator was created successfully
         // Test passes if no panic occurs during creation
+    }
+}
+
+#[cfg(test)]
+mod original_binary_regressions {
+    use super::SecurityPolicies;
+    const WASM: &[u8] = b"\0asm\x01\0\0\0\x05\x04\x01\x01\x01\x01\x07\x0a\x01\x06memory\x02\0";
+
+    #[test]
+    fn loadable_original_binary_passes_structural_and_data_checks() {
+        SecurityPolicies::default().validate_wasm_binary(WASM).unwrap();
+    }
+
+    #[test]
+    fn suspicious_data_is_rejected_in_utf8_and_binary_segments() {
+        for data in [b"/bin/sh".as_slice(), b"\xff/bin/sh".as_slice()] {
+            let mut wasm = WASM.to_vec();
+            wasm.extend_from_slice(&[
+                11,
+                (6 + data.len()) as u8,
+                1,
+                0,
+                0x41,
+                0,
+                0x0b,
+                data.len() as u8,
+            ]);
+            wasm.extend_from_slice(data);
+            let error = SecurityPolicies::default().validate_wasm_binary(&wasm).unwrap_err();
+            assert!(error.is_security_error(), "{error}");
+            assert!(error.to_string().contains("suspicious content"), "{error}");
+        }
+    }
+
+    #[test]
+    fn original_binary_validation_still_requires_memory_export() {
+        let error = SecurityPolicies::default()
+            .validate_wasm_binary(b"\0asm\x01\0\0\0")
+            .unwrap_err();
+        assert!(error.to_string().contains("must export memory"), "{error}");
     }
 }

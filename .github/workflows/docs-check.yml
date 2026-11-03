@@ -15,6 +15,9 @@ on:
       - 'crates/mockforge-cli/src/**'
       - 'scripts/automated-tests/test-docs.sh'
       - 'scripts/check_docs_cli.py'
+      - 'scripts/inject_docs_canonicals.py'
+      - 'scripts/generate_docs_sitemap.py'
+      - 'scripts/tests/test_docs_canonicals.py'
       - 'scripts/check_docs_drift.py'
       - 'scripts/check_config_field_drift.py'
       - 'scripts/docs-cli-surface.json'
@@ -46,6 +49,9 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+
+      - name: Verify canonical link generation
+        run: python3 scripts/tests/test_docs_canonicals.py
 
       - name: Setup mdBook
         uses: ./.github/actions/setup-mdbook

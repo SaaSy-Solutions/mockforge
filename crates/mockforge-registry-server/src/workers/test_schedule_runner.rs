@@ -28,7 +28,7 @@ use sqlx::PgPool;
 use tracing::{error, info, warn};
 
 use crate::redis::RedisPool;
-use crate::run_queue::{enqueue, EnqueuedJob};
+use crate::run_queue::{enqueue, is_runnable_test_run_kind, EnqueuedJob};
 
 const TICK_INTERVAL: Duration = Duration::from_secs(60);
 
@@ -64,17 +64,17 @@ pub async fn run_tick(pool: &PgPool, redis: Option<&RedisPool>) -> sqlx::Result<
     for sched in schedules {
         let lower_bound = sched.last_triggered_at.unwrap_or(sched.created_at);
         match next_fire_in_window(&sched.cron, &sched.timezone, lower_bound, now) {
-            Ok(Some(fire_at)) => {
-                if let Err(e) = trigger_scheduled_run(pool, redis, &sched, fire_at).await {
+            Ok(Some(fire_at)) => match trigger_scheduled_run(pool, redis, &sched, fire_at).await {
+                Ok(true) => fired += 1,
+                Ok(false) => {}
+                Err(e) => {
                     error!(
                         schedule_id = %sched.id,
                         error = %e,
                         "scheduled run trigger failed",
                     );
-                } else {
-                    fired += 1;
                 }
-            }
+            },
             Ok(None) => {
                 // Not yet due — fall through.
             }
@@ -100,14 +100,14 @@ async fn trigger_scheduled_run(
     redis: Option<&RedisPool>,
     sched: &TestSchedule,
     fire_at: DateTime<Utc>,
-) -> sqlx::Result<()> {
+) -> sqlx::Result<bool> {
     // Mark the schedule first so a crash mid-trigger doesn't double-fire
     // — better to skip a run than run it twice. The mark is idempotent on
     // its own (compares fire_at to last_triggered_at).
     let marked = TestSchedule::mark_triggered(pool, sched.id, fire_at).await?;
     if marked.is_none() {
         // Another worker already advanced this row. Nothing to do.
-        return Ok(());
+        return Ok(false);
     }
 
     let suite = match TestSuite::find_by_id(pool, sched.suite_id).await? {
@@ -118,9 +118,18 @@ async fn trigger_scheduled_run(
                 suite_id = %sched.suite_id,
                 "schedule references missing suite — skipping",
             );
-            return Ok(());
+            return Ok(false);
         }
     };
+    if !is_runnable_test_run_kind(&suite.kind) {
+        warn!(
+            schedule_id = %sched.id,
+            suite_id = %suite.id,
+            kind = %suite.kind,
+            "scheduled suite kind has no runnable executor — skipping",
+        );
+        return Ok(false);
+    }
     let workspace = match CloudWorkspace::find_by_id(pool, suite.workspace_id).await {
         Ok(Some(w)) => w,
         Ok(None) => {
@@ -129,7 +138,7 @@ async fn trigger_scheduled_run(
                 workspace_id = %suite.workspace_id,
                 "suite references missing workspace — skipping",
             );
-            return Ok(());
+            return Ok(false);
         }
         Err(e) => {
             error!(
@@ -183,7 +192,7 @@ async fn trigger_scheduled_run(
             "scheduled run inserted but Redis enqueue failed",
         );
     }
-    Ok(())
+    Ok(true)
 }
 
 /// Returns the most recent cron fire time strictly after `lower_bound`

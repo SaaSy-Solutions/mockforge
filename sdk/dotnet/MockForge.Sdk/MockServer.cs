@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
@@ -39,6 +40,10 @@ public class MockServer : IDisposable
 {
     private const int STARTUP_TIMEOUT_SECONDS = 10;
     private const int HEALTH_CHECK_INTERVAL_MS = 100;
+    private const string MANAGEMENT_TOKEN_ENV = "MOCKFORGE_MANAGEMENT_TOKEN";
+
+    /// <summary>Header carrying the management credential on control-plane requests.</summary>
+    public const string ManagementTokenHeader = "X-MockForge-Management-Token";
 
     private readonly MockServerConfig _config;
     private Process? _process;
@@ -47,6 +52,7 @@ public class MockServer : IDisposable
     private int _adminPort = 0;
     private readonly List<ResponseStub> _stubs = new();
     private readonly HttpClient _httpClient;
+    private readonly string _managementToken;
     private bool _disposed = false;
 
     /// <summary>
@@ -57,10 +63,36 @@ public class MockServer : IDisposable
         _config = config ?? new MockServerConfig();
         _port = _config.Port;
         _host = _config.Host ?? "127.0.0.1";
+        _managementToken = ResolveManagementToken(
+            _config.ManagementToken, Environment.GetEnvironmentVariable(MANAGEMENT_TOKEN_ENV));
         _httpClient = new HttpClient
         {
             Timeout = TimeSpan.FromSeconds(1)
         };
+        // Every request this client makes carries the management credential.
+        _httpClient.DefaultRequestHeaders.Add(ManagementTokenHeader, _managementToken);
+    }
+
+    /// <summary>
+    /// The control-plane credential this server uses
+    /// </summary>
+    public string ManagementToken => _managementToken;
+
+    /// <summary>
+    /// Resolve the management token: explicit value, else the env value, else
+    /// a fresh random 64-char hex token.
+    /// </summary>
+    public static string ResolveManagementToken(string? explicitToken, string? fromEnv)
+    {
+        if (!string.IsNullOrEmpty(explicitToken))
+        {
+            return explicitToken;
+        }
+        if (!string.IsNullOrEmpty(fromEnv))
+        {
+            return fromEnv;
+        }
+        return Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
     }
 
     /// <summary>
@@ -116,6 +148,7 @@ public class MockServer : IDisposable
             RedirectStandardError = true,
             CreateNoWindow = true
         };
+        startInfo.Environment[MANAGEMENT_TOKEN_ENV] = _managementToken;
 
         try
         {

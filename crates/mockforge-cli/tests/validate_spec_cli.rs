@@ -51,3 +51,27 @@ fn validate_spec_json_exits_by_verdict_and_prints_only_the_document() {
     // Nothing was written beside the specs.
     assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 2);
 }
+
+#[test]
+fn validate_spec_does_not_initialize_configured_analytics() {
+    let dir = tempfile::tempdir().unwrap();
+    let spec = dir.path().join("api.json");
+    std::fs::write(
+        &spec,
+        r#"{"openapi":"3.0.3","info":{"title":"Test","version":"1"},"paths":{}}"#,
+    )
+    .unwrap();
+    let analytics = dir.path().join("analytics.sqlite");
+    for format in ["text", "json"] {
+        let output = Command::cargo_bin("mockforge")
+            .unwrap()
+            .args(["validate-spec", "--format", format])
+            .arg(&spec)
+            .env("MOCKFORGE_ANALYTICS_DB", &analytics)
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+        assert!(!analytics.exists(), "{format} validation wrote an analytics database");
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
+    }
+}

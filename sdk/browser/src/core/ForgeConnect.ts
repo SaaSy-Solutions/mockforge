@@ -80,7 +80,7 @@ export class ForgeConnect {
         }
 
         // Create client and check connection
-        this.client = new MockForgeClient(this.config.serverUrl);
+        this.client = new MockForgeClient(this.config.serverUrl, this.config.managementToken);
         const connected = await this.client.healthCheck();
 
         this.updateConnectionStatus(connected, this.config.serverUrl);
@@ -122,7 +122,7 @@ export class ForgeConnect {
 
             // Connect WebSocket if enabled
             if (this.useWebSocket && this.config.serverUrl) {
-                this.websocketClient = new WebSocketClient(this.config.serverUrl);
+                this.websocketClient = new WebSocketClient(this.config.serverUrl, this.config.managementToken);
                 const wsConnected = await this.websocketClient.connect();
 
                 if (wsConnected) {
@@ -181,7 +181,7 @@ export class ForgeConnect {
             const url = `${baseUrl}:${port}`;
             this.log(`Trying to connect to ${url}...`);
 
-            const client = new MockForgeClient(url);
+            const client = new MockForgeClient(url, this.config.managementToken);
             const connected = await client.healthCheck();
 
             if (connected) {
@@ -481,7 +481,7 @@ export class ForgeConnect {
         // If WebSocket is not enabled, enable it for live reload
         if (!this.useWebSocket && this.config.serverUrl) {
             this.useWebSocket = true;
-            this.websocketClient = new WebSocketClient(this.config.serverUrl);
+            this.websocketClient = new WebSocketClient(this.config.serverUrl, this.config.managementToken);
             this.websocketClient.connect().then((connected) => {
                 if (connected) {
                     this.setupWebSocketLiveReload();

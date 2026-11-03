@@ -447,6 +447,8 @@ pub mod stateful_handler;
 pub mod sync_watcher;
 /// Template expansion utilities (Send-safe, isolated from templating module)
 pub mod template_expansion;
+/// Sandbox for the `{{fs.readFile}}` template token (#1015)
+pub mod template_fs;
 /// Template library system for shared templates, versioning, and marketplace
 pub mod template_library;
 pub mod templating;

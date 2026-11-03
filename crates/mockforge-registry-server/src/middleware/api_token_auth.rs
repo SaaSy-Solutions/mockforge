@@ -16,6 +16,11 @@ pub struct TokenAuthResult {
     pub token: ApiToken,
 }
 
+/// True when the token has an expiry at or before `now`.
+fn is_expired(token: &ApiToken, now: chrono::DateTime<chrono::Utc>) -> bool {
+    token.expires_at.is_some_and(|expires_at| expires_at <= now)
+}
+
 /// Authenticate request using API token
 /// Returns (user_id, org_id, token) if valid, None otherwise
 pub async fn authenticate_api_token(
@@ -38,11 +43,9 @@ pub async fn authenticate_api_token(
         None => return Ok(None),
     };
 
-    // Check if token is expired
-    if let Some(expires_at) = api_token.expires_at {
-        if expires_at < chrono::Utc::now() {
-            return Ok(None); // Token expired
-        }
+    // Expired tokens are rejected even if the lookup returned them.
+    if is_expired(&api_token, chrono::Utc::now()) {
+        return Ok(None);
     }
 
     // Get user_id from token (if associated) or from org owner
@@ -63,4 +66,36 @@ pub async fn authenticate_api_token(
         org_id: api_token.org_id,
         token: api_token,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::{Duration, Utc};
+
+    fn token(expires_at: Option<chrono::DateTime<Utc>>) -> ApiToken {
+        let now = Utc::now();
+        ApiToken {
+            id: Uuid::new_v4(),
+            org_id: Uuid::new_v4(),
+            user_id: None,
+            name: "t".into(),
+            token_prefix: "mfx_test1234".into(),
+            hashed_token: String::new(),
+            scopes: vec!["deploy:mocks".into()],
+            last_used_at: None,
+            expires_at,
+            created_at: now,
+            updated_at: now,
+        }
+    }
+
+    #[test]
+    fn expired_tokens_are_rejected() {
+        let now = Utc::now();
+        assert!(is_expired(&token(Some(now - Duration::seconds(1))), now));
+        assert!(is_expired(&token(Some(now)), now));
+        assert!(!is_expired(&token(Some(now + Duration::hours(1))), now));
+        assert!(!is_expired(&token(None), now));
+    }
 }

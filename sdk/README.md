@@ -186,8 +186,14 @@ Starts a mock server.
 
 ### Installation
 
+The SDK is not yet published to PyPI (the `mockforge` name there belongs to an
+unrelated project), so install it from this repository:
+
 ```bash
-pip install mockforge-sdk
+pip install "mockforge-sdk @ git+https://github.com/SaaSy-Solutions/mockforge.git#subdirectory=sdk/python"
+
+# Or from a local checkout
+pip install ./sdk/python
 ```
 
 ### Usage

@@ -63,8 +63,17 @@ impl LlmClient {
             .or_else(|| std::env::var("MOCKFORGE_AI_SEED").ok().and_then(|s| s.trim().parse().ok()))
     }
 
-    /// Generate a response from a prompt
-    pub async fn generate(&self, request: &LlmGenerationRequest) -> Result<serde_json::Value> {
+    /// Generate a response and require one valid JSON value without fallback wrappers.
+    pub async fn generate_json(&self, request: &LlmGenerationRequest) -> Result<serde_json::Value> {
+        let text = self.generate_text(request).await?;
+        serde_json::from_str(&text).map_err(|_| {
+            mockforge_foundation::Error::internal(
+                "AI provider returned invalid JSON; no fixture was baked",
+            )
+        })
+    }
+
+    async fn generate_text(&self, request: &LlmGenerationRequest) -> Result<String> {
         self.ensure_initialized().await?;
 
         let engine = self.rag_engine.read().await;
@@ -85,14 +94,19 @@ impl LlmClient {
         ];
 
         // Generate response
-        let response_text = provider
+        provider
             .generate_chat(
                 messages,
                 request.temperature,
                 request.max_tokens,
                 self.resolve_seed(request),
             )
-            .await?;
+            .await
+    }
+
+    /// Generate a response from a prompt
+    pub async fn generate(&self, request: &LlmGenerationRequest) -> Result<serde_json::Value> {
+        let response_text = self.generate_text(request).await?;
 
         // Try to parse as JSON
         match serde_json::from_str::<serde_json::Value>(&response_text) {

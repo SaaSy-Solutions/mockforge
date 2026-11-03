@@ -5,7 +5,7 @@
  */
 
 import { ForgeConnect } from '../core/ForgeConnect';
-import { ForgeConnectConfig } from '../types';
+import { ForgeConnectConfig, MockConfig, Environment } from '../types';
 
 /**
  * Vue.js adapter configuration
@@ -53,8 +53,8 @@ export class VueAdapter {
             const isDev = typeof window !== 'undefined' &&
                          (window.location.hostname === 'localhost' ||
                           window.location.hostname === '127.0.0.1' ||
-                          import.meta.env?.MODE === 'development' ||
-                          process.env.NODE_ENV === 'development');
+                          (import.meta as ImportMeta & { env?: { MODE?: string } }).env?.MODE === 'development' ||
+                          (typeof process !== 'undefined' && process.env.NODE_ENV === 'development'));
 
             if (!isDev) {
                 return false;
@@ -184,12 +184,12 @@ export function useForgeConnect(config?: VueAdapterConfig) {
         const forgeConnect = adapter.getForgeConnect();
 
         const connected = Vue.ref(false);
-        const mocks = Vue.ref<any[]>([]);
-        const environments = Vue.ref<any[]>([]);
-        const activeEnvironment = Vue.ref<any | null>(null);
+        const mocks = Vue.ref([] as MockConfig[]);
+        const environments = Vue.ref([] as Environment[]);
+        const activeEnvironment = Vue.ref(null as Environment | null);
         const offline = Vue.ref(false);
         const loading = Vue.ref(false);
-        const error = Vue.ref<string | null>(null);
+        const error = Vue.ref(null as string | null);
         const liveReloadEnabled = Vue.ref(true);
 
         const initialize = async () => {

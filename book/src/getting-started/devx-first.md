@@ -25,8 +25,8 @@ cargo install mockforge-cli
 # Or use npm for Node.js SDK
 npm install @mockforge-dev/sdk
 
-# Or pip for Python SDK
-pip install mockforge-sdk
+# Or pip for Python SDK (not yet on PyPI; installs from this repo)
+pip install "mockforge-sdk @ git+https://github.com/SaaSy-Solutions/mockforge.git#subdirectory=sdk/python"
 ```
 
 ### Option 1: Use the SDK in Your Tests

@@ -9,7 +9,7 @@
 
 use axum::{
     extract::Request,
-    http::{header::HeaderName, HeaderValue},
+    http::{header::HeaderName, HeaderValue, Uri},
     middleware::Next,
     response::Response,
 };
@@ -35,7 +35,7 @@ pub async fn request_id_middleware(request: Request, next: Next) -> Response {
         "request",
         request_id = %request_id,
         method = %request.method(),
-        uri = %request.uri(),
+        uri = %redact_uri(request.uri()),
     );
 
     // Run the rest of the chain inside the span. `instrument` re-enters the
@@ -54,6 +54,79 @@ pub async fn request_id_middleware(request: Request, next: Next) -> Response {
     }
 
     response
+}
+
+/// Query parameters whose values are credentials. Their values never reach
+/// logs or traces (#1018). Matched case-insensitively after percent-decoding
+/// the key.
+const REDACTED_QUERY_KEYS: &[&str] = &["token", "access_token"];
+
+/// Placeholder written in place of a redacted query value.
+pub const REDACTED: &str = "[REDACTED]";
+
+/// The URI as a string with credential query values replaced by
+/// [`REDACTED`]. Use this wherever a request URI is logged or put on a span.
+pub fn redact_uri(uri: &Uri) -> String {
+    let full = uri.to_string();
+    let Some((before, query)) = full.split_once('?') else {
+        return full;
+    };
+    let redacted: Vec<String> = query
+        .split('&')
+        .map(|pair| {
+            let key = pair.split_once('=').map_or(pair, |(key, _)| key);
+            let decoded = decode_query_component(key).to_ascii_lowercase();
+            if REDACTED_QUERY_KEYS.contains(&decoded.as_str()) {
+                format!("{key}={REDACTED}")
+            } else {
+                pair.to_string()
+            }
+        })
+        .collect();
+    format!("{before}?{}", redacted.join("&"))
+}
+
+/// Lossy `application/x-www-form-urlencoded` decode, used only to recognise
+/// encoded spellings of a credential key such as `%74oken`.
+fn decode_query_component(raw: &str) -> String {
+    let bytes = raw.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        let hex = |b: u8| (b as char).to_digit(16);
+        match bytes[i] {
+            b'%' if i + 2 < bytes.len() => match (hex(bytes[i + 1]), hex(bytes[i + 2])) {
+                (Some(hi), Some(lo)) => {
+                    out.push(((hi << 4) | lo) as u8);
+                    i += 3;
+                }
+                _ => {
+                    out.push(b'%');
+                    i += 1;
+                }
+            },
+            b'+' => {
+                out.push(b' ');
+                i += 1;
+            }
+            other => {
+                out.push(other);
+                i += 1;
+            }
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+/// `TraceLayer` span for each request, with the URI passed through
+/// [`redact_uri`]. Same name, level and fields as tower-http's default span.
+pub fn redacted_trace_span<B>(request: &axum::http::Request<B>) -> tracing::Span {
+    tracing::debug_span!(
+        "request",
+        method = %request.method(),
+        uri = %redact_uri(request.uri()),
+        version = ?request.version(),
+    )
 }
 
 /// Extract request ID from header or generate a new one
@@ -264,5 +337,92 @@ mod tests {
     #[test]
     fn test_x_request_id_header_name() {
         assert_eq!(X_REQUEST_ID.as_str(), "x-request-id");
+    }
+
+    // ===== #1018: credentials in the query string never reach logs =====
+
+    #[test]
+    fn redact_uri_replaces_credential_values_only() {
+        let cases = [
+            ("/a/b", "/a/b"),
+            ("/a?x=1", "/a?x=1"),
+            ("/s?token=abc.def", "/s?token=[REDACTED]"),
+            ("/s?x=1&token=abc&y=2", "/s?x=1&token=[REDACTED]&y=2"),
+            ("/s?TOKEN=abc", "/s?TOKEN=[REDACTED]"),
+            ("/s?%74oken=abc", "/s?%74oken=[REDACTED]"),
+            ("/s?access_token=abc", "/s?access_token=[REDACTED]"),
+            ("/s?token=a&token=b", "/s?token=[REDACTED]&token=[REDACTED]"),
+            ("/s?token", "/s?token=[REDACTED]"),
+            ("/s?token=", "/s?token=[REDACTED]"),
+            ("/s?tokens=keep&my_token=keep", "/s?tokens=keep&my_token=keep"),
+        ];
+        for (input, expected) in cases {
+            let uri: Uri = input.parse().expect("valid uri");
+            assert_eq!(redact_uri(&uri), expected, "{input}");
+        }
+    }
+
+    #[derive(Clone, Default)]
+    struct CapturedLogs(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
+
+    impl std::io::Write for CapturedLogs {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().expect("log buffer lock").extend_from_slice(buf);
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    /// Runs requests through the same request-id middleware and `TraceLayer`
+    /// span as `main.rs`, capturing every event and span at TRACE level.
+    #[tokio::test]
+    async fn request_logs_never_contain_query_tokens() {
+        let logs = CapturedLogs::default();
+        let writer = logs.clone();
+        let subscriber = tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::TRACE)
+            .with_span_events(tracing_subscriber::fmt::format::FmtSpan::FULL)
+            .with_ansi(false)
+            .with_writer(move || writer.clone())
+            .finish();
+        let _guard = tracing::subscriber::set_default(subscriber);
+
+        async fn handler() -> &'static str {
+            tracing::info!("handled");
+            "OK"
+        }
+        let app = Router::new()
+            .route("/api/v1/test-runs/{id}/stream", get(handler))
+            .route("/api/v1/plugins/{name}", get(handler))
+            .layer(
+                tower_http::trace::TraceLayer::new_for_http()
+                    .make_span_with(redacted_trace_span::<Body>),
+            )
+            .layer(axum::middleware::from_fn(request_id_middleware));
+
+        for uri in [
+            "/api/v1/test-runs/r1/stream?token=SECRET-SSE-JWT",
+            "/api/v1/plugins/p?token=SECRET-QUERY&x=1",
+            "/api/v1/plugins/p?access_token=SECRET-ACCESS",
+            "/api/v1/plugins/p?%74oken=SECRET-ENCODED",
+        ] {
+            let request = Request::builder().uri(uri).body(Body::empty()).expect("request");
+            let response = app.clone().oneshot(request).await.expect("infallible");
+            assert_eq!(response.status(), StatusCode::OK);
+        }
+
+        let output =
+            String::from_utf8(logs.0.lock().expect("log buffer lock").clone()).expect("utf8 logs");
+        // The capture must have recorded the requests, or the check below is vacuous.
+        assert!(output.contains("handled"), "no events captured:\n{output}");
+        assert!(
+            output.contains("uri=/api/v1/test-runs/r1/stream?token=[REDACTED]"),
+            "span uri missing:\n{output}"
+        );
+        assert!(output.contains("uri=/api/v1/plugins/p?token=[REDACTED]&x=1"), "{output}");
+        assert!(!output.contains("SECRET"), "token leaked into logs:\n{output}");
     }
 }

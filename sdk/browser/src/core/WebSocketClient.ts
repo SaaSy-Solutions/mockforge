@@ -29,6 +29,13 @@ export interface WebSocketEvent {
 }
 
 /**
+ * WebSocket subprotocols carrying the management token to `/__mockforge/ws`
+ */
+export function managementSubprotocols(token: string): string[] {
+    return ['mockforge-management', `mockforge-token.${token}`];
+}
+
+/**
  * WebSocket client for MockForge real-time updates
  */
 export class WebSocketClient {
@@ -40,10 +47,12 @@ export class WebSocketClient {
     private reconnectTimer: NodeJS.Timeout | null = null;
     private eventListeners: Map<WebSocketEventType, Set<(event: WebSocketEvent) => void>> = new Map();
     private connected: boolean = false;
+    private managementToken?: string;
 
-    constructor(baseUrl: string) {
+    constructor(baseUrl: string, managementToken?: string) {
         // Convert HTTP URL to WebSocket URL
         this.baseUrl = baseUrl.replace(/\/$/, '').replace(/^http/, 'ws');
+        this.managementToken = managementToken || undefined;
     }
 
     /**
@@ -58,7 +67,11 @@ export class WebSocketClient {
             try {
                 // MockForge WebSocket endpoint
                 const wsUrl = `${this.baseUrl}/__mockforge/ws`;
-                this.ws = new WebSocket(wsUrl);
+                // Browsers cannot set headers on a WebSocket handshake, so the
+                // management token travels as a subprotocol.
+                this.ws = this.managementToken
+                    ? new WebSocket(wsUrl, managementSubprotocols(this.managementToken))
+                    : new WebSocket(wsUrl);
 
                 this.ws.onopen = () => {
                     this.connected = true;

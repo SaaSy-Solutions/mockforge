@@ -46,39 +46,37 @@ See the [complete Pillars documentation](docs/PILLARS.md) for detailed informati
 
 | Feature | MockForge | WireMock | MockServer | Mockoon |
 |---------|-----------|----------|------------|---------|
-| **Language** | Rust | Java | Java/JavaScript | JavaScript |
-| **Multi-Language SDKs** | ✅ Rust, Node.js, Python, Go, Java, .NET | ⚠️ Java native, clients for others | ⚠️ Java/JS native, clients for others | ⚠️ JS native, clients for others |
-| **Performance** | ⚡ High (native Rust) | Medium | Medium | Medium |
-| **HTTP/REST** | ✅ Full | ✅ Full | ✅ Full | ✅ Full |
-| **gRPC Native** | ✅ Full + HTTP Bridge | ❌ No | ❌ No | ⚠️ Limited |
-| **WebSocket** | ✅ Scripted Replay + JSONPath | ❌ No | ⚠️ Basic | ❌ No |
-| **GraphQL** | ✅ Yes | ⚠️ Via HTTP | ⚠️ Via HTTP | ✅ Yes |
-| **Kafka** | ✅ Full Mock Broker | ❌ No | ❌ No | ❌ No |
-| **MQTT** | ✅ Full Broker (3.1.1 & 5.0) | ❌ No | ❌ No | ❌ No |
-| **AMQP/RabbitMQ** | ✅ Full Broker (0.9.1) | ❌ No | ❌ No | ❌ No |
-| **SMTP** | ✅ Full Email Server | ❌ No | ❌ No | ❌ No |
-| **FTP** | ✅ Full File Transfer | ❌ No | ❌ No | ❌ No |
-| **TCP** | ✅ Raw TCP Mocking | ❌ No | ❌ No | ❌ No |
-| **Client Generation** | ✅ React, Vue, Angular, Svelte | ❌ No | ❌ No | ❌ No |
-| **TLS/mTLS** | ✅ HTTPS + Mutual TLS | ⚠️ TLS only | ⚠️ TLS only | ⚠️ TLS only |
-| **Admin UI** | ✅ Modern React UI | ⚠️ Basic | ✅ Yes | ✅ Desktop App |
-| **Data Generation** | ✅ Advanced (Faker + RAG) | ⚠️ Basic | ⚠️ Basic | ⚠️ Templates |
-| **AI-Driven Mocking** | ✅ LLM-powered generation | ❌ No | ❌ No | ❌ No |
-| **Data Drift** | ✅ Evolving mock data | ❌ No | ❌ No | ❌ No |
-| **AI Event Streams** | ✅ Narrative-driven WebSocket | ❌ No | ❌ No | ❌ No |
-| **Plugin System** | ✅ WASM-based | ⚠️ Java extensions | ⚠️ JavaScript | ❌ No |
-| **E2E Encryption** | ✅ Built-in (AES-256/ChaCha20) | ❌ No | ⚠️ TLS only | ⚠️ TLS only |
-| **Workspace Sync** | ✅ Git integration + file watching | ❌ No | ❌ No | ⚠️ Cloud sync (Pro) |
-| **Cross-Endpoint Validation** | ✅ Referential integrity checks | ❌ No | ❌ No | ❌ No |
-| **OpenAPI Support** | ✅ Full + Auto-generation | ✅ Yes | ✅ Yes | ✅ Yes |
-| **Template Expansion** | ✅ Advanced (faker, time, UUIDs) | ⚠️ Basic | ⚠️ Basic | ✅ Handlebars |
-| **Deployment** | Binary, Docker, Cargo | JAR, Docker, Maven | JAR/NPM, Docker | Desktop, NPM, Docker |
-| **Stateful Mocking** | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes |
-| **Request Matching** | ✅ JSONPath, Regex, Schema | ✅ Yes | ✅ Yes | ✅ Yes |
-| **Latency Simulation** | ✅ Configurable profiles | ✅ Yes | ✅ Yes | ✅ Yes |
-| **Fault Injection** | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes |
-| **CLI Tool** | ✅ Full-featured | ✅ Yes | ✅ Yes | ✅ Yes |
+| **Language** | Rust | Java | Java | TypeScript |
+| **Language SDKs / clients** | Rust, Node.js, Python, Go, Java, .NET | Java native; clients for other languages | Clients for Java, JavaScript, Python, Ruby, Go, .NET, Rust, PHP | — |
+| **HTTP/REST** | ✅ | ✅ | ✅ | ✅ |
+| **gRPC** | ✅ Built-in + HTTP bridge | ⚠️ Via `wiremock-grpc-extension` | ✅ | — |
+| **WebSocket** | ✅ Scripted replay + JSONPath | ⚠️ WireMock 4.x beta | ⚠️ For AI-protocol (MCP/A2A) servers | ✅ |
+| **GraphQL** | ✅ Schema-based | ⚠️ Via `wiremock-graphql-extension` | ✅ | — |
+| **Kafka** | ✅ Mock broker | — | ✅ AsyncAPI broker mocking | — |
+| **MQTT** | ✅ Broker (3.1.1 & 5.0) | — | ✅ AsyncAPI broker mocking | — |
+| **AMQP/RabbitMQ** | ✅ Broker (0.9.1) | — | ✅ AsyncAPI broker mocking | — |
+| **SMTP** | ✅ Email server | — | — | — |
+| **FTP** | ✅ File transfer | — | — | — |
+| **TCP** | ✅ Raw TCP | — | — | — |
+| **TLS/mTLS** | ✅ HTTPS + mutual TLS | ✅ HTTPS + client-certificate auth | ✅ HTTPS + mutual TLS | ✅ TLS |
+| **UI** | ✅ Web admin UI (React) | ⚠️ Admin API; web UI in WireMock Cloud | ✅ Web dashboard | ✅ Desktop app |
+| **Response templating** | ✅ Faker, time, UUIDs | ✅ Handlebars | ✅ Velocity, Mustache, JavaScript | ✅ Handlebars + Faker.js |
+| **Fake data generation** | ✅ Faker + RAG | ⚠️ Via Faker extension (`RandomExtension`) | — | ✅ Faker.js helpers |
+| **OpenAPI** | ✅ Serve from spec + generation | ⚠️ Import in WireMock Cloud; OSS stubs are hand-written | ✅ Mocks + validation from spec | ✅ Import/export |
+| **Extensions** | ✅ WASM plugins | ✅ Java extensions | — | — |
+| **Deployment** | Binary, Docker, Cargo | JAR, Docker, Maven | JAR, Docker, Helm, npm, Testcontainers | Desktop, CLI (npm), Docker |
+| **Stateful mocking** | ✅ | ✅ Scenarios | ✅ Stateful scenarios | ✅ CRUD routes + data buckets |
+| **Request matching** | ✅ JSONPath, regex, schema | ✅ | ✅ | ✅ Response rules |
+| **Latency simulation** | ✅ Configurable profiles | ✅ | ✅ | ✅ |
+| **Fault injection** | ✅ | ✅ | ✅ | ⚠️ Error/random responses |
+| **CLI** | ✅ | ✅ Standalone JAR | ✅ | ✅ |
 | **License** | MIT/Apache-2.0 | Apache-2.0 | Apache-2.0 | MIT |
+
+✅ supported · ⚠️ partial, extension, beta or paid tier · — not found in the vendor's documentation (not a claim that it's missing).
+
+Competitor cells come from each vendor's own docs ([WireMock](https://wiremock.org/docs/), [MockServer](https://www.mock-server.com/), [Mockoon](https://mockoon.com/features/)) as of October 2026. Protocol references: [WireMock WebSockets](https://wiremock.org/docs/websockets/), [MockServer protocols](https://www.mock-server.com/), and [Mockoon WebSockets](https://mockoon.com/docs/latest/api-endpoints/websockets/). Corrections are welcome via an issue or PR.
+
+MockForge also includes features we haven't compared across tools: client generation (React, Vue, Angular, Svelte), LLM-driven mock generation, data drift, AI event streams for WebSocket, built-in payload encryption (AES-256/ChaCha20), Git-backed workspace sync, and cross-endpoint referential-integrity validation.
 
 ## 🌐 Multi-Language Ecosystem
 
@@ -538,13 +536,16 @@ docker pull ghcr.io/saasy-solutions/mockforge:0.3.116
 # Run with the bundled example spec + admin UI
 docker run -p 3000:3000 -p 3001:3001 -p 50051:50051 -p 9080:9080 \
   -e MOCKFORGE_ADMIN_ENABLED=true \
+  -e MOCKFORGE_ADMIN_PASSWORD='choose-a-long-password' \
   ghcr.io/saasy-solutions/mockforge:latest \
   serve --spec examples/openapi-demo.json --admin --admin-port 9080
 ```
 
-The admin UI is then at <http://localhost:9080> — sign in with the default
-local credentials (`admin` / `admin123`, or `editor` / `editor123` /
-`viewer` / `viewer123`).
+The admin UI is then at <http://localhost:9080> — sign in as `admin` with
+the password you set. Inside a container the admin server listens on every
+interface, so it refuses to start without `MOCKFORGE_ADMIN_PASSWORD` (12+
+characters), `MOCKFORGE_MANAGEMENT_TOKEN` (32+ characters, for API clients)
+or `JWT_SECRET`.
 
 #### Build from source
 
@@ -1324,9 +1325,11 @@ The Admin UI provides:
 - **🎯 Fixture management** with drag-and-drop tree view for organizing fixtures
 - **🎨 Professional UI** with tabbed interface and responsive design
 
-> **Authentication**: The Admin UI uses JWT login with three roles: **Admin** (full access), **Editor** (create, edit, and delete mocks and fixtures, but not server settings such as latency/fault/proxy config, or roles), and **Viewer** (read-only). Every mutating admin endpoint is permission-checked against the caller's role. Read-only `GET /__mockforge/*` endpoints stay unauthenticated so the TUI and scripts can poll them; the admin port is opt-in via `--admin`, so keep it off untrusted networks.
+> **Authentication**: The Admin UI uses JWT login with three roles: **Admin** (full access), **Editor** (create, edit, and delete mocks and fixtures, but not server settings such as latency/fault/proxy config, or roles), and **Viewer** (read-only). Every admin endpoint, reads included, is permission-checked against the caller's role; only the login, health/liveness and static UI files are open.
 >
-> When `JWT_SECRET` is not set, MockForge seeds local development users (`admin` / `admin123`, `editor` / `editor123`, `viewer` / `viewer123`). Set `JWT_SECRET` (and `MOCKFORGE_DISABLE_DEV_SEED_USERS=true`) for any shared deployment. OAuth/SSO login is not available in the local Admin UI; MockForge Cloud supports OIDC and SAML SSO.
+> **Local development**: when the admin server is bound to loopback (`127.0.0.1`, the default outside containers) and no credentials are configured, anonymous `GET /__mockforge/*` reads are still allowed from the same machine (a loopback `Host` is required), so the TUI and scripts keep working. There are no built-in users: to log in to the UI (and make changes), set `MOCKFORGE_ADMIN_PASSWORD`.
+>
+> **Any other bind address** (`0.0.0.0`, `::`, a LAN address, every container) needs credentials, or the admin server refuses to start: `MOCKFORGE_ADMIN_PASSWORD` (12+ characters; the only admin UI login; optional `MOCKFORGE_ADMIN_USERNAME`, default `admin`), `MOCKFORGE_MANAGEMENT_TOKEN` (32+ characters, sent as `X-MockForge-Management-Token` or `Authorization: Bearer`; pass it to the TUI with `--token`), or `JWT_SECRET` (32+ characters). Without `JWT_SECRET`, admin JWTs are signed with a random per-process secret, so sessions end when the server restarts. OAuth/SSO login is not available in the local Admin UI; MockForge Cloud supports OIDC and SAML SSO.
 
 ### Embedded Admin Mode
 

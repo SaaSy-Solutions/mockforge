@@ -9,7 +9,7 @@
 use crate::ai::provider::ProviderSelection;
 use crate::error::{ApiError, ApiResult};
 use crate::handlers::usage::effective_limits;
-use crate::models::{Organization, UsageCounter};
+use crate::models::{Organization, Plan, UsageCounter};
 use crate::store::with_org_context;
 use crate::AppState;
 use uuid::Uuid;
@@ -19,8 +19,10 @@ use uuid::Uuid;
 pub struct QuotaCheck {
     /// Token quota for the current month (-1 = unlimited).
     pub limit: i64,
-    /// Tokens already consumed this month.
+    /// Tokens consumed or durably reserved by outstanding/uncertain calls this month.
     pub used: i64,
+    /// Credits held by pending or uncertain provider calls.
+    pub reserved: i64,
     /// True if the request is allowed to proceed.
     pub allowed: bool,
     /// Human-readable reason when `allowed = false`.
@@ -51,16 +53,64 @@ pub async fn check_ai_quota(
     let limit = limits.get("ai_tokens_per_month").and_then(|v| v.as_i64()).unwrap_or(0);
 
     let usage = state.store.get_or_create_current_usage_counter(org.id).await?;
-    let used = usage.ai_tokens_used;
+    let counter_id = usage.id;
+    let period_start = usage.period_start;
+    let org_id = org.id;
+    let mut reserved: i64 = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(sqlx::query_scalar("SELECT COALESCE(SUM(budget),0)::bigint FROM ai_token_reservations WHERE usage_counter_id=$1 AND org_id=$2 AND state <> 'completed'")
+                .bind(counter_id).bind(org_id).fetch_one(&mut **tx).await?)
+        })
+    }).await?;
+    let mut used = usage.ai_tokens_used.saturating_add(reserved);
+
+    if matches!(selection, ProviderSelection::Platform) {
+        match crate::handlers::entitlements::require_verified_free_owner(state, org).await {
+            Ok(()) => {}
+            Err(ApiError::ValidationFailed(message)) => {
+                return Ok(QuotaCheck {
+                    limit,
+                    used,
+                    reserved,
+                    allowed: false,
+                    deny_reason: Some(message),
+                });
+            }
+            Err(error) => return Err(error),
+        }
+    }
+
+    if matches!(selection, ProviderSelection::Platform)
+        && limit >= 0
+        && crate::handlers::entitlements::effective_plan(state, org).await? == Plan::Free
+    {
+        let shared: Option<(i64, i64, i64)> = with_org_context(state.db.runtime_pool(), org_id, |tx| Box::pin(async move {
+            Ok(sqlx::query_as("SELECT f.granted_tokens,f.used_tokens,f.reserved_tokens FROM free_ai_credit_periods f JOIN organizations o ON o.owner_id=f.owner_user_id WHERE o.id=$1 AND f.period_start=$2")
+                .bind(org_id).bind(period_start).fetch_optional(&mut **tx).await?)
+        })).await?;
+        if let Some((grant, consumed, held)) = shared {
+            if grant >= 0 {
+                let available = grant
+                    .max(limit)
+                    .saturating_sub(consumed)
+                    .saturating_sub(held)
+                    .max(0)
+                    .min(limit.saturating_sub(used).max(0));
+                used = limit.saturating_sub(available);
+                reserved = reserved.max(held).min(used);
+            }
+        }
+    }
 
     match selection {
         ProviderSelection::Disabled => Ok(QuotaCheck {
             limit,
             used,
+            reserved,
             allowed: false,
             deny_reason: Some(
-                "AI features are not available on the Free plan without a BYOK provider key. \
-                 Upgrade to Pro or add a BYOK key in Settings → BYOK."
+                "AI features require a platform token allowance or an enabled BYOK provider key. \
+                 Review your quota or add a BYOK key in Settings → BYOK."
                     .into(),
             ),
         }),
@@ -69,6 +119,7 @@ pub async fn check_ai_quota(
             Ok(QuotaCheck {
                 limit,
                 used,
+                reserved,
                 allowed: true,
                 deny_reason: None,
             })
@@ -79,6 +130,7 @@ pub async fn check_ai_quota(
                 Ok(QuotaCheck {
                     limit,
                     used,
+                    reserved,
                     allowed: true,
                     deny_reason: None,
                 })
@@ -86,6 +138,7 @@ pub async fn check_ai_quota(
                 Ok(QuotaCheck {
                     limit,
                     used,
+                    reserved,
                     allowed: false,
                     deny_reason: Some(format!(
                         "Monthly AI token quota exhausted ({used} / {limit}). \
@@ -96,6 +149,7 @@ pub async fn check_ai_quota(
                 Ok(QuotaCheck {
                     limit,
                     used,
+                    reserved,
                     allowed: true,
                     deny_reason: None,
                 })
@@ -107,16 +161,9 @@ pub async fn check_ai_quota(
 /// Record post-call token usage. Only billed for `Platform` requests —
 /// BYOK requests don't consume the platform's token quota.
 ///
-/// The increment is now a single atomic `UPDATE ... RETURNING` (#867), so the
-/// counter can no longer be clobbered by concurrent writers. Note that the
-/// pre-call [`check_ai_quota`] read and this post-call increment still form a
-/// check-then-act window: many in-flight Platform requests can each pass the
-/// pre-call check and then push `ai_tokens_used` past the limit. That is an
-/// acceptable, bounded overshoot for a *post-call accounting* model (tokens are
-/// only known after the LLM responds) — the next [`check_ai_quota`] sees the
-/// now-correct total and denies. The atomic increment guarantees no usage is
-/// *lost*; eliminating the overshoot entirely would require pre-reserving an
-/// upper-bound token budget before the call, which is out of scope here.
+/// Legacy accounting helper for already-authoritative external usage records.
+/// Studio and workers use `reservation::call_with_budget` for admission and
+/// exact-period settlement instead of this post-call-only helper.
 pub async fn record_ai_usage(
     state: &AppState,
     org_id: Uuid,

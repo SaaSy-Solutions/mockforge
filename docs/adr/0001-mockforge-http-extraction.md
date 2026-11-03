@@ -206,8 +206,8 @@ work; these two moves do not complete that issue.
 
 ### Risk simulation boundary (#632)
 
-Risk simulation calls the application's authentication engine, which still lives
-in HTTP pending the broader auth extraction (#635). Intelligence owns the six
+Risk simulation calls the application's authentication engine, extracted into
+`mockforge-auth` by #635 and re-exported through HTTP. Intelligence owns the six
 simulation handler implementations and their router through a typed
 `RiskSimulationEngine` interface. The existing HTTP `RiskSimulationState` keeps
 its public `Arc<RiskEngine>` field and supplies that exact shared engine;
@@ -265,3 +265,22 @@ comparison does not emit. This source move adds neither durable snapshot storage
 nor tenant isolation and does not establish deployed-account acceptance. Those
 behaviors must not be inferred from extraction or compatibility tests. The
 failure-designer and incident-replay boundaries remain separate #632 work.
+
+### Authentication boundary (#635)
+
+Authentication implementation and OAuth2 server endpoints live in `mockforge-auth`.
+HTTP retains its `auth::*` and `handlers::oauth2_server::*` paths as compatibility
+exports. The new crate keeps the existing Core configuration/error dependencies,
+Foundation risk DTOs and OpenAPI types; extracting those shared contracts is a
+separate change. The risk-simulation trait implementation moves with `RiskEngine`
+to preserve Rust trait coherence, while HTTP retains its existing state adapter.
+
+The existing undeclared `auth/audit_log.rs` source moves with the subtree but is
+not newly registered or activated by this extraction. Authentication policies,
+OIDC environment lookup, token timeouts and risk behavior retain their existing
+semantics. A compatibility test exposed a pre-existing claims propagation defect:
+Axum extracts raw `AuthClaims`, but middleware only stored `Extension<AuthClaims>`.
+Middleware now stores both forms so standard extractors work and existing direct
+wrapper consumers keep working. Native and release acceptance must be recorded
+separately; this preparation does not establish prerequisite completion or release
+availability.

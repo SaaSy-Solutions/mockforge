@@ -1,6 +1,7 @@
 //! Atomically publish complete immutable snapshots without replacing a winner.
 use super::{
-    fs, loading, validate_artifact_type, ArtifactFreezer, FreezeRequest, FrozenArtifact, Result,
+    bundles, fs, loading, validate_artifact_type, ArtifactFreezer, FreezeRequest, FrozenArtifact,
+    Result,
 };
 
 impl ArtifactFreezer {
@@ -10,7 +11,7 @@ impl ArtifactFreezer {
         identifier: &str,
         format: &str,
     ) -> Result<Option<FrozenArtifact>> {
-        let path = self.snapshot_path(artifact_type, identifier, format)?;
+        let mut path = self.snapshot_path(artifact_type, identifier, format)?;
         match fs::symlink_metadata(&path).await {
             Ok(metadata) if metadata.file_type().is_file() => {}
             Ok(_) => {
@@ -18,7 +19,28 @@ impl ArtifactFreezer {
                     "Frozen snapshot must be a regular file",
                 ))
             }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                let directory = bundles::path(&path);
+                match fs::symlink_metadata(&directory).await {
+                    Ok(metadata) if metadata.file_type().is_dir() => {
+                        path = bundles::payload(&directory).ok_or_else(|| {
+                            mockforge_foundation::Error::config("Invalid snapshot bundle format")
+                        })?;
+                    }
+                    Ok(_) => {
+                        return Err(mockforge_foundation::Error::config(
+                            "Snapshot bundle must be a directory",
+                        ))
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+                    Err(error) => {
+                        return Err(mockforge_foundation::Error::io_with_context(
+                            "inspect snapshot bundle",
+                            error.to_string(),
+                        ))
+                    }
+                }
+            }
             Err(error) => {
                 return Err(mockforge_foundation::Error::io_with_context(
                     "read frozen snapshot",
@@ -61,7 +83,7 @@ impl ArtifactFreezer {
     }
 
     /// Publish one immutable snapshot for an exact generation identity.
-    /// A complete temporary file is linked into place without overwriting a
+    /// A complete temporary directory is renamed into place without overwriting a
     /// winner from another process. All callers return that same snapshot.
     pub(crate) async fn freeze_once(
         &self,
@@ -69,30 +91,11 @@ impl ArtifactFreezer {
         identifier: &str,
     ) -> Result<FrozenArtifact> {
         let path = self.snapshot_path(&request.artifact_type, identifier, &request.format)?;
-        let temporary = self.base_dir.join(format!(".freeze-{}.tmp", uuid::Uuid::new_v4()));
-        let mut candidate = request.clone();
-        candidate.path = Some(temporary.to_string_lossy().into_owned());
-        self.freeze(&candidate).await?;
-        let published = fs::hard_link(&temporary, &path).await;
-        let removed = fs::remove_file(&temporary).await;
-        removed.map_err(|error| {
-            mockforge_foundation::Error::io_with_context(
-                "remove frozen snapshot temporary file",
-                error.to_string(),
-            )
-        })?;
-        if let Err(error) = published {
-            if error.kind() != std::io::ErrorKind::AlreadyExists {
-                return Err(mockforge_foundation::Error::io_with_context(
-                    "publish frozen snapshot",
-                    error.to_string(),
-                ));
-            }
+        if let Some(winner) =
+            self.load_snapshot(&request.artifact_type, identifier, &request.format).await?
+        {
+            return Ok(winner);
         }
-        self.load_snapshot(&request.artifact_type, identifier, &request.format)
-            .await?
-            .ok_or_else(|| {
-                mockforge_foundation::Error::config("Published frozen snapshot disappeared")
-            })
+        bundles::publish(self, request, identifier, &path).await
     }
 }

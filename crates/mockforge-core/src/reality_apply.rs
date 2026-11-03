@@ -46,7 +46,48 @@ pub async fn apply_reality_to_server_config(engine: &RealityEngine, config: &mut
     config.core.default_latency = reality_config.latency.clone();
     config.core.latency_enabled = reality_config.latency.base_ms > 0;
 
+    // Reality controls activation, not which provider/model the operator trusts.
+    let behavior_model = config.mockai.intelligent_behavior.behavior_model.clone();
+
     // Apply MockAI configuration
     config.mockai.enabled = reality_config.mockai.enabled;
     config.mockai.intelligent_behavior = reality_config.mockai.clone();
+    config.mockai.intelligent_behavior.behavior_model = behavior_model;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[tokio::test]
+    async fn reality_levels_preserve_the_selected_provider_model_and_seed() {
+        for level in 1..=5 {
+            let mut config = ServerConfig::default();
+            config.mockai.intelligent_behavior.behavior_model.llm_provider = "ollama".into();
+            config.mockai.intelligent_behavior.behavior_model.model = "local-fixture".into();
+            config.mockai.intelligent_behavior.behavior_model.api_endpoint =
+                Some("http://127.0.0.1:11434/api/chat".into());
+            config.mockai.intelligent_behavior.behavior_model.seed = Some(42);
+            let expected =
+                serde_json::to_value(&config.mockai.intelligent_behavior.behavior_model).unwrap();
+            let engine = RealityEngine::with_level(crate::RealityLevel::from_value(level).unwrap());
+            let expected_enabled = engine.get_config().await.mockai.enabled;
+            apply_reality_to_server_config(&engine, &mut config).await;
+            assert_eq!(
+                serde_json::to_value(&config.mockai.intelligent_behavior.behavior_model).unwrap(),
+                expected
+            );
+            assert_eq!(config.mockai.enabled, expected_enabled);
+        }
+    }
+    #[tokio::test]
+    async fn disabled_reality_cannot_enable_runtime_ai() {
+        let mut config = ServerConfig::default();
+        config.reality.enabled = false;
+        config.mockai.enabled = false;
+        let before = serde_json::to_value(&config.mockai).unwrap();
+        let engine = RealityEngine::with_level(crate::RealityLevel::from_value(5).unwrap());
+        apply_reality_to_server_config(&engine, &mut config).await;
+        assert_eq!(serde_json::to_value(&config.mockai).unwrap(), before);
+        assert!(!config.mockai.enabled);
+    }
 }
