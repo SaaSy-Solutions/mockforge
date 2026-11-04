@@ -1,0 +1,88 @@
+name: Example configuration image
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/example-configuration-image.yml'
+      - 'docker/examples-refresh.Dockerfile'
+      - 'scripts/example_configuration_image.py'
+      - 'scripts/tests/test_example_configuration_image.py'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mockforge-example-configuration-image
+  cancel-in-progress: false
+
+jobs:
+  guards:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify refresh guards
+        run: python3 -m unittest discover -s scripts/tests -p test_example_configuration_image.py -v
+      - name: Verify actual source and all runtime inputs
+        run: python3 scripts/example_configuration_image.py --source "$GITHUB_SHA" --check-only --output "$RUNNER_TEMP/example-source-proof"
+
+  publish:
+    needs: guards
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.ref_protected
+    runs-on: [self-hosted, linux, x64, rust]
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Qualify configuration-only image from cached immutable runtime
+        run: python3 scripts/example_configuration_image.py --source "$GITHUB_SHA" --output "$RUNNER_TEMP/example-image-proof"
+      - name: Create private publication auth directory
+        shell: bash
+        run: |
+          auth_dir="$(mktemp -d "$RUNNER_TEMP/example-image-auth-XXXXXXXX")"
+          chmod 700 "$auth_dir"
+          echo "DOCKER_CONFIG=$auth_dir" >> "$GITHUB_ENV"
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish only qualified distinct configuration tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/example_configuration_image.py --source "$GITHUB_SHA" --check-only --output "$RUNNER_TEMP/example-publish-source-proof"
+          python3 - "$RUNNER_TEMP/example-image-proof/receipt.json" "$GITHUB_SHA" <<'PY'
+          import json, sys
+          proof = json.load(open(sys.argv[1]))
+          assert proof['status'] == 'qualified' and proof['config_source'] == sys.argv[2]
+          assert proof['six_bundled_http_cases_passed'] and not proof['published']
+          PY
+          /usr/bin/docker --host unix:///var/run/docker.sock tag "mockforge-examples-local:$GITHUB_SHA" "ghcr.io/saasy-solutions/mockforge:examples-$GITHUB_SHA"
+          /usr/bin/docker --host unix:///var/run/docker.sock push "ghcr.io/saasy-solutions/mockforge:examples-$GITHUB_SHA" | tee "$RUNNER_TEMP/example-image-proof/push.log"
+      - name: Retain qualification and publication evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: example-image-proof-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/example-image-proof/*.json
+            ${{ runner.temp }}/example-image-proof/*.log
+            ${{ runner.temp }}/example-image-proof/http.stdout
+            ${{ runner.temp }}/example-image-proof/http.stderr
+          if-no-files-found: warn
+      - name: Remove private publication credentials
+        if: always() && env.DOCKER_CONFIG != ''
+        shell: bash
+        run: |
+          case "$DOCKER_CONFIG" in "$RUNNER_TEMP"/example-image-auth-*) ;; *) exit 1 ;; esac
+          rm -r -- "${DOCKER_CONFIG:?}"
