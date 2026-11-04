@@ -35,6 +35,20 @@ class AshburnImagesTest(unittest.TestCase):
             self.assertIn("provenance: false", workflow)
             self.assertIn(":buildcache", workflow)
 
+    def test_rust_build_stages_limit_cargo_parallelism(self) -> None:
+        for name in ("Dockerfile", "Dockerfile.registry", "Dockerfile.runner", "Dockerfile.tunnel"):
+            with self.subTest(dockerfile=name):
+                source = (ROOT / name).read_text()
+                builder = source.split("FROM ${RUST_IMAGE} AS builder", 1)[1].split("\nFROM ", 1)[0]
+                self.assertRegex(builder, r"(?m)^ENV CARGO_BUILD_JOBS=2$")
+                self.assertLess(builder.index("ENV CARGO_BUILD_JOBS=2"), builder.index("cargo build"))
+                self.assertNotRegex(builder, r"cargo build[^\n]*(?:--jobs| -j)")
+        for name in FILENAMES:
+            source = (ROOT / ".github/workflows" / name).read_text()
+            self.assertIn("memory=20g", source)
+            self.assertIn("memory-swap=20g", source)
+            self.assertIn("group: mockforge-image-builds", source)
+
     def test_fly_publisher_is_gone(self) -> None:
         for path in (
             "scripts/ci/fly_buildkit_publish.py",
