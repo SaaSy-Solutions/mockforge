@@ -162,7 +162,7 @@ mod bootstrap {
     };
 
     async fn verified_user(state: &AppState) -> User {
-        let owner = super::user(state).await;
+        let owner = user(state).await;
         sqlx::query("UPDATE users SET is_verified = TRUE WHERE id = $1")
             .bind(owner.id)
             .execute(state.db.pool())
@@ -175,7 +175,7 @@ mod bootstrap {
     #[ignore = "requires isolated Postgres"]
     async fn bootstrap_refuses_unverified_email_and_claimed_slug() {
         let state = state().await;
-        let owner = super::user(&state).await;
+        let owner = user(&state).await;
         let org = free_org(&state, &owner).await;
         let config = BootstrapConfig {
             site_admin_emails: vec![owner.email.clone()],
