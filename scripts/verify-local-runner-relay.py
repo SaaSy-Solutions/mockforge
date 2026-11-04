@@ -235,10 +235,18 @@ req.end();"""
             item = json.loads(result.stdout)[0]
             require(item['Config'].get('Labels', {}).get('saasy.fixture.owner') == owner and item['Image'] == expected_image, 'Unknown fixture generation; cleanup refused')
             run('rm', '--force', item['Id'])
-        if network:
-            net = json.loads(run('network', 'inspect', network))[0]
-            require(net['Labels'].get('saasy.fixture.owner') == owner and not net.get('Containers'), 'Network still has unknown users')
-            run('network', 'rm', network)
+        # Creation may succeed before its CLI times out or is interrupted.
+        # Reconcile only our exact preselected name even without a returned ID.
+        network_matches = run('network', 'ls', '--filter', 'name=^' + owner + '$', '--format', '{{.ID}}').decode().split()
+        require(len(network_matches) <= 1, 'Ambiguous owned network; cleanup refused')
+        if network_matches:
+            net = json.loads(run('network', 'inspect', network_matches[0]))[0]
+            require(net['Name'] == owner and (network is None or net['Id'] == network)
+                    and net['Internal'] and net['Labels'].get('saasy.fixture.owner') == owner
+                    and not net.get('Containers'), 'Network still has unknown users or generation; cleanup refused')
+            run('network', 'rm', net['Id'])
+        require(not run('network', 'ls', '--filter', 'name=^' + owner + '$', '--format', '{{.ID}}').strip(),
+                'Owned network remains after cleanup')
         remaining = run('ps', '-a', '--filter', 'label=saasy.fixture.owner=' + owner, '--format', '{{.ID}}')
         receipt['cleanup_verified'] = not bool(remaining.strip())
         args.receipt.write_text(json.dumps(receipt, indent=2) + '\n')
