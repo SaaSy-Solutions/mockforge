@@ -35,6 +35,33 @@ GHCR digests and start registry, server, demo, and tunnel relay with healthy
 endpoints. The existing root GHCR publisher uses `main-<sha>` tags rather than
 bare SHA tags, so resolve that image's digest from its published tag.
 
+### Bundled demo responses
+
+The commerce, weather and chat samples use plausible fixed values plus the
+`{{uuid}}` and `{{now}}` tokens exercised through the actual CLI server. The
+CLI response path does not currently install core's extended Faker/random
+rewriter; see [#1481](https://github.com/SaaSy-Solutions/mockforge/issues/1481).
+Do not assume a token supported by a core helper also expands in a served
+OpenAPI response. Preserve the samples' existing JSON field types when editing
+their values.
+
+Verify the six bundled JSON response examples against a built root image:
+
+```bash
+python3 scripts/verify-bundled-demo.py --image <root-image> --receipt /tmp/demo-check.json
+```
+
+The verifier starts one isolated container with no network or published ports,
+checks HTTP statuses, response shapes, unresolved markers and usable sample
+values, then removes only that owned container. The image must already be
+available on the selected Docker daemon. For a sample-only change, `--mount-specs`
+mounts this checkout's three specs read-only over an existing image; its receipt
+explicitly records that this is an existing-binary test, not a rebuilt image.
+
+Root image publishing and PR smoke include `examples/**`, since the Dockerfile
+copies those files into the runtime image. PR smoke runs the verifier against
+the image's actual bundled copies, without the checkout override.
+
 ## Cloud test runner
 
 `mockforge-test-runner` consumes the registry's `test_runs:queued` Redis list
