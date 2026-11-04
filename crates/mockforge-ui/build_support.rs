@@ -4,9 +4,21 @@ use std::collections::BTreeSet;
 use std::io;
 use std::path::{Path, PathBuf};
 
+const FRONTEND_INPUTS: [&str; 9] = [
+    "package.json",
+    "pnpm-lock.yaml",
+    "index.html",
+    "vite.config.ts",
+    "postcss.config.js",
+    "tailwind.config.js",
+    "tsconfig.json",
+    "tsconfig.app.json",
+    "tsconfig.node.json",
+];
+
 /// Select existing inputs after the caller has created `ui/dist`.
 ///
-/// Source checkouts watch the three separate UI directories, avoiding
+/// Source checkouts watch separate UI directories and configuration files, avoiding
 /// `ui/node_modules`. Published packages omit `ui/src`; their existing `ui`
 /// parent observes later directory creation without watching missing paths.
 pub(crate) fn watched_inputs(crate_dir: &Path) -> io::Result<Vec<PathBuf>> {
@@ -18,7 +30,7 @@ pub(crate) fn watched_inputs(crate_dir: &Path) -> io::Result<Vec<PathBuf>> {
         ));
     }
     let mut inputs = BTreeSet::from([crate_dir.join("build.rs")]);
-    for relative in ["src", "dist", "public"] {
+    for relative in ["src", "dist", "public"].into_iter().chain(FRONTEND_INPUTS) {
         let candidate = ui_dir.join(relative);
         inputs.insert(if candidate.exists() {
             candidate
@@ -77,6 +89,9 @@ mod tests {
         for name in ["src", "public", "node_modules"] {
             fs::create_dir(fixture.0.join("ui").join(name)).expect("source directory");
         }
+        for name in FRONTEND_INPUTS {
+            fs::write(fixture.0.join("ui").join(name), "fixture").expect("frontend input");
+        }
         fs::write(fixture.0.join("build_ui.sh"), "#!/bin/sh\n").expect("source hook");
         let paths = watched_inputs(&fixture.0).expect("watch inputs");
         assert!(paths.iter().all(|path| path.exists()));
@@ -119,6 +134,36 @@ mod tests {
         assert!(!after.contains(&fixture.0.join("ui/public")));
         assert!(after.contains(&fixture.0.join("ui")));
         assert!(after.iter().all(|path| path.exists()));
+    }
+
+    #[test]
+    fn source_configuration_inputs_are_observed() {
+        let fixture = Fixture::new();
+        for name in ["src", "public", "node_modules"] {
+            fs::create_dir(fixture.0.join("ui").join(name)).expect("source directory");
+        }
+        let inputs = [
+            "package.json",
+            "pnpm-lock.yaml",
+            "index.html",
+            "vite.config.ts",
+            "postcss.config.js",
+            "tailwind.config.js",
+            "tsconfig.json",
+            "tsconfig.app.json",
+            "tsconfig.node.json",
+        ];
+        for name in inputs {
+            fs::write(fixture.0.join("ui").join(name), "fixture").expect("frontend input");
+        }
+        let paths = watched_inputs(&fixture.0).expect("watch inputs");
+        for name in inputs {
+            assert!(
+                observed(&paths, &fixture.0.join("ui").join(name)),
+                "frontend input is not observed: {name}"
+            );
+        }
+        assert!(!observed(&paths, &fixture.0.join("ui/node_modules/package.json")));
     }
 
     #[test]

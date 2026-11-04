@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Opt-in native qualification of the UI build-input selector, not a timing benchmark."""
+"""Opt-in UI input-selector controls, not a timing or complete frontend benchmark."""
 import argparse
 import hashlib
 import json
@@ -11,10 +11,53 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[2]
 CLIENT = ["cargo", "rust_build_policy.py", "rust_policy_config.py",
           "rust_policy_runtime.py", "rust_policy_warmth.py"]
-STEPS = ["initial", "noop", "create-index", "noop", "edit-index", "noop",
-         "remove-index", "noop", "create-icon", "noop", "edit-icon", "noop",
-         "remove-icon", "noop", "remove-public", "noop", "recreate-public", "noop",
-         "node-modules-only", "noop"]
+FRONTEND_INPUTS = ["package.json", "pnpm-lock.yaml", "index.html", "vite.config.ts",
+                   "postcss.config.js", "tailwind.config.js", "tsconfig.json",
+                   "tsconfig.app.json", "tsconfig.node.json"]
+CHANGES = ["create-index", "edit-index", "remove-index", "create-icon", "edit-icon",
+           "remove-icon", "remove-public", "recreate-public", "edit-source-config",
+           "remove-source-config", "recreate-source-config", "edit-source-index",
+           "remove-source-index", "recreate-source-index", "edit-lock", "node-modules-only"]
+STEPS = ["initial", "noop"] + [step for change in CHANGES for step in (change, "noop")]
+BUILD_SCRIPT = '''mod build_support;
+fn main() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    for input in build_support::watched_inputs(root).expect("UI anchor") {
+        println!("cargo:rerun-if-changed={}", input.display());
+    }
+    // Exercise generated watched files after invocation starts, even when the
+    // synthetic output bytes are identical. This is never an actual UI bundle.
+    std::fs::write(root.join("ui/dist/build-produced.html"), "synthetic build output")
+        .expect("owned synthetic dist output");
+}
+'''
+
+
+def prepare_fixture(fixture):
+    (fixture / "scripts/dev").mkdir(parents=True)
+    identities = {}
+    for name in CLIENT:
+        source = ROOT / "scripts/dev" / name
+        destination = fixture / "scripts/dev" / name
+        shutil.copyfile(source, destination)
+        destination.chmod(source.stat().st_mode & 0o777)
+        if source.read_bytes() != destination.read_bytes():
+            raise ValueError(f"launcher copy differs: {name}")
+        identities[name] = hashlib.sha256(destination.read_bytes()).hexdigest()
+    support = (ROOT / "crates/mockforge-ui/build_support.rs").read_bytes()
+    (fixture / "build_support.rs").write_bytes(support)
+    identities["build_support.rs"] = hashlib.sha256(support).hexdigest()
+    (fixture / "Cargo.toml").write_text('[package]\nname="mockforge-ui-watch-probe"\nversion="0.0.0"\nedition="2021"\n[workspace]\n[lib]\npath="build_support.rs"\n')
+    (fixture / "Cargo.lock").write_text('version = 3\n[[package]]\nname = "mockforge-ui-watch-probe"\nversion = "0.0.0"\n')
+    (fixture / "build.rs").write_text(BUILD_SCRIPT)
+    for name in ["src", "dist", "public", "node_modules"]:
+        (fixture / "ui" / name).mkdir(parents=True)
+    for name in FRONTEND_INPUTS:
+        (fixture / "ui" / name).write_text("synthetic source input")
+    subprocess.run(["git", "init", "-q", str(fixture)], check=True)
+    return {"sha256": identities, "canonical_target": str(fixture / "target"),
+            "build_script_sha256": hashlib.sha256(BUILD_SCRIPT.encode()).hexdigest(),
+            "rustc": subprocess.check_output(["rustc", "-vV"], cwd=fixture, text=True)}
 
 
 def invoke(fixture, evidence, label, operation):
@@ -42,66 +85,66 @@ def invoke(fixture, evidence, label, operation):
             "admission": receipts[0]}, lines
 
 
+def mutate(fixture, step):
+    ui = fixture / "ui"
+    index, icon = ui / "dist/index.html", ui / "public/mockforge-icon.png"
+    config, source_index = ui / "vite.config.ts", ui / "index.html"
+    actions = {
+        "create-index": lambda: index.write_text("first"),
+        "edit-index": lambda: index.write_text("second"),
+        "remove-index": index.unlink,
+        "create-icon": lambda: icon.write_bytes(b"first"),
+        "edit-icon": lambda: icon.write_bytes(b"second"),
+        "remove-icon": icon.unlink,
+        "remove-public": icon.parent.rmdir,
+        "recreate-public": icon.parent.mkdir,
+        "edit-source-config": lambda: config.write_text("changed config"),
+        "remove-source-config": config.unlink,
+        "recreate-source-config": lambda: config.write_text("restored config"),
+        "edit-source-index": lambda: source_index.write_text("changed HTML input"),
+        "remove-source-index": source_index.unlink,
+        "recreate-source-index": lambda: source_index.write_text("restored HTML input"),
+        "edit-lock": lambda: (ui / "pnpm-lock.yaml").write_text("changed lock input"),
+        "node-modules-only": lambda: (ui / "node_modules/irrelevant.txt").write_text("not an input"),
+    }
+    actions.get(step, lambda: None)()
+
+
+def qualify_transitions(fixture, evidence, records):
+    for number, step in enumerate(STEPS):
+        mutate(fixture, step)
+        result, _ = invoke(fixture, evidence, f"{number:02}-{step}", "check")
+        expect_fresh = step in {"noop", "node-modules-only"}
+        if result["fresh"] != expect_fresh:
+            raise ValueError(f"unexpected freshness: {result}")
+        if records:
+            reran = result["script_output_mtime_ns"] != records[-1]["script_output_mtime_ns"]
+            if reran == expect_fresh:
+                raise ValueError(f"unexpected build-script execution: {result}")
+        records.append(result)
+
+
 def run(evidence):
     if not evidence.is_absolute() or Path("/tmp") not in evidence.resolve().parents:
         raise ValueError("use an explicitly new owned /tmp evidence directory")
     evidence.mkdir(exist_ok=False)
     records = []
     target = ROOT / "target"
+    if target.is_symlink():
+        raise ValueError("refusing a symlink target")
     target.mkdir(exist_ok=True)
     try:
         with tempfile.TemporaryDirectory(prefix="ui-watch-probe-", dir=target) as folder:
             fixture = Path(folder)
-            (fixture / "scripts/dev").mkdir(parents=True)
-            identities = {}
-            for name in CLIENT:
-                source = ROOT / "scripts/dev" / name
-                destination = fixture / "scripts/dev" / name
-                shutil.copyfile(source, destination)
-                destination.chmod(source.stat().st_mode & 0o777)
-                if source.read_bytes() != destination.read_bytes():
-                    raise ValueError(f"launcher copy differs: {name}")
-                identities[name] = hashlib.sha256(destination.read_bytes()).hexdigest()
-            support = (ROOT / "crates/mockforge-ui/build_support.rs").read_bytes()
-            (fixture / "build_support.rs").write_bytes(support)
-            identities["build_support.rs"] = hashlib.sha256(support).hexdigest()
-            (fixture / "Cargo.toml").write_text('[package]\nname="mockforge-ui-watch-probe"\nversion="0.0.0"\nedition="2021"\n[workspace]\n[lib]\npath="build_support.rs"\n')
-            (fixture / "Cargo.lock").write_text('version = 3\n[[package]]\nname = "mockforge-ui-watch-probe"\nversion = "0.0.0"\n')
-            (fixture / "build.rs").write_text('mod build_support;\nfn main() {\n for input in build_support::watched_inputs(std::path::Path::new(env!("CARGO_MANIFEST_DIR"))).expect("UI anchor") {\n  println!("cargo:rerun-if-changed={}", input.display());\n }\n}\n')
-            for name in ["src", "dist", "public", "node_modules"]:
-                (fixture / "ui" / name).mkdir(parents=True)
-            subprocess.run(["git", "init", "-q", str(fixture)], check=True)
-            (evidence / "identities.json").write_text(json.dumps({"sha256": identities,
-                "canonical_target": str(fixture / "target")}, indent=2) + "\n")
+            identity = prepare_fixture(fixture)
+            (evidence / "identities.json").write_text(json.dumps(identity, indent=2) + "\n")
             _, lines = invoke(fixture, evidence, "native-tests", "test")
-            if not any("test result: ok. 5 passed; 0 failed" in line for line in lines):
-                raise ValueError("five native helper controls did not all execute successfully")
-            index = fixture / "ui/dist/index.html"
-            icon = fixture / "ui/public/mockforge-icon.png"
-            for number, step in enumerate(STEPS):
-                label = f"{number:02}-{step}"
-                if step == "create-index": index.write_text("first")
-                elif step == "edit-index": index.write_text("second")
-                elif step == "remove-index": index.unlink()
-                elif step == "create-icon": icon.write_bytes(b"first")
-                elif step == "edit-icon": icon.write_bytes(b"second")
-                elif step == "remove-icon": icon.unlink()
-                elif step == "remove-public": icon.parent.rmdir()
-                elif step == "recreate-public": icon.parent.mkdir()
-                elif step == "node-modules-only":
-                    (fixture / "ui/node_modules/irrelevant.txt").write_text("not an input")
-                result, _ = invoke(fixture, evidence, label, "check")
-                expect_fresh = step in {"noop", "node-modules-only"}
-                if result["fresh"] != expect_fresh:
-                    raise ValueError(f"unexpected freshness: {result}")
-                if records:
-                    reran = result["script_output_mtime_ns"] != records[-1]["script_output_mtime_ns"]
-                    if reran == expect_fresh:
-                        raise ValueError(f"unexpected build-script execution: {result}")
-                records.append(result)
+            if not any("test result: ok. 6 passed; 0 failed" in line for line in lines):
+                raise ValueError("six native helper controls did not all execute successfully")
+            qualify_transitions(fixture, evidence, records)
     finally:
         (evidence / "results.json").write_text(json.dumps(records, indent=2) + "\n")
-    print(f"Five native controls and {len(records)} actual Cargo transitions passed")
+    print(f"Six native controls and {len(records)} actual Cargo transitions passed")
 
 
 def main():
