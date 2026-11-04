@@ -9,6 +9,8 @@ on:
       - '.github/workflows/docker-build.yml'
       - 'Dockerfile*'
       - '.dockerignore'
+      - 'examples/**'
+      - 'scripts/verify-bundled-demo.py'
       - 'scripts/tests/k6_egress_e2e.sh'
 
 concurrency:
@@ -25,6 +27,8 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
+      - name: Verify demo verifier guards
+        run: python3 -m unittest discover -s scripts/tests -p test_bundled_demo.py -v
       - uses: docker/setup-buildx-action@v4
         with:
           name: mockforge-smoke-${{ github.run_id }}
@@ -41,6 +45,13 @@ jobs:
           file: Dockerfile
           platforms: linux/amd64
           push: false
+          load: true
+          tags: mockforge-root:smoke-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Verify bundled demo responses
+        run: >-
+          python3 scripts/verify-bundled-demo.py
+          --image mockforge-root:smoke-${{ github.run_id }}-${{ github.run_attempt }}
+          --receipt "$RUNNER_TEMP/mockforge-demo-${{ github.run_id }}-${{ github.run_attempt }}.json"
       - uses: docker/build-push-action@v7
         with:
           context: .
@@ -70,3 +81,6 @@ jobs:
       - name: Remove smoke egress image
         if: always()
         run: docker image rm -f "mockforge-egress:smoke-${{ github.run_id }}" || true
+      - name: Remove smoke root image
+        if: always()
+        run: docker image rm "mockforge-root:smoke-${{ github.run_id }}-${{ github.run_attempt }}" || true

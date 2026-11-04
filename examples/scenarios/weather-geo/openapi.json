@@ -45,16 +45,16 @@
             "content": {
               "application/json": {
                 "example": {
-                  "temperature": "{{random.int(-10,35)}}",
-                  "condition": "{{random.choice(['sunny', 'cloudy', 'rainy', 'snowy'])}}",
-                  "humidity": "{{random.int(30,90)}}",
-                  "windSpeed": "{{random.int(0,30)}}",
+                  "temperature": "18",
+                  "condition": "sunny",
+                  "humidity": "65",
+                  "windSpeed": "8",
                   "location": {
-                    "city": "{{faker.address.city}}",
-                    "country": "{{faker.address.country}}",
+                    "city": "London",
+                    "country": "United Kingdom",
                     "coordinates": {
-                      "lat": "{{faker.address.latitude}}",
-                      "lon": "{{faker.address.longitude}}"
+                      "lat": "51.5074",
+                      "lon": "-0.1278"
                     }
                   }
                 }
@@ -103,8 +103,8 @@
                   "forecast": [
                     {
                       "date": "{{now}}",
-                      "temperature": "{{random.int(-10,35)}}",
-                      "condition": "{{random.choice(['sunny', 'cloudy', 'rainy'])}}"
+                      "temperature": "18",
+                      "condition": "sunny"
                     }
                   ]
                 }

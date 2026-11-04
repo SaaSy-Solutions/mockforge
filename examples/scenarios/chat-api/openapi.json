@@ -34,7 +34,7 @@
                     {
                       "id": "{{uuid}}",
                       "userId": "{{uuid}}",
-                      "text": "{{faker.lorem.sentence}}",
+                      "text": "Welcome to the demo channel.",
                       "timestamp": "{{now}}"
                     }
                   ]

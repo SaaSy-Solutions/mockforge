@@ -12,6 +12,7 @@ on:
     paths:
       - 'Cargo.*'
       - 'crates/**'
+      - 'examples/**'
       - 'Dockerfile*'
       - '.dockerignore'
       - '.github/workflows/docker-build.yml'

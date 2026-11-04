@@ -25,14 +25,14 @@
                   "products": [
                     {
                       "id": "{{uuid}}",
-                      "name": "{{faker.commerce.productName}}",
-                      "price": "{{faker.commerce.price}}",
-                      "category": "{{faker.commerce.department}}",
-                      "description": "{{faker.commerce.productDescription}}",
-                      "stock": "{{random.int(0,100)}}"
+                      "name": "Demo wireless headphones",
+                      "price": "49.99",
+                      "category": "Electronics",
+                      "description": "Sample item from the demo catalog.",
+                      "stock": "42"
                     }
                   ],
-                  "total": "{{random.int(10,100)}}"
+                  "total": "27"
                 }
               }
             }
@@ -54,11 +54,11 @@
                   "items": [
                     {
                       "productId": "{{uuid}}",
-                      "quantity": "{{random.int(1,5)}}",
-                      "price": "{{faker.commerce.price}}"
+                      "quantity": "2",
+                      "price": "49.99"
                     }
                   ],
-                  "total": "{{faker.commerce.price}}"
+                  "total": "99.98"
                 }
               }
             }
@@ -101,7 +101,7 @@
                 "example": {
                   "id": "{{uuid}}",
                   "status": "pending",
-                  "total": "{{faker.commerce.price}}",
+                  "total": "99.98",
                   "createdAt": "{{now}}"
                 }
               }
