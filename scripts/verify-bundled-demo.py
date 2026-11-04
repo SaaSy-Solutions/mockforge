@@ -140,7 +140,7 @@ def main():
     require(image["Os"] == "linux" and image["Architecture"] == "amd64", "Expected Linux amd64 image")
     owner = "mockforge-demo-check-" + secrets.token_hex(8)
     receipt = {"image_id": image["Id"], "mounted_checkout_specs": args.mount_specs,
-               "spec_sha256": {name: row["sha256"] for name, row in files.items()},
+               "expected_spec_sha256": {name: row["sha256"] for name, row in files.items()},
                "cases": [], "cleanup_verified": False}
     identity = None
     def interrupted(*_):
@@ -183,6 +183,11 @@ def main():
         else:
             raise AssertionError("Owned demo failed to become ready")
         receipt["binary_sha256"] = run("exec", identity, "sha256sum", "/proc/1/exe").decode().split()[0]
+        actual_specs = {name: run("exec", identity, "sha256sum",
+                                 f"/app/examples/scenarios/{name}/openapi.json").decode().split()[0]
+                        for name in SCENARIOS}
+        receipt["actual_spec_sha256"] = actual_specs
+        require(actual_specs == receipt["expected_spec_sha256"], "Image scenario bytes differ from the checked-out examples")
         for method, path, query, expected_status, expected in cases:
             url = "http://127.0.0.1:3000" + path
             if query:
