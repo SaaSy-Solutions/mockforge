@@ -3,8 +3,8 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use mockforge_core::protocol_abstraction::Protocol;
-use mockforge_core::protocol_server::MockProtocolServer;
+use mockforge_protocol::protocol_abstraction::Protocol;
+use mockforge_protocol::protocol_server::MockProtocolServer;
 
 use crate::server::SmtpServer;
 use crate::spec_registry::SmtpSpecRegistry;

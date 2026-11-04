@@ -8147,6 +8147,7 @@ dependencies = [
  "mockforge-foundation",
  "mockforge-intelligence",
  "mockforge-openapi",
+ "mockforge-protocol",
  "mockforge-template-expansion",
  "notify 8.2.0",
  "once_cell",
@@ -8970,6 +8971,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "mockforge-protocol"
+version = "0.3.240"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "futures",
+ "mockforge-foundation",
+ "regex",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "tempfile",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "mockforge-proxy"
 version = "0.3.240"
 dependencies = [
@@ -9309,7 +9327,7 @@ dependencies = [
  "criterion",
  "lettre",
  "mail-parser",
- "mockforge-core",
+ "mockforge-protocol",
  "rcgen",
  "regex",
  "rustls",
@@ -9334,7 +9352,7 @@ dependencies = [
  "base64 0.22.1",
  "criterion",
  "hex",
- "mockforge-core",
+ "mockforge-protocol",
  "regex",
  "serde",
  "serde_json",

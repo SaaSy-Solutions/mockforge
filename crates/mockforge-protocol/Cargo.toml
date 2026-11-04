@@ -1,0 +1,42 @@
+[package]
+name = "mockforge-protocol"
+rust-version.workspace = true
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+readme = "../../README.md"
+description = "Protocol contracts, registries, matching, fixture loading and server lifecycle support"
+keywords = ["mock", "protocol", "testing", "network"]
+categories = ["development-tools::testing", "network-programming"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lints.rust]
+missing_docs = "deny"
+unsafe_code = "deny"
+
+[dependencies]
+mockforge-foundation = { path = "../mockforge-foundation", default-features = false }
+async-trait = { workspace = true }
+chrono = { workspace = true }
+futures = { workspace = true }
+regex = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[features]
+default = []
+scripting = ["mockforge-foundation/scripting"]
+schema = ["mockforge-foundation/schema"]

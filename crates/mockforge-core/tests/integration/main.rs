@@ -24,6 +24,7 @@ mod priority_handler_edge_cases;
 mod prop_conditions_tests;
 mod prop_routing_tests;
 mod prop_tests;
+mod protocol_public_api_compatibility;
 mod protocol_registry_integration;
 mod reality_hot_reload_test;
 mod reality_integration_test;

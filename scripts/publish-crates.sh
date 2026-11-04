@@ -77,6 +77,7 @@ CRATES=(
   mockforge-tui
   mockforge-tunnel
   mockforge-foundation
+  mockforge-protocol
   mockforge-observability
   mockforge-plugin-loader
   mockforge-plugin-sdk

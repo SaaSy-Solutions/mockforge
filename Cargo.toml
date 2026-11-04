@@ -42,6 +42,7 @@ members = [
     "crates/mockforge-foundation",
 
     # Extracted from mockforge-core
+    "crates/mockforge-protocol",
     "crates/mockforge-openapi",
     "crates/mockforge-proxy",
     "crates/mockforge-import",
