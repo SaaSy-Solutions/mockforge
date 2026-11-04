@@ -1,3 +1,5 @@
+mod build_support;
+
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::env;
@@ -54,8 +56,6 @@ fn main() {
     if let Err(e) = vergen::EmitBuilder::builder().build_timestamp().git_sha(true).emit() {
         println!("cargo:warning=Failed to generate version info: {}", e);
     }
-    println!("cargo:rerun-if-changed=ui/build.rs");
-    println!("cargo:rerun-if-changed=ui/src/");
 
     let crate_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
     let ui_dist_path = Path::new(&crate_dir).join("ui/dist");
@@ -87,11 +87,11 @@ fn main() {
         println!("cargo:warning=UI build script not found, using fallback files from public/");
     }
 
-    println!("cargo:rerun-if-changed={}", ui_dist_path.join("index.html").display());
-    println!("cargo:rerun-if-changed={}", ui_dist_path.join("manifest.json").display());
-    println!("cargo:rerun-if-changed={}", ui_dist_path.join("assets").display());
-    println!("cargo:rerun-if-changed={}", ui_public_path.join("manifest.json").display());
-    println!("cargo:rerun-if-changed={}", ui_public_path.join("sw.js").display());
+    for input in build_support::watched_inputs(Path::new(&crate_dir))
+        .expect("UI directory exists after creating its output directory")
+    {
+        println!("cargo:rerun-if-changed={}", input.display());
+    }
 
     let out_dir = env::var_os("OUT_DIR").unwrap();
     let out_path = Path::new(&out_dir);
