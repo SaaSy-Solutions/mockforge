@@ -13,7 +13,7 @@ CLIENT = ["cargo", "rust_build_policy.py", "rust_policy_config.py",
           "rust_policy_runtime.py", "rust_policy_warmth.py"]
 FRONTEND_INPUTS = ["package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "index.html", "vite.config.ts",
                    "postcss.config.js", "tailwind.config.js", "tsconfig.json",
-                   "tsconfig.app.json", "tsconfig.node.json"]
+                   "tsconfig.app.json", "tsconfig.node.json", "tsconfig.test.json"]
 CHANGES = ["create-icon", "edit-icon", "remove-icon", "edit-source-config",
            "remove-source-config", "recreate-source-config", "edit-source-index",
            "remove-source-index", "recreate-source-index", "edit-lock", "edit-workspace-policy", "node-modules-only",
