@@ -20,7 +20,7 @@ if (existing && !existing.isDirectory()) throw new Error('Owned UI output must b
 process.stdout.write(output);
 NODE
 )"
-  MOCKFORGE_UI_BUILD_OUT_DIR="$owned_output" corepack pnpm run build --outDir "$owned_output" --emptyOutDir
+  MOCKFORGE_UI_BUILD_OUT_DIR="$owned_output" corepack pnpm run build --outDir "$owned_output" --emptyOutDir --configLoader runner
 else
   printf '%s\n' 'Usage: build_ui.sh [Cargo OUT_DIR/ui-dist]' >&2
   exit 2
