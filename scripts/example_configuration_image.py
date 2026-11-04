@@ -121,7 +121,12 @@ def verify_archive(path, base, source):
         original = dict(base['Config'])
         original.pop('Labels', None)
         # Docker classic archive serialization may omit empty legacy fields.
-        normalized = lambda d: {k: v for k, v in d.items() if v not in (None, {}, [], '')}
+        # Classic Docker adds parent Image bookkeeping and explicit false
+        # attach/TTY defaults that the daemon's image Config view omits.
+        legacy_defaults = {'AttachStdin', 'AttachStdout', 'AttachStderr', 'OpenStdin', 'StdinOnce', 'Tty'}
+        normalized = lambda d: {k: v for k, v in d.items()
+                                if k != 'Image' and v not in (None, {}, [], '')
+                                and not (k in legacy_defaults and v is False)}
         require(normalized(runtime) == normalized(original), 'Runtime settings changed')
         required_labels = {'org.opencontainers.image.revision': RUNTIME_SOURCE,
                            'io.mockforge.image.kind': 'example-configuration-refresh',

@@ -62,13 +62,24 @@ jobs:
           set -euo pipefail
           python3 scripts/example_configuration_image.py --source "$GITHUB_SHA" --check-only --output "$RUNNER_TEMP/example-publish-source-proof"
           python3 - "$RUNNER_TEMP/example-image-proof/receipt.json" "$GITHUB_SHA" <<'PY'
-          import json, sys
+          import json, subprocess, sys
           proof = json.load(open(sys.argv[1]))
           assert proof['status'] == 'qualified' and proof['config_source'] == sys.argv[2]
           assert proof['six_bundled_http_cases_passed'] and not proof['published']
+          subprocess.run(['/usr/bin/docker', '--host', 'unix:///var/run/docker.sock', 'tag', proof['image_id'],
+                          'ghcr.io/saasy-solutions/mockforge:examples-' + sys.argv[2]], check=True)
           PY
-          /usr/bin/docker --host unix:///var/run/docker.sock tag "mockforge-examples-local:$GITHUB_SHA" "ghcr.io/saasy-solutions/mockforge:examples-$GITHUB_SHA"
           /usr/bin/docker --host unix:///var/run/docker.sock push "ghcr.io/saasy-solutions/mockforge:examples-$GITHUB_SHA" | tee "$RUNNER_TEMP/example-image-proof/push.log"
+          python3 - "$RUNNER_TEMP/example-image-proof" <<'PY'
+          import json, pathlib, re, sys
+          root = pathlib.Path(sys.argv[1])
+          proof = json.loads((root / 'receipt.json').read_text())
+          digests = re.findall(r'digest: (sha256:[0-9a-f]{64})', (root / 'push.log').read_text())
+          assert len(digests) == 1
+          proof.update(published=True, registry_manifest_digest=digests[0],
+                       published_ref='ghcr.io/saasy-solutions/mockforge:examples-' + proof['config_source'] + '@' + digests[0])
+          (root / 'publication.json').write_text(json.dumps(proof, indent=2) + '\n')
+          PY
       - name: Retain qualification and publication evidence
         if: always()
         uses: actions/upload-artifact@v7
