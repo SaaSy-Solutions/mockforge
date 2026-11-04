@@ -27,6 +27,8 @@ RUN pnpm build
 # Use rust:1.90-slim (Trixie/testing-based) which has GLIBC 2.39+ required by native dependencies
 FROM ${RUST_IMAGE} AS builder
 
+ENV CARGO_BUILD_JOBS=2
+
 # Install required dependencies for building (including C++ for Kafka support)
 RUN apt-get update && apt-get install -y \
     pkg-config \
