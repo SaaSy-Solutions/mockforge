@@ -8,22 +8,11 @@
 //! implemented, cloud management and forwarding refuse requests; legacy local
 //! destinations are never treated as authenticated cloud connections.
 //!
-//! Wire it from a relay binary's `main`:
-//!
-//! ```ignore
-//! let inner = InMemoryTunnelStore::new();
-//! let store = if let Ok(registry_url) = std::env::var("REGISTRY_URL") {
-//!     let token = std::env::var("MOCKFORGE_INTERNAL_API_TOKEN")
-//!         .expect("MOCKFORGE_INTERNAL_API_TOKEN required when REGISTRY_URL is set");
-//!     Arc::new(RegistryTunnelStore::new(inner, registry_url, token))
-//!         as Arc<dyn TunnelStoreTrait>
-//! } else {
-//!     Arc::new(inner) as Arc<dyn TunnelStoreTrait>
-//! };
-//! ```
-//!
-//! See docs/cloud/CLOUD_TUNNEL_RELAY_DEPLOYMENT.md for the deployment
-//! story (Fly app + wildcard DNS + cert).
+//! The cloud-enabled `tunnel-server` validates required registry configuration
+//! before opening storage or a listener, and always selects this wrapper. It
+//! never falls back to unrestricted local forwarding on missing configuration.
+//! See docs/cloud/CLOUD_TUNNEL_RELAY_DEPLOYMENT.md for the current containment
+//! behavior and the authenticated reverse transport still required.
 
 use crate::server::TunnelStoreTrait;
 use crate::{Result, TunnelConfig, TunnelError, TunnelStatus};
