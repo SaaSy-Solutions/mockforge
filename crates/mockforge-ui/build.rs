@@ -61,18 +61,19 @@ fn main() {
     let ui_dist_path = Path::new(&crate_dir).join("ui/dist");
     let ui_public_path = Path::new(&crate_dir).join("ui/public");
 
-    // Ensure dist directory exists (for local dev builds)
-    if !ui_dist_path.exists() {
-        fs::create_dir_all(&ui_dist_path).expect("Failed to create ui/dist directory");
-    }
+    let out_dir = env::var_os("OUT_DIR").unwrap();
+    let out_path = Path::new(&out_dir);
+    let owned_ui_dist = out_path.join("ui-dist");
+    let mut frontend_succeeded = false;
 
     // Try to run the UI build script, but don't fail if it doesn't exist or fails
     // This allows the crate to compile even when the UI hasn't been built
     let ui_build_script = Path::new(&crate_dir).join("build_ui.sh");
     if ui_build_script.exists() {
-        let status = Command::new("bash").arg(&ui_build_script).status();
+        let status = Command::new("bash").arg(&ui_build_script).arg(&owned_ui_dist).status();
 
         if let Ok(status) = status {
+            frontend_succeeded = status.success();
             if !status.success() {
                 println!(
                     "cargo:warning=UI build script failed, but continuing with fallback files"
@@ -87,17 +88,16 @@ fn main() {
         println!("cargo:warning=UI build script not found, using fallback files from public/");
     }
 
-    for input in build_support::watched_inputs(Path::new(&crate_dir))
-        .expect("UI directory exists after creating its output directory")
+    let assets =
+        build_support::AssetSource::select(&owned_ui_dist, &ui_dist_path, frontend_succeeded);
+    for input in build_support::watched_inputs(Path::new(&crate_dir), &assets)
+        .expect("the packaged UI input directory exists")
     {
         println!("cargo:rerun-if-changed={}", input.display());
     }
 
-    let out_dir = env::var_os("OUT_DIR").unwrap();
-    let out_path = Path::new(&out_dir);
-
-    generate_ui_content(out_path, &ui_dist_path);
-    generate_asset_paths(out_path, &ui_dist_path);
+    generate_ui_content(out_path, assets.directory());
+    generate_asset_paths(out_path, assets.directory());
     generate_icon_assets(out_path, &ui_public_path);
 }
 

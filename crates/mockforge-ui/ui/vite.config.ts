@@ -7,6 +7,7 @@ import path from 'path'
 export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const isCloudBuild = env.VITE_MOCKFORGE_MODE === 'cloud'
+  const cargoUiOutput = process.env.MOCKFORGE_UI_BUILD_OUT_DIR
 
   // Guard: a cloud-mode production build MUST have VITE_API_BASE_URL set.
   // Without it the compiled bundle sees `isCloud === false` at runtime, the
@@ -27,7 +28,7 @@ export default defineConfig(({ command, mode }) => {
     plugins: [
       react(),
       visualizer({
-        filename: './dist/stats.html',
+        filename: cargoUiOutput ? path.join(cargoUiOutput, 'stats.html') : './dist/stats.html',
         open: false,
         gzipSize: true,
         brotliSize: true,

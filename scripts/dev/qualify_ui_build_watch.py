@@ -11,26 +11,34 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[2]
 CLIENT = ["cargo", "rust_build_policy.py", "rust_policy_config.py",
           "rust_policy_runtime.py", "rust_policy_warmth.py"]
-FRONTEND_INPUTS = ["package.json", "pnpm-lock.yaml", "index.html", "vite.config.ts",
+FRONTEND_INPUTS = ["package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "index.html", "vite.config.ts",
                    "postcss.config.js", "tailwind.config.js", "tsconfig.json",
                    "tsconfig.app.json", "tsconfig.node.json"]
-CHANGES = ["create-index", "edit-index", "remove-index", "create-icon", "edit-icon",
-           "remove-icon", "remove-public", "recreate-public", "edit-source-config",
+CHANGES = ["create-icon", "edit-icon", "remove-icon", "edit-source-config",
            "remove-source-config", "recreate-source-config", "edit-source-index",
-           "remove-source-index", "recreate-source-index", "edit-lock", "node-modules-only"]
+           "remove-source-index", "recreate-source-index", "edit-lock", "edit-workspace-policy", "node-modules-only",
+           "create-inactive-prebuilt", "edit-inactive-prebuilt", "remove-inactive-prebuilt",
+           "activate-fallback", "create-prebuilt", "edit-prebuilt", "remove-prebuilt-file",
+           "remove-prebuilt-dir", "recreate-prebuilt-dir", "recreate-prebuilt-index",
+           "remove-public", "recreate-public", "activate-owned"]
 STEPS = ["initial", "noop"] + [step for change in CHANGES for step in (change, "noop")]
-BUILD_SCRIPT = '''mod build_support;
-fn main() {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-    for input in build_support::watched_inputs(root).expect("UI anchor") {
-        println!("cargo:rerun-if-changed={}", input.display());
-    }
-    // Exercise generated watched files after invocation starts, even when the
-    // synthetic output bytes are identical. This is never an actual UI bundle.
-    std::fs::write(root.join("ui/dist/build-produced.html"), "synthetic build output")
-        .expect("owned synthetic dist output");
-}
-'''
+INACTIVE_CHANGES = {"node-modules-only", "create-inactive-prebuilt",
+                    "edit-inactive-prebuilt", "remove-inactive-prebuilt"}
+BUILD_SCRIPT = '\n'.join([
+    'mod build_support;',
+    'fn main() {',
+    ' let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));',
+    ' let owned = std::path::PathBuf::from(std::env::var_os("OUT_DIR").expect("owned output")).join("ui-dist");',
+    ' std::fs::create_dir_all(&owned).expect("owned output directory");',
+    ' std::fs::write(owned.join("index.html"), "synthetic produced output").expect("owned output");',
+    ' let succeeds = std::fs::read_to_string(root.join("ui/src/producer-mode.txt")).unwrap_or_default() != "fallback";',
+    ' let assets = build_support::AssetSource::select(&owned, &root.join("ui/dist"), succeeds);',
+    ' for input in build_support::watched_inputs(root, &assets).expect("UI input directory") {',
+    '  println!("cargo:rerun-if-changed={}", input.display());',
+    ' }',
+    '}',
+    '',
+])
 
 
 def prepare_fixture(fixture):
@@ -50,7 +58,7 @@ def prepare_fixture(fixture):
     (fixture / "Cargo.toml").write_text('[package]\nname="mockforge-ui-watch-probe"\nversion="0.0.0"\nedition="2021"\n[workspace]\n[lib]\npath="build_support.rs"\n')
     (fixture / "Cargo.lock").write_text('version = 3\n[[package]]\nname = "mockforge-ui-watch-probe"\nversion = "0.0.0"\n')
     (fixture / "build.rs").write_text(BUILD_SCRIPT)
-    for name in ["src", "dist", "public", "node_modules"]:
+    for name in ["src", "public", "node_modules"]:
         (fixture / "ui" / name).mkdir(parents=True)
     for name in FRONTEND_INPUTS:
         (fixture / "ui" / name).write_text("synthetic source input")
@@ -87,17 +95,21 @@ def invoke(fixture, evidence, label, operation):
 
 def mutate(fixture, step):
     ui = fixture / "ui"
-    index, icon = ui / "dist/index.html", ui / "public/mockforge-icon.png"
+    prebuilt, icon = ui / "dist/index.html", ui / "public/mockforge-icon.png"
     config, source_index = ui / "vite.config.ts", ui / "index.html"
+
+    def create_prebuilt():
+        prebuilt.parent.mkdir()
+        prebuilt.write_text("prebuilt input")
+
+    def remove_prebuilt():
+        prebuilt.unlink()
+        prebuilt.parent.rmdir()
+
     actions = {
-        "create-index": lambda: index.write_text("first"),
-        "edit-index": lambda: index.write_text("second"),
-        "remove-index": index.unlink,
         "create-icon": lambda: icon.write_bytes(b"first"),
         "edit-icon": lambda: icon.write_bytes(b"second"),
         "remove-icon": icon.unlink,
-        "remove-public": icon.parent.rmdir,
-        "recreate-public": icon.parent.mkdir,
         "edit-source-config": lambda: config.write_text("changed config"),
         "remove-source-config": config.unlink,
         "recreate-source-config": lambda: config.write_text("restored config"),
@@ -105,7 +117,21 @@ def mutate(fixture, step):
         "remove-source-index": source_index.unlink,
         "recreate-source-index": lambda: source_index.write_text("restored HTML input"),
         "edit-lock": lambda: (ui / "pnpm-lock.yaml").write_text("changed lock input"),
+        "edit-workspace-policy": lambda: (ui / "pnpm-workspace.yaml").write_text("changed build policy input"),
         "node-modules-only": lambda: (ui / "node_modules/irrelevant.txt").write_text("not an input"),
+        "create-inactive-prebuilt": create_prebuilt,
+        "edit-inactive-prebuilt": lambda: prebuilt.write_text("inactive input edit"),
+        "remove-inactive-prebuilt": remove_prebuilt,
+        "activate-fallback": lambda: (ui / "src/producer-mode.txt").write_text("fallback"),
+        "create-prebuilt": create_prebuilt,
+        "edit-prebuilt": lambda: prebuilt.write_text("changed prebuilt input"),
+        "remove-prebuilt-file": prebuilt.unlink,
+        "remove-prebuilt-dir": prebuilt.parent.rmdir,
+        "recreate-prebuilt-dir": prebuilt.parent.mkdir,
+        "recreate-prebuilt-index": lambda: prebuilt.write_text("recreated prebuilt input"),
+        "remove-public": icon.parent.rmdir,
+        "recreate-public": icon.parent.mkdir,
+        "activate-owned": lambda: (ui / "src/producer-mode.txt").write_text("owned"),
     }
     actions.get(step, lambda: None)()
 
@@ -114,7 +140,7 @@ def qualify_transitions(fixture, evidence, records):
     for number, step in enumerate(STEPS):
         mutate(fixture, step)
         result, _ = invoke(fixture, evidence, f"{number:02}-{step}", "check")
-        expect_fresh = step in {"noop", "node-modules-only"}
+        expect_fresh = step == "noop" or step in INACTIVE_CHANGES
         if result["fresh"] != expect_fresh:
             raise ValueError(f"unexpected freshness: {result}")
         if records:
@@ -139,12 +165,12 @@ def run(evidence):
             identity = prepare_fixture(fixture)
             (evidence / "identities.json").write_text(json.dumps(identity, indent=2) + "\n")
             _, lines = invoke(fixture, evidence, "native-tests", "test")
-            if not any("test result: ok. 6 passed; 0 failed" in line for line in lines):
-                raise ValueError("six native helper controls did not all execute successfully")
+            if not any("test result: ok. 9 passed; 0 failed" in line for line in lines):
+                raise ValueError("nine native helper controls did not all execute successfully")
             qualify_transitions(fixture, evidence, records)
     finally:
         (evidence / "results.json").write_text(json.dumps(records, indent=2) + "\n")
-    print(f"Six native controls and {len(records)} actual Cargo transitions passed")
+    print(f"Nine native controls and {len(records)} actual Cargo transitions passed")
 
 
 def main():

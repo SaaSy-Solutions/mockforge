@@ -24,4 +24,4 @@ Both ordinary admissions used policy `5de45082645bb5f7236dc78f2c41fdd6ee4dcabe4c
 
 The [lossless baseline archive](baseline-raw.tar.xz) contains both raw JSON/stderr pairs, source/configuration identities, timestamp snapshot, and reproduction summary. Size 84040 bytes; SHA-256 `4906604e63cce820dc7101c87058e07e08b673629db166921862c9cdcbe3c6db`. Tracked source remained clean throughout.
 
-HAL was inspected using existing trusted SSH only. Its existing clone has no warmed UI artifacts and lives on a 16 GiB tmpfs with 8.7 GiB free, so the initial reproduction used the local existing worktree. Any later remote checkout needs adequate disk space and its own canonical target. No remote source, policy, key, or configuration was changed.
+An existing remote checkout was inspected using trusted access. It lacked warmed UI artifacts and had constrained temporary storage, so the initial reproduction reused the local target. Offload requires an independently owned target and verified capacity. No host policy, key, or global configuration changed.
