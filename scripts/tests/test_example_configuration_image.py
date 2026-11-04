@@ -62,7 +62,7 @@ class SourceGuard(unittest.TestCase):
 
 
 class ArchiveGuard(unittest.TestCase):
-    def archive(self, path, bad_file=False, corrupt=False, changed_runtime=False):
+    def archive(self, path, bad_file=False, corrupt=False, changed_runtime=False, compat_config=False, compat_layers=False, compat_tags=False):
         blobs = {}
         def blob(content, media):
             digest = 'sha256:' + hashlib.sha256(content).hexdigest()
@@ -99,8 +99,11 @@ class ArchiveGuard(unittest.TestCase):
         index = json.dumps({'schemaVersion': 2, 'manifests': [manifest]}).encode()
         if corrupt:
             blobs['blobs/sha256/' + extra['digest'][7:]] += b'corrupt'
+        compatibility = json.dumps([{'Config': 'blobs/sha256/' + ('0' * 64 if compat_config else config['digest'][7:]),
+                                     'Layers': [] if compat_layers else ['blobs/sha256/' + layer['digest'][7:] for layer in [base_layer] * 12 + [extra]],
+                                     'RepoTags': ['unexpected:tag'] if compat_tags else None}]).encode()
         with tarfile.open(path, 'w') as tar:
-            for name, content in {'index.json': index, **blobs}.items():
+            for name, content in {'index.json': index, 'manifest.json': compatibility, **blobs}.items():
                 info = tarfile.TarInfo(name)
                 info.size = len(content)
                 tar.addfile(info, io.BytesIO(content))
@@ -115,12 +118,36 @@ class ArchiveGuard(unittest.TestCase):
             self.assertEqual(len(proof['rootfs_diff_ids']), 13)
 
     def test_other_file_blob_corruption_and_runtime_change_rejected(self):
-        for fault in ('bad_file', 'corrupt', 'changed_runtime'):
+        for fault in ('bad_file', 'corrupt', 'changed_runtime', 'compat_config', 'compat_layers', 'compat_tags'):
             with self.subTest(fault=fault), tempfile.TemporaryDirectory(prefix='mockforge-oci-negative-') as directory:
                 path = Path(directory) / 'image.tar'
                 base = self.archive(path, **{fault: True})
                 with self.assertRaises(ValueError):
                     MODULE.verify_archive(path, base, 'a' * 40)
+
+
+class DaemonIdentityGuard(unittest.TestCase):
+    def test_base_config_and_manifest_id_conventions(self):
+        server = {'Version': '29.0.0', 'Components': [{'Name': 'Engine'}]}
+        for identity in (MODULE.BASE_CONFIG, MODULE.BASE_MANIFEST):
+            base = {'Id': identity, 'RepoDigests': [MODULE.BASE_REF], 'Os': 'linux', 'Architecture': 'amd64'}
+            MODULE.base_identity_guard(base, server)
+            for key, value in [('Id', 'sha256:' + '0' * 64), ('RepoDigests', []), ('Architecture', 'arm64')]:
+                with self.assertRaises(ValueError):
+                    MODULE.base_identity_guard({**base, key: value}, server)
+        with self.assertRaisesRegex(ValueError, 'Genuine'):
+            MODULE.base_identity_guard(base, {'Version': '29.0.0', 'Components': [{'Name': 'Podman'}]})
+
+    def test_new_image_binds_id_and_actual_rootfs(self):
+        graph = {'config_digest': 'sha256:' + '1' * 64, 'manifest_digest': 'sha256:' + '2' * 64,
+                 'rootfs_diff_ids': ['sha256:' + '3' * 64]}
+        for identity in (graph['config_digest'], graph['manifest_digest']):
+            image = {'Id': identity, 'RootFS': {'Layers': graph['rootfs_diff_ids']}, 'Os': 'linux', 'Architecture': 'amd64'}
+            MODULE.image_identity_guard(image, graph)
+            with self.assertRaises(ValueError):
+                MODULE.image_identity_guard({**image, 'RootFS': {'Layers': []}}, graph)
+            with self.assertRaises(ValueError):
+                MODULE.image_identity_guard({**image, 'Id': 'sha256:' + '0' * 64}, graph)
 
 
 if __name__ == '__main__':

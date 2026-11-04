@@ -76,6 +76,23 @@ def digest_stream(stream):
     return 'sha256:' + h.hexdigest()
 
 
+
+def base_identity_guard(base, server):
+    require(int(server['Version'].split('.')[0]) >= 28
+            and any(c.get('Name') == 'Engine' for c in server.get('Components', [])),
+            'Genuine local Docker Engine 28 or newer required')
+    require(base['Id'] in (BASE_CONFIG, BASE_MANIFEST) and BASE_REF in base.get('RepoDigests', [])
+            and base['Os'] == 'linux' and base['Architecture'] == 'amd64',
+            'Qualified immutable Linux amd64 base is not cached')
+
+
+def image_identity_guard(image, graph):
+    require(image['Id'] in (graph['config_digest'], graph['manifest_digest'])
+            and image['RootFS']['Layers'] == graph['rootfs_diff_ids']
+            and image['Os'] == 'linux' and image['Architecture'] == 'amd64',
+            'Actual loaded image differs from verified archive')
+
+
 def verify_archive(path, base, source):
     """Check every OCI blob and diff ID, then allow only three overlay files."""
     with tarfile.open(path) as archive:
@@ -104,6 +121,14 @@ def verify_archive(path, base, source):
         manifest = blob(index['manifests'][0], True)
         config = blob(manifest['config'], True)
         layers = manifest['layers']
+        compat = json.loads(read('manifest.json'))
+        require(len(compat) == 1 and compat[0]['Config'] == 'blobs/sha256/' + manifest['config']['digest'][7:]
+                and compat[0]['Layers'] == ['blobs/sha256/' + layer['digest'][7:] for layer in layers],
+                'Docker compatibility manifest differs from OCI graph')
+        # This driver saves by immutable image ID, never by a mutable tag.
+        require(not compat[0].get('RepoTags')
+                and not index['manifests'][0].get('annotations', {}).get('org.opencontainers.image.ref.name'),
+                'Unexpected tagged archive; image-ID export required')
         expected = base['RootFS']['Layers']
         require(len(expected) == 12 and config['rootfs']['diff_ids'][:-1] == expected
                 and len(layers) == 13, 'Exactly qualified base layers plus one configuration layer required')
@@ -175,7 +200,8 @@ def main():
         env.pop('DOCKER_HOST', None)
         env['DOCKER_BUILDKIT'] = '0'
         base = json.loads(command(DOCKER + ['image', 'inspect', BASE_REF], env=env))[0]
-        require(base['Id'] == BASE_CONFIG and BASE_REF in base.get('RepoDigests', []), 'Qualified immutable base is not cached')
+        server = json.loads(command(DOCKER + ['version', '--format', '{{json .Server}}'], env=env))
+        base_identity_guard(base, server)
         size = base['Size']
         docker_root = command(DOCKER + ['info', '--format', '{{.DockerRootDir}}'], env=env).decode().strip()
         require(Path(docker_root).is_dir(), 'Local engine filesystem required')
@@ -203,7 +229,7 @@ def main():
         archive = args.output / 'image.tar'
         command(DOCKER + ['image', 'save', '--output', str(archive), image['Id']], env=env, timeout=120)
         receipt['oci'] = verify_archive(archive, base, args.source)
-        require(receipt['oci']['config_digest'] == image['Id'], 'Actual loaded image differs from verified archive')
+        image_identity_guard(image, receipt['oci'])
         receipt['archive_sha256'] = digest_stream(archive.open('rb'))[7:]
         spec = importlib.util.spec_from_file_location('owned_lifecycle', ROOT / 'scripts/verify-root-image-archive.py')
         module = importlib.util.module_from_spec(spec)

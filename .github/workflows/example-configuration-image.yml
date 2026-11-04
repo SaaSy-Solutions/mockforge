@@ -71,17 +71,22 @@ jobs:
           PY
           /usr/bin/docker --host unix:///var/run/docker.sock push "ghcr.io/saasy-solutions/mockforge:examples-$GITHUB_SHA" | tee "$RUNNER_TEMP/example-image-proof/push.log"
           python3 - "$RUNNER_TEMP/example-image-proof" <<'PY'
-          import json, pathlib, re, sys
+          import json, os, pathlib, re, sys
           root = pathlib.Path(sys.argv[1])
           proof = json.loads((root / 'receipt.json').read_text())
           digests = re.findall(r'digest: (sha256:[0-9a-f]{64})', (root / 'push.log').read_text())
           assert len(digests) == 1
           proof.update(published=True, registry_manifest_digest=digests[0],
                        published_ref='ghcr.io/saasy-solutions/mockforge:examples-' + proof['config_source'] + '@' + digests[0])
-          (root / 'publication.json').write_text(json.dumps(proof, indent=2) + '\n')
+          evidence = json.dumps(proof, indent=2) + '\n'
+          (root / 'publication.json').write_text(evidence)
+          print(evidence)
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write('Published configuration refresh: `' + proof['published_ref'] + '`\n\n```json\n' + evidence + '```\n')
           PY
       - name: Retain qualification and publication evidence
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: example-image-proof-${{ github.run_id }}-${{ github.run_attempt }}
@@ -91,6 +96,7 @@ jobs:
             ${{ runner.temp }}/example-image-proof/http.stdout
             ${{ runner.temp }}/example-image-proof/http.stderr
           if-no-files-found: warn
+          retention-days: 3
       - name: Remove private publication credentials
         if: always() && env.DOCKER_CONFIG != ''
         shell: bash

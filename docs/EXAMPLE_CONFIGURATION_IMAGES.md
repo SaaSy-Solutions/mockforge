@@ -30,6 +30,9 @@ It checks the exported complete OCI graph, every blob hash and uncompressed
 layer digest. The original twelve layers must remain unchanged, with exactly
 one extra layer containing only the three expected JSON files and their parent
 directories. Runtime settings must remain unchanged apart from explicit labels.
+Docker compatibility-manifest config, layers and tag absence must agree with
+the OCI graph. Both classic config IDs and containerd manifest IDs are accepted
+only with the matching actual rootfs and Linux amd64 identity.
 Classic Docker's parent-image bookkeeping and default attach/TTY serialization
 are excluded from that runtime comparison. The actual new image then serves all
 six HTTP examples without checkout mounts; the measured binary must match the
@@ -51,3 +54,7 @@ manifest. It does not update deployment pins, native-image tags or `latest`.
 Native fixes merged after the runtime commit invalidate this narrow refresh
 path. Qualify a new native base before extending the supported configuration
 source range; never weaken the input gate to pass a newer runtime change.
+
+Publication JSON and the registry digest are printed to the job log and step
+summary. A short-lived artifact upload is best effort because organization
+artifact storage may be full; this never weakens qualification or push gates.
