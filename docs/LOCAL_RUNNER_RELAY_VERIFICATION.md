@@ -39,6 +39,25 @@ proves local HTTP relay behavior, not public DNS/TLS or a remote-client tunnel.
 A separate relay instance asks the synthetic registry for a reservation without
 a connected destination. The authorized lookup must be observed and the request
 must not reach the backend. The receipt records the actual failure status
-(currently500), rather than claiming that reservation metadata establishes a
+(currently 500), rather than claiming that reservation metadata establishes a
 working cloud tunnel. No production registry authentication, tenant persistence,
 billing, paid/provider job or successful public tunnel is qualified here.
+
+## Root demo image archive
+
+`scripts/verify-root-image-archive.py` prepares the separate release-artifact
+check. It never pulls an image or accesses a deployment host. Provide an archive
+and measured metadata containing `source`, `ref`, `publisher_run_id`,
+`manifest_digest`, `config_digest`, `rootfs_diff_ids` and `archive_sha256`.
+The source/ref must name the exact root image; the GitHub run must be a completed,
+successful protected-main publisher workflow.
+
+Pass `--oci-verifier` pointing to the reviewed SaaS `core_release_images.py`
+(pinned SHA256 in the script) and `--demo-verifier` pointing to the merged
+`verify-bundled-demo.py`. The complete OCI graph is checked before local load;
+an existing contradictory source tag refuses import. The script measures the
+loaded binary and runs the six HTTP cases against the actual image bundle,
+without checkout mounts. Its receipt distinguishes archive acceptance from
+runtime acceptance and preserves failures. Source-to-manifest attribution still
+requires the coordinator's independently reviewed publisher/registry evidence;
+an absent OCI revision label is not fabricated.
