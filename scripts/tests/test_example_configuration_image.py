@@ -89,7 +89,8 @@ class ArchiveGuard(unittest.TestCase):
                   'io.mockforge.config.source': 'a' * 40,
                   'io.mockforge.runtime.base.digest': MODULE.BASE_MANIFEST,
                   'io.mockforge.runtime.binary.sha256': MODULE.BINARY}
-        image_runtime = {**runtime, 'Labels': labels}
+        image_runtime = {**runtime, 'Labels': labels, 'Image': 'sha256:' + 'b' * 64,
+                         'AttachStdin': False, 'Tty': False}
         if changed_runtime:
             image_runtime['User'] = 'root'
         diff_ids = [base_layer['digest']] * 12
