@@ -58,6 +58,9 @@ Pass `--oci-verifier` pointing to the reviewed SaaS `core_release_images.py`
 an existing contradictory source tag refuses import. The script measures the
 loaded binary and runs the six HTTP cases against the actual image bundle,
 without checkout mounts. Its receipt distinguishes archive acceptance from
-runtime acceptance and preserves failures. Source-to-manifest attribution still
+runtime acceptance and preserves failures. Timeout, SIGINT and SIGTERM request
+child termination and allow its cleanup handler a bounded wait; the coordinator
+never forcibly kills that verifier. An unresponsive child remains identified by
+PID with `unresolved_cleanup` and requires operator follow-up. Source-to-manifest attribution still
 requires the coordinator's independently reviewed publisher/registry evidence;
 an absent OCI revision label is not fabricated.
