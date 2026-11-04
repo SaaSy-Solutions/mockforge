@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 use std::io;
 use std::path::{Path, PathBuf};
 
-const FRONTEND_INPUTS: [&str; 10] = [
+const FRONTEND_INPUTS: [&str; 11] = [
     "package.json",
     "pnpm-lock.yaml",
     "pnpm-workspace.yaml",
@@ -15,6 +15,7 @@ const FRONTEND_INPUTS: [&str; 10] = [
     "tsconfig.json",
     "tsconfig.app.json",
     "tsconfig.node.json",
+    "tsconfig.test.json",
 ];
 
 /// The selected asset owner determines whether prebuilt files are inputs.
@@ -189,6 +190,7 @@ mod tests {
             "tsconfig.json",
             "tsconfig.app.json",
             "tsconfig.node.json",
+            "tsconfig.test.json",
         ];
         for name in inputs {
             fs::write(fixture.0.join("ui").join(name), "fixture").expect("frontend input");

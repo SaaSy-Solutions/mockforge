@@ -19,7 +19,19 @@ def run(command, cwd, log, environment=None):
 def observe(fixture, evidence, label):
     command = [str(fixture / 'scripts/dev/cargo'), 'test', '--locked', '--lib', '--message-format=json']
     with (evidence / f'{label}.jsonl').open('w') as stdout, (evidence / f'{label}.stderr').open('w') as stderr:
-        subprocess.run(command, cwd=fixture, stdout=stdout, stderr=stderr, check=True, timeout=900)
+        completed = subprocess.run(command, cwd=fixture, stdout=stdout, stderr=stderr, check=False, timeout=900)
+    captured = [json.loads(line) for line in (evidence / f'{label}.jsonl').read_text().splitlines() if line.startswith('{')]
+    package_ids = {m['package_id'] for m in captured if m.get('reason') == 'compiler-artifact'
+                   and m.get('manifest_path') == str(fixture / 'Cargo.toml')}
+    for message in captured:
+        if message.get('reason') == 'build-script-executed' and message['package_id'] in package_ids:
+            directory = Path(message['out_dir']).parent
+            for filename in ['output', 'stderr']:
+                source = directory / filename
+                if source.is_file():
+                    (evidence / f'{label}-producer-{filename}.log').write_bytes(source.read_bytes())
+    if completed.returncode:
+        raise subprocess.CalledProcessError(completed.returncode, completed.args)
     lines = (evidence / f'{label}.jsonl').read_text().splitlines()
     assert any('test result: ok. 1 passed; 0 failed' in line for line in lines)
     messages = [json.loads(line) for line in lines if line.startswith('{')]
@@ -50,7 +62,7 @@ def prepare(repo, fixture, evidence):
     files += [('scripts/dev/' + name, 'scripts/dev/' + name) for name in client]
     files += [(name, name) for name in ['rust-toolchain.toml', '.cargo/config.toml']]
     configs = ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'vite.config.ts', 'postcss.config.js', 'tailwind.config.js',
-               'tsconfig.json', 'tsconfig.app.json', 'tsconfig.node.json']
+               'tsconfig.json', 'tsconfig.app.json', 'tsconfig.node.json', 'tsconfig.test.json']
     files += [('crates/mockforge-ui/ui/' + name, 'ui/' + name) for name in configs]
     public = ['manifest.json', 'sw.js', 'mockforge-icon.png', 'mockforge-icon-32.png',
               'mockforge-icon-48.png', 'mockforge-logo-40.png', 'mockforge-logo-80.png']

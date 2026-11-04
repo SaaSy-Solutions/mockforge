@@ -14,8 +14,20 @@ def observe(fixture, evidence, label, expected):
     environment = dict(os.environ, UI_ASSET_PROBE_EXPECTED=expected,
                        CARGO_LOG='cargo::core::compiler::fingerprint=info')
     with (evidence / f'{label}.jsonl').open('w') as stdout, (evidence / f'{label}.stderr').open('w') as stderr:
-        subprocess.run([str(fixture / 'scripts/dev/cargo'), 'test', '--locked', '--lib', '--message-format=json'],
-                       cwd=fixture, env=environment, stdout=stdout, stderr=stderr, check=True, timeout=1200)
+        completed = subprocess.run([str(fixture / 'scripts/dev/cargo'), 'test', '--locked', '--lib', '--message-format=json'],
+                       cwd=fixture, env=environment, stdout=stdout, stderr=stderr, check=False, timeout=1200)
+    captured = [json.loads(line) for line in (evidence / f'{label}.jsonl').read_text().splitlines() if line.startswith('{')]
+    package_ids = {m['package_id'] for m in captured if m.get('reason') == 'compiler-artifact'
+                   and m.get('manifest_path') == str(fixture / 'Cargo.toml')}
+    for message in captured:
+        if message.get('reason') == 'build-script-executed' and message['package_id'] in package_ids:
+            directory = Path(message['out_dir']).parent
+            for filename in ['output', 'stderr']:
+                source = directory / filename
+                if source.is_file():
+                    (evidence / f'{label}-producer-{filename}.log').write_bytes(source.read_bytes())
+    if completed.returncode:
+        raise subprocess.CalledProcessError(completed.returncode, completed.args)
     lines = (evidence / f'{label}.jsonl').read_text().splitlines()
     assert any('test result: ok. 1 passed; 0 failed' in line for line in lines)
     messages = [json.loads(line) for line in lines if line.startswith('{')]
@@ -61,6 +73,10 @@ fn embeds_expected_assets() {
             assert!(html.contains("Admin UI not bundled"));
             assert!(!html.contains("ui-owned-output-proof"));
         },
+        "prebuilt" => {
+            assert!(html.contains("prebuilt fallback marker"));
+            assert!(!html.contains("ui-owned-output-proof"));
+        },
         _ => panic!("unknown expected mode"),
     }
 }
@@ -76,7 +92,19 @@ fn embeds_expected_assets() {
             assert results[1]['owned_index_still_exists'], 'failure did not retain the stale-index scenario'
             assert results[2]['fresh_count'] == results[2]['artifact_count'], results[2]
             assert results[1]['script_output_mtime_ns'] == results[2]['script_output_mtime_ns']
-            print('Actual Vite failure rejected stale owned output, embedded placeholder, and unchanged repeat stayed fresh')
+            prebuilt = fixture / 'ui/dist'
+            prebuilt.mkdir()
+            (prebuilt / 'index.html').write_text('<title>prebuilt fallback marker</title>')
+            results.append(observe(fixture, evidence, 'failed-prebuilt', 'prebuilt'))
+            results.append(observe(fixture, evidence, 'failed-prebuilt-repeat', 'prebuilt'))
+            assert results[-1]['fresh_count'] == results[-1]['artifact_count']
+            assert results[-2]['script_output_mtime_ns'] == results[-1]['script_output_mtime_ns']
+            (fixture / 'ui/src/main.js').write_text('document.body.dataset.proof = "ui-owned-output-proof-js";\n')
+            results.append(observe(fixture, evidence, 'recovered-producer', 'owned'))
+            results.append(observe(fixture, evidence, 'recovered-producer-repeat', 'owned'))
+            assert results[-1]['fresh_count'] == results[-1]['artifact_count']
+            assert results[-2]['script_output_mtime_ns'] == results[-1]['script_output_mtime_ns']
+            print('Actual Vite success/failure/recovery, stale-output rejection, placeholder/prebuilt selection and fresh repeats PASS')
     finally:
         (evidence / 'results.json').write_text(json.dumps(results, indent=2) + '\n')
 

@@ -2,6 +2,9 @@ import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { visualizer } from 'rollup-plugin-visualizer'
 import path from 'path'
+import { fileURLToPath } from 'node:url'
+
+const configDir = path.dirname(fileURLToPath(import.meta.url))
 
 // https://vite.dev/config/
 export default defineConfig(({ command, mode }) => {
@@ -37,13 +40,13 @@ export default defineConfig(({ command, mode }) => {
     ],
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, './src'),
+        '@': path.resolve(configDir, './src'),
         // MUI compatibility shims — legacy pages still import from
         // '@mui/material' / '@mui/icons-material'. These aliases redirect
         // those imports to in-tree shadcn-token replacements so we can drop
         // the MUI dependency without rewriting every page in one PR.
-        '@mui/material': path.resolve(__dirname, './src/components/ui/mui-shim.tsx'),
-        '@mui/icons-material': path.resolve(__dirname, './src/components/ui/mui-icons-shim.tsx'),
+        '@mui/material': path.resolve(configDir, './src/components/ui/mui-shim.tsx'),
+        '@mui/icons-material': path.resolve(configDir, './src/components/ui/mui-icons-shim.tsx'),
       },
       dedupe: ['react', 'react-dom'], // Ensure React is not duplicated
     },
