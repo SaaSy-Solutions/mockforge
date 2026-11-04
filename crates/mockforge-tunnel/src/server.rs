@@ -25,6 +25,11 @@ use uuid::Uuid;
 /// Trait for tunnel storage backends
 #[async_trait]
 pub trait TunnelStoreTrait: Send + Sync {
+    /// Local management is unavailable until a cloud client is authenticated.
+    fn allows_management(&self) -> bool {
+        true
+    }
+
     async fn create_tunnel(&self, config: &TunnelConfig) -> crate::Result<TunnelStatus>;
     async fn get_tunnel(&self, tunnel_id: &str) -> crate::Result<TunnelStatus>;
     async fn delete_tunnel(&self, tunnel_id: &str) -> crate::Result<()>;
@@ -50,6 +55,10 @@ impl TunnelStoreWrapper {
 
 #[async_trait]
 impl TunnelStoreTrait for TunnelStoreWrapper {
+    fn allows_management(&self) -> bool {
+        self.inner.allows_management()
+    }
+
     async fn create_tunnel(&self, config: &TunnelConfig) -> crate::Result<TunnelStatus> {
         self.inner.create_tunnel(config).await
     }
@@ -240,11 +249,23 @@ impl TunnelStoreTrait for TunnelStore {
     }
 }
 
+fn require_management(store: &TunnelStoreWrapper) -> Result<(), (StatusCode, String)> {
+    if store.allows_management() {
+        Ok(())
+    } else {
+        Err((
+            StatusCode::NOT_IMPLEMENTED,
+            "Cloud tunnel client registration is not available".to_string(),
+        ))
+    }
+}
+
 /// Create tunnel API handler
 async fn create_tunnel_handler(
     State(store): State<TunnelStoreWrapper>,
     Json(payload): Json<serde_json::Value>,
 ) -> Result<Json<TunnelStatus>, (StatusCode, String)> {
+    require_management(&store)?;
     let local_url = payload["local_url"]
         .as_str()
         .ok_or_else(|| (StatusCode::BAD_REQUEST, "local_url required".to_string()))?;
@@ -270,6 +291,7 @@ async fn get_tunnel_handler(
     State(store): State<TunnelStoreWrapper>,
     axum::extract::Path(tunnel_id): axum::extract::Path<String>,
 ) -> Result<Json<TunnelStatus>, (StatusCode, String)> {
+    require_management(&store)?;
     match store.get_tunnel(&tunnel_id).await {
         Ok(status) => Ok(Json(status)),
         Err(e) => Err((StatusCode::NOT_FOUND, e.to_string())),
@@ -281,6 +303,7 @@ async fn delete_tunnel_handler(
     State(store): State<TunnelStoreWrapper>,
     axum::extract::Path(tunnel_id): axum::extract::Path<String>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    require_management(&store)?;
     match store.delete_tunnel(&tunnel_id).await {
         Ok(_) => Ok(Json(serde_json::json!({"success": true}))),
         Err(e) => Err((StatusCode::NOT_FOUND, e.to_string())),
@@ -288,9 +311,12 @@ async fn delete_tunnel_handler(
 }
 
 /// List tunnels API handler
-async fn list_tunnels_handler(State(store): State<TunnelStoreWrapper>) -> Json<Vec<TunnelStatus>> {
+async fn list_tunnels_handler(
+    State(store): State<TunnelStoreWrapper>,
+) -> Result<Json<Vec<TunnelStatus>>, (StatusCode, String)> {
+    require_management(&store)?;
     let tunnels = store.list_tunnels().await;
-    Json(tunnels)
+    Ok(Json(tunnels))
 }
 
 /// Health check handler
