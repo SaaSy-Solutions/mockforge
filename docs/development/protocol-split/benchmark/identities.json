@@ -1,0 +1,32 @@
+{
+  "before": {
+    "commit": "3871677f241ee8e9726ad7646fa356c0a2df04ca",
+    "tree": "/mnt/build/worktrees/mf-protocol-bench-before-1477",
+    "target": "/mnt/build/worktrees/mf-protocol-bench-before-1477/target",
+    "rustc": "rustc 1.96.0 (ac68faa20 2026-05-25)\nbinary: rustc\ncommit-hash: ac68faa20c58cbccd01ee7208bf3b6e93a7d7f96\ncommit-date: 2026-05-25\nhost: x86_64-unknown-linux-gnu\nrelease: 1.96.0\nLLVM version: 22.1.2\n",
+    "auth_sha256": "234ac7847cfc07ce55d3be839f63e51f2827abfefd4ef665b5e39ced5f0434fc",
+    "config_sha256": {
+      "rust-toolchain.toml": "6fe3413f7a613e26462abe0564db73f16343ffbcd0a81ddd6a3fa9346859da46",
+      ".cargo/config.toml": "5dccc98024c1b14f7f30d5155b9de7f4c25be358b599118a99c369e2e579f6e1",
+      "scripts/dev/cargo": "9e8478cab48d86aa00d93f3a40454057bbf04620709ca30ef32d97135a8b9d85",
+      "scripts/dev/rust_build_policy.py": "4725838ba7eb6e497529604534a7a6aac0275f4af4f5784c13130e45d57adfc5",
+      "scripts/dev/rust_policy_config.py": "2e3f11627eeace79e656e063ccfe06ae06cbc761837addeaeda09febb273fd24"
+    },
+    "lock_sha256": "d84121b25732214f7ae2abb6693eb71aaacb95b8543b886f4bf0b44167f09f54"
+  },
+  "after": {
+    "commit": "56dc1ffa2dabdcaf67d914cf6dc85ce41f9b7166",
+    "tree": "/mnt/build/worktrees/mf-protocol-bench-after-1477",
+    "target": "/mnt/build/worktrees/mf-protocol-bench-after-1477/target",
+    "rustc": "rustc 1.96.0 (ac68faa20 2026-05-25)\nbinary: rustc\ncommit-hash: ac68faa20c58cbccd01ee7208bf3b6e93a7d7f96\ncommit-date: 2026-05-25\nhost: x86_64-unknown-linux-gnu\nrelease: 1.96.0\nLLVM version: 22.1.2\n",
+    "auth_sha256": "234ac7847cfc07ce55d3be839f63e51f2827abfefd4ef665b5e39ced5f0434fc",
+    "config_sha256": {
+      "rust-toolchain.toml": "6fe3413f7a613e26462abe0564db73f16343ffbcd0a81ddd6a3fa9346859da46",
+      ".cargo/config.toml": "5dccc98024c1b14f7f30d5155b9de7f4c25be358b599118a99c369e2e579f6e1",
+      "scripts/dev/cargo": "9e8478cab48d86aa00d93f3a40454057bbf04620709ca30ef32d97135a8b9d85",
+      "scripts/dev/rust_build_policy.py": "4725838ba7eb6e497529604534a7a6aac0275f4af4f5784c13130e45d57adfc5",
+      "scripts/dev/rust_policy_config.py": "2e3f11627eeace79e656e063ccfe06ae06cbc761837addeaeda09febb273fd24"
+    },
+    "lock_sha256": "237c04fd2550be73c396483caa7a78ca7671cbc5f204b94df286b2e0138df560"
+  }
+}

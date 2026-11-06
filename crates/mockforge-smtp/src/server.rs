@@ -1,10 +1,10 @@
 //! SMTP server implementation
 
 use crate::{SmtpConfig, SmtpSpecRegistry};
-use mockforge_core::protocol_abstraction::{
+use mockforge_protocol::protocol_abstraction::{
     MessagePattern, MiddlewareChain, Protocol, ProtocolRequest, SpecRegistry,
 };
-use mockforge_core::Result;
+use mockforge_protocol::Result;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::pin::Pin;
@@ -161,10 +161,10 @@ impl SmtpServer {
         use std::io::BufReader;
 
         let cert_path = config.tls_cert_path.as_ref().ok_or_else(|| {
-            mockforge_core::Error::internal("TLS certificate path not configured")
+            mockforge_protocol::Error::internal("TLS certificate path not configured")
         })?;
         let key_path = config.tls_key_path.as_ref().ok_or_else(|| {
-            mockforge_core::Error::internal("TLS private key path not configured")
+            mockforge_protocol::Error::internal("TLS private key path not configured")
         })?;
 
         let cert_file = File::open(cert_path)?;
@@ -173,17 +173,17 @@ impl SmtpServer {
         let key_file = File::open(key_path)?;
         let key = pkcs8_private_keys(&mut BufReader::new(key_file))
             .next()
-            .ok_or_else(|| mockforge_core::Error::internal("No private keys found"))??;
+            .ok_or_else(|| mockforge_protocol::Error::internal("No private keys found"))??;
 
         // Explicit provider: ring and aws-lc-rs are both compiled into the
         // workspace, so rustls can't pick a process default on its own.
         let provider = Arc::new(rustls::crypto::ring::default_provider());
         let mut server_config = rustls::ServerConfig::builder_with_provider(provider)
             .with_safe_default_protocol_versions()
-            .map_err(|e| mockforge_core::Error::internal(format!("TLS config error: {}", e)))?
+            .map_err(|e| mockforge_protocol::Error::internal(format!("TLS config error: {}", e)))?
             .with_no_client_auth()
             .with_single_cert(certs, key.into())
-            .map_err(|e| mockforge_core::Error::internal(format!("TLS config error: {}", e)))?;
+            .map_err(|e| mockforge_protocol::Error::internal(format!("TLS config error: {}", e)))?;
 
         server_config.alpn_protocols = vec![b"smtp".to_vec()];
 
@@ -392,7 +392,7 @@ async fn handle_smtp_session(
                     SmtpStream::Tls(_) => unreachable!("checked is Plain above"),
                 };
                 let tls_stream = acceptor.accept(tcp).await.map_err(|e| {
-                    mockforge_core::Error::internal(format!("TLS accept failed: {e}"))
+                    mockforge_protocol::Error::internal(format!("TLS accept failed: {e}"))
                 })?;
                 reader = BufReader::new(SmtpStream::Tls(Box::new(tls_stream)));
                 session_state = SessionState::with_max_message_bytes(max_message_bytes);
@@ -732,7 +732,7 @@ async fn process_email(
     let from = state
         .mail_from
         .as_ref()
-        .ok_or_else(|| mockforge_core::Error::internal("Missing MAIL FROM"))?;
+        .ok_or_else(|| mockforge_protocol::Error::internal("Missing MAIL FROM"))?;
     let to = state.rcpt_to.join(", ");
 
     // Extract subject from data

@@ -1,11 +1,11 @@
 //! TCP spec registry for managing TCP fixtures
 
 use crate::fixtures::TcpFixture;
-use mockforge_core::fixture_store::{
+use mockforge_protocol::fixture_store::{
     load_fixtures_from_dir, FixtureFileFormat, FixtureFileGranularity, FixtureLoadErrorMode,
     FixtureLoadOptions,
 };
-use mockforge_core::Result;
+use mockforge_protocol::Result;
 use std::collections::HashMap;
 use std::path::Path;
 use tracing::info;

@@ -14,8 +14,8 @@ keywords = ["tcp", "mock", "testing", "api", "network"]
 categories = ["development-tools", "network-programming"]
 
 [dependencies]
-# MockForge core
-mockforge-core = { version = "0.3.239", path = "../mockforge-core" }
+# MockForge protocol support
+mockforge-protocol = { version = "0.3.240", path = "../mockforge-protocol", features = ["scripting"] }
 
 # Standard workspace dependencies
 tokio = { workspace = true, features = ["net", "io-util", "time", "sync"] }

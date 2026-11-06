@@ -1,0 +1,20 @@
+{
+  "measured_script_sha256": "21ef4be8b4360b991f142bd7bb4535f88a81a71cc79697c6be17d849197ca0e8",
+  "published_script_sha256": "4f1c8902466cd10ed1e0b78078482111347a30f149362bbf078cee3f4b541750",
+  "post_measurement_change": "Add fail-closed positive owned Core CPU delta qualification and cheap self-tests; run/perturb/command/profiles unchanged",
+  "ast_identity_verified": [
+    "run",
+    "perturb",
+    "verify",
+    "setup",
+    "host",
+    "profile_sample",
+    "COMMAND"
+  ],
+  "guard_self_test": "empty/no-Core/zero-Core rejected; positive fixture accepted",
+  "actual_profile_guard": {
+    "sampled_cpu_delta_seconds": 3.47,
+    "max_observed_cpu_seconds": 3.57
+  },
+  "rust_reruns": false
+}

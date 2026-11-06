@@ -1,0 +1,136 @@
+{
+  "before": {
+    "n": 5,
+    "execution_seconds": [
+      10.803,
+      6.895,
+      7.955,
+      8.68,
+      6.86
+    ],
+    "median": 7.955,
+    "range": [
+      6.86,
+      10.803
+    ],
+    "admission_seconds": [
+      371.507,
+      0.0,
+      0.0,
+      0.001,
+      199.953
+    ],
+    "wall_seconds": [
+      382.48941978900257,
+      7.109737634000339,
+      8.126765395998518,
+      8.936842494997109,
+      207.0075538969977
+    ],
+    "loadavg_before": [
+      "3.28 6.13 10.00 6/3227 3670547",
+      "14.15 15.59 13.23 8/3195 3851257",
+      "13.82 15.50 13.21 30/3194 3852469",
+      "13.10 15.29 13.17 10/3213 3853589",
+      "15.91 15.82 13.37 6/3295 3855213"
+    ],
+    "loadavg_after": [
+      "15.91 10.77 10.55 6/3324 3731258",
+      "13.82 15.50 13.21 8/3196 3852454",
+      "13.10 15.29 13.17 13/3267 3853349",
+      "15.91 15.82 13.37 10/3292 3855186",
+      "15.56 16.54 14.15 9/3329 3897650"
+    ]
+  },
+  "after": {
+    "n": 5,
+    "execution_seconds": [
+      0.969,
+      0.72,
+      0.789,
+      0.724,
+      0.643
+    ],
+    "median": 0.724,
+    "range": [
+      0.643,
+      0.969
+    ],
+    "admission_seconds": [
+      405.531,
+      0.0,
+      0.0,
+      0.0,
+      0.001
+    ],
+    "wall_seconds": [
+      406.75536056499914,
+      0.9025768700012122,
+      1.1033994919998804,
+      0.9017187610006658,
+      0.8015060299985635
+    ],
+    "loadavg_before": [
+      "15.91 10.77 10.55 6/3326 3731290",
+      "14.15 15.59 13.23 5/3244 3850856",
+      "13.10 15.29 13.17 18/3265 3853375",
+      "13.10 15.29 13.17 16/3211 3853523",
+      "15.56 16.54 14.15 12/3329 3897667"
+    ],
+    "loadavg_after": [
+      "14.15 15.59 13.23 13/3256 3850806",
+      "14.15 15.59 13.23 7/3205 3851227",
+      "13.10 15.29 13.17 10/3211 3853503",
+      "13.10 15.29 13.17 12/3206 3853565",
+      "15.76 16.56 14.17 9/3289 3897718"
+    ]
+  },
+  "tcp_profile": {
+    "debug_assertions": true,
+    "debuginfo": 2,
+    "opt_level": "0",
+    "overflow_checks": true,
+    "test": false
+  },
+  "tcp_features": [],
+  "policy_sha256": "5de45082645bb5f7236dc78f2c41fdd6ee4dcabe4c199be8abe34273f18bad7e",
+  "limits": {
+    "memory_mib": 12288,
+    "cpu_percent": 200,
+    "jobs": 2
+  },
+  "median_ratio": 10.987569060773481,
+  "median_reduction_percent": 90.89880578252672,
+  "restoration": {
+    "before": {
+      "status": "clean",
+      "auth_sha256": "234ac7847cfc07ce55d3be839f63e51f2827abfefd4ef665b5e39ced5f0434fc"
+    },
+    "after": {
+      "status": "clean",
+      "auth_sha256": "234ac7847cfc07ce55d3be839f63e51f2827abfefd4ef665b5e39ced5f0434fc"
+    }
+  },
+  "script_sha256": "21ef4be8b4360b991f142bd7bb4535f88a81a71cc79697c6be17d849197ca0e8",
+  "published_script_sha256": "4f1c8902466cd10ed1e0b78078482111347a30f149362bbf078cee3f4b541750",
+  "qualification_guard": {
+    "measured_script_sha256": "21ef4be8b4360b991f142bd7bb4535f88a81a71cc79697c6be17d849197ca0e8",
+    "published_script_sha256": "4f1c8902466cd10ed1e0b78078482111347a30f149362bbf078cee3f4b541750",
+    "post_measurement_change": "Add fail-closed positive owned Core CPU delta qualification and cheap self-tests; run/perturb/command/profiles unchanged",
+    "ast_identity_verified": [
+      "run",
+      "perturb",
+      "verify",
+      "setup",
+      "host",
+      "profile_sample",
+      "COMMAND"
+    ],
+    "guard_self_test": "empty/no-Core/zero-Core rejected; positive fixture accepted",
+    "actual_profile_guard": {
+      "sampled_cpu_delta_seconds": 3.47,
+      "max_observed_cpu_seconds": 3.57
+    },
+    "rust_reruns": false
+  }
+}

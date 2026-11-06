@@ -92,7 +92,7 @@ impl Default for SmtpConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mockforge_core::protocol_abstraction::Protocol;
+    use mockforge_protocol::protocol_abstraction::Protocol;
 
     #[test]
     fn test_default_config() {
