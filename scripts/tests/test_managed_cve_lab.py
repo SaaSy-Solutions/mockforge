@@ -198,9 +198,12 @@ class VerdictTests(unittest.TestCase):
         ]
 
     def verdict(self):
+        return self.outcome()[0]
+
+    def outcome(self):
         return evidence.classify(
             self.baseline, self.target, self.before, self.after, self.records, 403
-        )[0]
+        )
 
     def test_correlated_controls_and_blocked_signature_pass(self):
         self.assertEqual(self.verdict(), "pass")
@@ -421,6 +424,111 @@ class TransportForwardingTests(unittest.TestCase):
                 connection.close()
         # The recorder refused before forwarding anything to the backend.
         self.assertEqual(self.seen, [])
+
+
+
+class VerdictDescriptionTests(unittest.TestCase):
+    """Reports state exposed / not exposed plainly, with per-check detail."""
+
+    def setUp(self):
+        super().setUp()
+        self.base_report = {
+            "verdict": "pass",
+            "reason": "expected rejection with no correlated origin request and healthy controls",
+            "target": "https://lb.example",
+            "pack": {"cve": "CVE-2025-29927"},
+            "evidence_checks": [
+                {"check": "direct baseline reproduces the vulnerability", "outcome": "ok"},
+                {"check": "signature request was blocked at the target", "outcome": "ok"},
+            ],
+        }
+
+    def test_pass_says_not_exposed_with_target_and_cve(self):
+        text = evidence.describe(self.base_report)
+        self.assertIn("https://lb.example is NOT exposed to CVE-2025-29927", text)
+        self.assertIn("pass: ", text)
+        self.assertIn("Reason: expected rejection", text)
+
+    def test_fail_says_exposed_with_reason_and_details(self):
+        self.base_report.update(
+            verdict="fail",
+            reason="signature request reached the origin; blocking assertion failed",
+            evidence_checks=[
+                {"check": "direct baseline reproduces the vulnerability", "outcome": "ok"},
+                {
+                    "check": "signature request was blocked at the target",
+                    "outcome": "not satisfied, reached the origin with status 200",
+                },
+            ],
+        )
+        text = evidence.describe(self.base_report)
+        self.assertIn("https://lb.example is EXPOSED to CVE-2025-29927", text)
+        self.assertIn("attack traffic reached your origin", text)
+        self.assertIn("reached the origin with status 200", text)
+
+    def test_inconclusive_defers_the_exposure_judgment(self):
+        self.base_report.update(verdict="inconclusive", reason="benign controls did not corroborate origin reachability")
+        text = evidence.describe(self.base_report)
+        self.assertIn("no exposure determination could be made for https://lb.example", text)
+
+    def test_baseline_confirmed_mentions_no_lb_was_tested(self):
+        report = {"verdict": "baseline-confirmed", "reason": "Direct lab reproduction only; no LB tested", "pack": {"cve": "CVE-2025-29927"}}
+        text = evidence.describe(report)
+        self.assertIn("no LB/WAAP was tested", text)
+        self.assertIn("no exposure determination was made", text)
+
+    def test_direct_runs_use_the_lab_application_placeholder(self):
+        report = {"verdict": "pass", "reason": "r", "pack": {"cve": "CVE-2025-29927"}}
+        self.assertIn("the direct lab application is NOT exposed", evidence.describe(report))
+
+
+class EvidenceCheckTests(unittest.TestCase):
+    """classify() records each assertion so reports can show the deciding check."""
+
+    def setUp(self):
+        self.baseline = {"status": 200, "marker": True}
+        self.target = {"token": "attack", "status": 403, "marker": False}
+        self.before = {
+            "token": "before",
+            "status": 200,
+            "root_token": "before-root",
+            "root_status": 307,
+        }
+        self.after = {
+            "token": "after",
+            "status": 200,
+            "root_token": "after-root",
+            "root_status": 307,
+        }
+        self.records = [
+            {"tokens": [control[key]], "status": status}
+            for control in (self.before, self.after)
+            for key, status in (("token", 200), ("root_token", 307))
+        ]
+
+    def outcome(self):
+        return evidence.classify(
+            self.baseline, self.target, self.before, self.after, self.records, 403
+        )
+
+    def test_pass_records_every_check_ok(self):
+        _verdict, _reason, checks = self.outcome()
+        self.assertTrue(all(check["outcome"] == "ok" for check in checks))
+        names = [check["check"] for check in checks]
+        self.assertIn("direct baseline reproduces the vulnerability", names)
+        self.assertIn("signature request was blocked at the target", names)
+
+    def test_fail_names_the_origin_reach_with_status(self):
+        self.records.append({"tokens": ["attack"], "status": 200})
+        _verdict, _reason, checks = self.outcome()
+        blocked = [check for check in checks if check["check"] == "signature request was blocked at the target"]
+        self.assertEqual(len(blocked), 1)
+        self.assertIn("status 200", blocked[0]["outcome"])
+
+    def test_short_circuit_stops_at_the_first_failed_check(self):
+        self.baseline = {"status": 403, "marker": True}
+        _verdict, _reason, checks = self.outcome()
+        self.assertEqual(len(checks), 1)
 
 
 if __name__ == "__main__":

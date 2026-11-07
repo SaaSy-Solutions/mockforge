@@ -15,7 +15,7 @@ from cve_lab_catalog import CVE, PACKS
 from cve_lab_engine import doctor, prepare, lab, cleanup
 from cve_lab_transport import target_url, receiver, control
 from cve_lab_nuclei import probe
-from cve_lab_evidence import classify
+from cve_lab_evidence import classify, describe
 
 
 def run(args):
@@ -77,7 +77,7 @@ def run(args):
                     )
                     after = control(args.target, run_id, "after")
                     time.sleep(0.5)
-                    verdict, reason = classify(
+                    verdict, reason, checks = classify(
                         baseline,
                         tested,
                         before,
@@ -93,9 +93,16 @@ def run(args):
                             "inconclusive",
                             "LB controls did not match this application's login page",
                         )
+                        checks = [
+                            {
+                                "check": "benign control responses match this application",
+                                "outcome": "not satisfied",
+                            }
+                        ]
                     report.update(
                         verdict=verdict,
                         reason=reason,
+                        evidence_checks=checks,
                         target_probe=tested,
                         control_before=before,
                         control_after=after,
@@ -116,7 +123,8 @@ def run(args):
         report.update(verdict="inconclusive", reason=str(exc))
     finally:
         (output / "report.json").write_text(json.dumps(report, indent=2) + "\n")
-    print(f"{report['verdict']}: {report['reason']}\nReport: {output / 'report.json'}")
+    print(describe(report))
+    print(f"Report: {output / 'report.json'}")
     return 0 if report["verdict"] in ("pass", "baseline-confirmed") else 1
 
 
