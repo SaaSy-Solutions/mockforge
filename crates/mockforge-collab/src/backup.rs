@@ -1228,18 +1228,6 @@ impl BackupService {
         }
         Ok(())
     }
-
-    /// Get workspace data for backup
-    ///
-    /// Gets the full workspace state from the `TeamWorkspace` and converts it to JSON.
-    #[allow(dead_code)]
-    async fn get_workspace_data(&self, workspace_id: Uuid) -> Result<serde_json::Value> {
-        // Get the TeamWorkspace
-        let team_workspace = self.workspace_service.get_workspace(workspace_id).await?;
-
-        // Use CoreBridge to get the full workspace state as JSON
-        self.core_bridge.get_workspace_state_json(&team_workspace)
-    }
 }
 
 #[cfg(test)]

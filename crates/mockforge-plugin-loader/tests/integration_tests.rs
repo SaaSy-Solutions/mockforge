@@ -1,6 +1,5 @@
 //! Integration tests for the complete plugin system
 
-use mockforge_plugin_core::template::{TemplateFunction, TemplatePlugin, TemplatePluginConfig};
 use mockforge_plugin_core::*;
 use mockforge_plugin_loader::*;
 use std::collections::HashMap;
@@ -10,91 +9,6 @@ use tempfile::TempDir;
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // Mock plugin implementation for testing
-    #[derive(Debug)]
-    #[allow(dead_code)]
-    struct MockTemplatePlugin;
-
-    #[::async_trait::async_trait]
-    impl TemplatePlugin for MockTemplatePlugin {
-        fn capabilities(&self) -> PluginCapabilities {
-            PluginCapabilities::default()
-        }
-
-        async fn initialize(&self, _config: &TemplatePluginConfig) -> Result<()> {
-            Ok(())
-        }
-
-        async fn register_functions(
-            &self,
-            _context: &PluginContext,
-            _config: &TemplatePluginConfig,
-        ) -> Result<PluginResult<HashMap<String, TemplateFunction>>> {
-            let mut functions = HashMap::new();
-            functions.insert(
-                "test_function".to_string(),
-                TemplateFunction::new("test_function", "string", "Returns a test result"),
-            );
-            functions.insert(
-                "add".to_string(),
-                TemplateFunction::new("add", "number", "Adds two numbers"),
-            );
-            Ok(PluginResult::success(functions, 0))
-        }
-
-        async fn execute_function(
-            &self,
-            _context: &PluginContext,
-            function_name: &str,
-            args: &[serde_json::Value],
-            _config: &TemplatePluginConfig,
-        ) -> Result<PluginResult<serde_json::Value>> {
-            match function_name {
-                "test_function" => Ok(PluginResult::success(serde_json::json!("test_result"), 0)),
-                "add" => {
-                    if args.len() == 2 {
-                        if let (Some(a), Some(b)) = (args[0].as_i64(), args[1].as_i64()) {
-                            Ok(PluginResult::success(serde_json::json!(a + b), 0))
-                        } else {
-                            Ok(PluginResult::failure("Arguments must be numbers".to_string(), 0)
-                                as PluginResult<serde_json::Value>)
-                        }
-                    } else {
-                        Ok(
-                            PluginResult::failure(
-                                "Add function requires 2 arguments".to_string(),
-                                0,
-                            ) as PluginResult<serde_json::Value>,
-                        )
-                    }
-                }
-                _ => Ok(PluginResult::failure(format!("Unknown function: {}", function_name), 0)
-                    as PluginResult<serde_json::Value>),
-            }
-        }
-
-        async fn get_data_source(
-            &self,
-            _context: &PluginContext,
-            _data_source: &str,
-            _config: &TemplatePluginConfig,
-        ) -> Result<PluginResult<serde_json::Value>> {
-            Ok(PluginResult::success(serde_json::json!("test_data"), 0))
-        }
-
-        fn validate_config(&self, _config: &TemplatePluginConfig) -> Result<()> {
-            Ok(())
-        }
-
-        fn available_data_sources(&self) -> Vec<String> {
-            vec!["test_data".to_string()]
-        }
-
-        async fn cleanup(&self) -> Result<()> {
-            Ok(())
-        }
-    }
 
     fn create_mock_plugin_manifest() -> PluginManifest {
         let id = PluginId::new("mock-template-plugin");

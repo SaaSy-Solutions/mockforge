@@ -550,27 +550,6 @@ fn resolve_param_schema<'a>(
     }
 }
 
-/// Resolve a schema reference to a serde_json::Value for validation.
-/// Reserved for round 21.3 (response-body shape validation against the
-/// spec's response schema). Not yet wired into a call site.
-#[allow(dead_code)]
-fn resolve_schema_to_json(
-    schema_ref: &ReferenceOr<openapiv3::Schema>,
-    spec: &OpenAPI,
-) -> Option<serde_json::Value> {
-    let schema = match schema_ref {
-        ReferenceOr::Item(s) => s,
-        ReferenceOr::Reference { reference } => {
-            let name = reference.strip_prefix("#/components/schemas/")?;
-            match spec.components.as_ref()?.schemas.get(name)? {
-                ReferenceOr::Item(s) => s,
-                _ => return None,
-            }
-        }
-    };
-    serde_json::to_value(schema).ok()
-}
-
 /// Run request validation and write results to a file.
 /// Called from the conformance execution path.
 pub async fn run_request_validation(

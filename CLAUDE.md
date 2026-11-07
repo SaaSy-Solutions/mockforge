@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-MockForge is a high-performance mock API server written in Rust. It's a workspace of 66 crates supporting 10+ protocols (HTTP, gRPC, WebSocket, GraphQL, Kafka, MQTT, AMQP, SMTP, FTP, TCP), with an admin UI (React 19 + TypeScript), plugin system, benchmarking (k6), and a multi-tenant registry server.
+MockForge is a high-performance mock API server written in Rust. It's a workspace of 63 crates supporting 10+ protocols (HTTP, gRPC, WebSocket, GraphQL, Kafka, MQTT, AMQP, SMTP, FTP, TCP), with an admin UI (React 19 + TypeScript), plugin system, benchmarking (k6), and a multi-tenant registry server.
 
 - **Language**: Rust 2021 edition, `unsafe_code = "deny"` workspace-wide
 - **Version**: see `workspace.package.version` in root `Cargo.toml` (release cadence is high — do not hardcode; CHANGELOG.md head tracks it)
@@ -62,14 +62,17 @@ Key architectural boundaries:
 | Crate | Purpose |
 |-------|---------|
 | `mockforge-core` | Core server, routing, OpenAPI parsing, middleware |
+| `mockforge-config` | Configuration types for MockForge (leaf crate) |
 | `mockforge-data` | Data models, serialization, storage |
+| `mockforge-foundation` | Foundation types shared across the workspace (Error, Result) |
+| `mockforge-security-core` | Security and encryption primitives |
 | `mockforge-template-expansion` | Handlebars template rendering |
-| `mockforge-schema` | Schema validation |
 | `mockforge-world-state` | Stateful mock behavior |
 
 ### Protocol Layer
 | Crate | Purpose |
 |-------|---------|
+| `mockforge-auth` | Authentication middleware and OAuth2/OIDC support |
 | `mockforge-http` | HTTP protocol (primary protocol) |
 | `mockforge-grpc` | gRPC protocol support |
 | `mockforge-ws` | WebSocket protocol |
@@ -81,6 +84,17 @@ Key architectural boundaries:
 | `mockforge-ftp` | FTP protocol |
 | `mockforge-tcp` | TCP protocol |
 
+### Extracted from `mockforge-core`
+| Crate | Purpose |
+|-------|---------|
+| `mockforge-openapi` | OpenAPI 3.x / Swagger 2.0 loading, parsing, schema validation, response selection |
+| `mockforge-protocol` | Protocol contracts, registries, matching, fixture loading, server lifecycle |
+| `mockforge-proxy` | Proxying requests to upstream services |
+| `mockforge-import` | Import and code generation (OpenAPI, Postman, cURL, HAR, Insomnia) |
+| `mockforge-contracts` | Contract testing, drift detection, incident management |
+| `mockforge-workspace` | Workspace management, Git sync, encryption, multi-tenant routing |
+| `mockforge-intelligence` | AI-powered behavior, response generation, behavioral cloning |
+
 ### Plugin & Extension Layer
 | Crate | Purpose |
 |-------|---------|
@@ -89,17 +103,27 @@ Key architectural boundaries:
 | `mockforge-plugin-loader` | Dynamic plugin loading |
 | `mockforge-plugin-registry` | Plugin marketplace |
 | `mockforge-plugin-cli` | Plugin CLI management |
+| `mockforge-plugin-egress` | HTTP forward proxy enforcing per-plugin egress allowlists |
+| `mockforge-plugin-host` | Sidecar plugin runtime host |
+| `mockforge-platform-signing` | Release signing for platform artifacts |
 
 ### Bench, Test & Observability
 | Crate | Purpose |
 |-------|---------|
 | `mockforge-bench` | k6 script generation, WAFBench, OWASP testing |
 | `mockforge-test` | Test framework and utilities |
+| `mockforge-test-runner` | Cloud worker consuming test_runs from a Redis queue |
+
 | `mockforge-observability` | Observability infrastructure |
 | `mockforge-tracing` | Distributed tracing |
 | `mockforge-analytics` | Usage analytics |
 | `mockforge-reporting` | Report generation |
 | `mockforge-chaos` | Chaos engineering |
+| `mockforge-chaos-orchestration` | Chaos scenarios, scheduling, distributed coordination |
+| `mockforge-chaos-proxy` | Network-layer fault-injecting HTTP client for chaos campaigns |
+| `mockforge-chaos-ml` | ML-powered chaos: anomaly detection, RL, predictive remediation |
+| `mockforge-ai-core` | Core AI/LLM infrastructure for intelligent behavior |
+| `mockforge-behavioral-cloning` | Behavioral cloning and sequence learning |
 | `mockforge-performance` | Performance profiling |
 | `mockforge-pipelines` | Request/response pipelines |
 | `mockforge-recorder` | Traffic recording |
@@ -113,6 +137,8 @@ Key architectural boundaries:
 | `mockforge-ui` | React admin UI (Vite + React 19 + TypeScript) |
 | `mockforge-sdk` | Client SDK |
 | `mockforge-registry-server` | Multi-tenant registry API |
+| `mockforge-registry-core` | Registry domain models, storage, OSS-safe handlers |
+| `mockforge-tui` | Terminal UI dashboard |
 
 ### Infrastructure
 | Crate | Purpose |
