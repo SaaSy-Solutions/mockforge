@@ -11,11 +11,11 @@ import subprocess
 import sys
 import time
 import uuid
-from cve_lab_catalog import CVE, CATALOG
+from cve_lab_catalog import CATALOG, CVE, PACKS
 from cve_lab_engine import doctor, prepare, lab, cleanup
 from cve_lab_transport import target_url, receiver, control
 from cve_lab_nuclei import probe
-from cve_lab_evidence import classify
+from cve_lab_evidence import classify, describe
 
 
 def run_plan_lines(args):
@@ -25,7 +25,7 @@ def run_plan_lines(args):
     ]
     if args.target:
         lines.append(
-            f"Target under test: {args.target} — configure its LB/WAAP upstream to "
+            f"Target under test: {args.target}, configure its LB/WAAP upstream to "
             "forward to the recorder endpoint above before requests flow"
         )
         if args.listen_address == "127.0.0.1":
@@ -46,6 +46,7 @@ def run_plan_lines(args):
 
 
 def run(args):
+    pack = PACKS[args.cve]
     target_url(args.target) if args.target else None
     ipaddress.IPv4Address(args.listen_address)
     if not 1 <= args.origin_port <= 65535 or not 400 <= args.block_status <= 599:
@@ -58,7 +59,7 @@ def run(args):
     report = {
         "schema_version": 1,
         "run_id": run_id,
-        "pack": CATALOG,
+        "pack": pack["catalog"],
         "target": args.target,
         "verdict": "inconclusive",
         "runtime_patch_evidence": "unverified",
@@ -68,8 +69,8 @@ def run(args):
         json.dumps({"run_id": run_id, "engine": args.engine})
     )
     try:
-        prepare(args.engine)
-        with lab(args.engine, run_id, output) as backend:
+        prepare(args.engine, pack)
+        with lab(args.engine, run_id, output, pack) as backend:
             with receiver(args.origin_port, args.listen_address, backend) as records:
                 direct_host = (
                     "127.0.0.1"
@@ -83,7 +84,7 @@ def run(args):
                 )
                 baseline_control = control(origin, run_id, "baseline-control")
                 ordinary_status = baseline_control["root_status"]
-                baseline = probe(args.engine, origin, output, "baseline", run_id)
+                baseline = probe(args.engine, origin, output, "baseline", run_id, pack)
                 report.update(
                     baseline=baseline,
                     baseline_control=baseline_control,
@@ -92,7 +93,7 @@ def run(args):
                 if (
                     ordinary_status != 307
                     or baseline["status"] != 200
-                    or not baseline["dashboard"]
+                    or not baseline["marker"]
                 ):
                     raise RuntimeError(
                         "Direct baseline did not demonstrate authentication bypass"
@@ -101,11 +102,11 @@ def run(args):
                     target_start = len(records)
                     before = control(args.target, run_id, "before")
                     tested = probe(
-                        args.engine, args.target.rstrip("/"), output, "target", run_id
+                        args.engine, args.target.rstrip("/"), output, "target", run_id, pack
                     )
                     after = control(args.target, run_id, "after")
                     time.sleep(0.5)
-                    verdict, reason = classify(
+                    verdict, reason, checks = classify(
                         baseline,
                         tested,
                         before,
@@ -121,9 +122,16 @@ def run(args):
                             "inconclusive",
                             "LB controls did not match this application's login page",
                         )
+                        checks = [
+                            {
+                                "check": "benign control responses match this application",
+                                "outcome": "not satisfied",
+                            }
+                        ]
                     report.update(
                         verdict=verdict,
                         reason=reason,
+                        evidence_checks=checks,
                         target_probe=tested,
                         control_before=before,
                         control_after=after,
@@ -144,7 +152,8 @@ def run(args):
         report.update(verdict="inconclusive", reason=str(exc))
     finally:
         (output / "report.json").write_text(json.dumps(report, indent=2) + "\n")
-    print(f"{report['verdict']}: {report['reason']}\nReport: {output / 'report.json'}")
+    print(describe(report))
+    print(f"Report: {output / 'report.json'}")
     return 0 if report["verdict"] in ("pass", "baseline-confirmed") else 1
 
 
@@ -157,12 +166,12 @@ def main(argv=None):
     prepare_parser = commands.add_parser(
         "prepare", help="Download and cache the reviewed images"
     )
-    prepare_parser.add_argument("cve", choices=(CVE,))
+    prepare_parser.add_argument("cve", choices=tuple(PACKS))
     runner = commands.add_parser(
         "run",
         help="Auto-prepare, reproduce directly, optionally compare through your LB, then stop",
     )
-    runner.add_argument("cve", choices=(CVE,))
+    runner.add_argument("cve", choices=tuple(PACKS))
     runner.add_argument(
         "--target",
         help="Your authorized LB HTTP(S) origin, configured to forward to origin-port",
@@ -194,7 +203,7 @@ def main(argv=None):
         elif args.action == "list":
             print(json.dumps(CATALOG, indent=2))
         elif args.action == "prepare":
-            prepare(args.engine)
+            prepare(args.engine, PACKS[args.cve])
             print(
                 "Pinned lab and Nuclei images ready; updates ship with reviewed MockForge packs"
             )
