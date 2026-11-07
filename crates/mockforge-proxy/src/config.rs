@@ -536,3 +536,293 @@ impl Default for ProxyConfig {
         }
     }
 }
+
+#[cfg(test)]
+mod proxy_config_tests {
+    use super::*;
+    use http::{HeaderMap, HeaderValue, Method, Uri};
+    use serde_json::json;
+
+    fn rule(pattern: &str, target: &str) -> ProxyRule {
+        ProxyRule {
+            path_pattern: pattern.to_string(),
+            target_url: target.to_string(),
+            pattern: pattern.to_string(),
+            upstream_url: target.to_string(),
+            ..Default::default()
+        }
+    }
+
+    fn config_with(rules: Vec<ProxyRule>) -> ProxyConfig {
+        ProxyConfig {
+            enabled: true,
+            target_url: Some("http://default-upstream".to_string()),
+            rules,
+            ..Default::default()
+        }
+    }
+
+    // ─── Defaults ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn new_sets_proxy_defaults() {
+        let config = ProxyConfig::new("http://upstream.example.com".to_string());
+        assert!(config.enabled);
+        assert_eq!(config.target_url.as_deref(), Some("http://upstream.example.com"));
+        assert_eq!(config.prefix.as_deref(), Some("/proxy/"));
+        assert!(config.passthrough_by_default);
+        assert_eq!(config.timeout_seconds, 30);
+        assert!(config.follow_redirects);
+    }
+
+    #[test]
+    fn default_config_is_disabled_without_prefix() {
+        let config = ProxyConfig::default();
+        assert!(!config.enabled);
+        assert_eq!(config.target_url, None);
+        assert_eq!(config.prefix, None);
+        assert!(!config.passthrough_by_default);
+    }
+
+    // ─── Migration mode resolution ──────────────────────────────────────────
+
+    #[test]
+    fn migration_disabled_yields_no_mode() {
+        let mut config = config_with(vec![rule("/api/*", "http://a")]);
+        config.migration_enabled = false;
+        assert_eq!(config.get_effective_migration_mode("/api/users"), None);
+    }
+
+    #[test]
+    fn group_override_wins_over_route_mode() {
+        let mut grouped = rule("/api/*", "http://a");
+        grouped.migration_mode = MigrationMode::Real;
+        grouped.migration_group = Some("billing".to_string());
+
+        let mut config = config_with(vec![grouped]);
+        config.migration_enabled = true;
+        // No group override → route-specific mode.
+        assert_eq!(config.get_effective_migration_mode("/api/users"), Some(MigrationMode::Real));
+        // Group override takes precedence.
+        config.update_group_migration_mode("billing", MigrationMode::Shadow);
+        assert_eq!(config.get_effective_migration_mode("/api/users"), Some(MigrationMode::Shadow));
+    }
+
+    #[test]
+    fn first_matching_rule_wins() {
+        let mut first = rule("/api/*", "http://a");
+        first.migration_mode = MigrationMode::Mock;
+        let mut second = rule("/api/users", "http://b");
+        second.migration_mode = MigrationMode::Real;
+
+        let mut config = config_with(vec![first, second]);
+        config.migration_enabled = true;
+        assert_eq!(config.get_effective_migration_mode("/api/users"), Some(MigrationMode::Mock));
+    }
+
+    // ─── Proxy decisions ────────────────────────────────────────────────────
+
+    #[test]
+    fn should_proxy_respects_enabled_flag() {
+        let mut config = config_with(vec![rule("/api/*", "http://a")]);
+        config.enabled = false;
+        assert!(!config.should_proxy(&Method::GET, "/api/users"));
+    }
+
+    #[test]
+    fn migration_modes_force_mock_or_proxy() {
+        let mut mock_rule = rule("/mock/*", "http://a");
+        mock_rule.migration_mode = MigrationMode::Mock;
+        let mut real_rule = rule("/real/*", "http://b");
+        real_rule.migration_mode = MigrationMode::Real;
+        let mut shadow_rule = rule("/shadow/*", "http://c");
+        shadow_rule.migration_mode = MigrationMode::Shadow;
+
+        let mut config = config_with(vec![mock_rule, real_rule, shadow_rule]);
+        config.migration_enabled = true;
+
+        assert!(!config.should_proxy(&Method::GET, "/mock/x"), "Mock forces mock");
+        assert!(config.should_proxy(&Method::GET, "/real/x"), "Real forces proxy");
+        assert!(config.should_proxy(&Method::GET, "/shadow/x"), "Shadow forces proxy");
+    }
+
+    #[test]
+    fn should_proxy_skips_conditional_rules_and_falls_back_to_prefix() {
+        let mut conditional = rule("/api/*", "http://a");
+        conditional.condition = Some("header[x-test] == 'yes'".to_string());
+
+        let mut config = config_with(vec![conditional]);
+        config.prefix = Some("/proxy/".to_string());
+
+        // The legacy method cannot evaluate conditions, so the conditional
+        // rule is skipped and the prefix decides.
+        assert!(!config.should_proxy(&Method::GET, "/api/users"));
+        assert!(config.should_proxy(&Method::GET, "/proxy/other"));
+    }
+
+    #[test]
+    fn prefix_logic_proxies_everything_when_unset() {
+        let mut config = config_with(vec![]);
+        config.prefix = None;
+        assert!(config.should_proxy(&Method::GET, "/any/path"));
+        config.prefix = Some("/proxy/".to_string());
+        assert!(config.should_proxy(&Method::GET, "/proxy/any"));
+        assert!(!config.should_proxy(&Method::GET, "/other/any"));
+    }
+
+    #[test]
+    fn conditional_rules_evaluate_request_context() {
+        let mut conditional = rule("/api/*", "http://a");
+        conditional.condition = Some("header[x-test] != ''".to_string());
+        let config = config_with(vec![conditional]);
+
+        let uri = Uri::from_static("/api/users");
+        let mut headers = HeaderMap::new();
+        headers.insert("x-test", HeaderValue::from_static("yes"));
+        assert!(config.should_proxy_with_condition(&Method::GET, &uri, &headers, None));
+
+        // Condition false and conditional rules exist → no prefix fallback.
+        let empty_headers = HeaderMap::new();
+        assert!(!config.should_proxy_with_condition(&Method::GET, &uri, &empty_headers, None));
+    }
+
+    #[test]
+    fn shadow_mode_detected_only_for_shadow_rules() {
+        let mut shadow = rule("/shadow/*", "http://a");
+        shadow.migration_mode = MigrationMode::Shadow;
+        let mut real = rule("/real/*", "http://b");
+        real.migration_mode = MigrationMode::Real;
+
+        let mut config = config_with(vec![shadow, real]);
+        assert!(!config.should_shadow("/shadow/x"), "migration disabled");
+        config.migration_enabled = true;
+        assert!(config.should_shadow("/shadow/x"));
+        assert!(!config.should_shadow("/real/x"));
+    }
+
+    // ─── Upstream and prefix resolution ─────────────────────────────────────
+
+    #[test]
+    fn upstream_url_prefers_matching_rule() {
+        let config = config_with(vec![rule("/api/*", "http://api-upstream")]);
+        assert_eq!(config.get_upstream_url("/api/users"), "http://api-upstream");
+        assert_eq!(config.get_upstream_url("/other"), "http://default-upstream");
+
+        let mut no_target = config_with(vec![]);
+        no_target.target_url = None;
+        assert_eq!(no_target.get_upstream_url("/fallback"), "/fallback");
+    }
+
+    #[test]
+    fn strip_prefix_normalizes_leading_slash() {
+        let mut config = config_with(vec![]);
+        config.prefix = Some("/proxy/".to_string());
+        assert_eq!(config.strip_prefix("/proxy/api/users"), "/api/users");
+        // Non-matching paths pass through unchanged.
+        assert_eq!(config.strip_prefix("/other"), "/other");
+
+        // A prefix without trailing slash still yields a leading slash.
+        config.prefix = Some("/proxy".to_string());
+        assert_eq!(config.strip_prefix("/proxyusers"), "/users");
+
+        config.prefix = None;
+        assert_eq!(config.strip_prefix("/anything"), "/anything");
+    }
+
+    #[test]
+    fn path_patterns_support_wildcards() {
+        let config = config_with(vec![rule("/api/*", "http://a")]);
+        assert!(config.path_matches_pattern("/api/*", "/api/users"));
+        assert!(config.path_matches_pattern("/api/*", "/api"));
+        assert!(!config.path_matches_pattern("/api/*", "/other"));
+        assert!(config.path_matches_pattern("/health", "/health"));
+        assert!(!config.path_matches_pattern("/health", "/health/extra"));
+    }
+
+    // ─── Rule and group mutation ────────────────────────────────────────────
+
+    #[test]
+    fn rule_migration_mode_updates_by_either_pattern_alias() {
+        let mut config = config_with(vec![rule("/api/*", "http://a")]);
+        config.migration_enabled = true;
+        assert!(config.update_rule_migration_mode("/api/*", MigrationMode::Real));
+        assert_eq!(config.get_effective_migration_mode("/api/users"), Some(MigrationMode::Real));
+        // Unknown pattern reports not-found.
+        assert!(!config.update_rule_migration_mode("/nope", MigrationMode::Mock));
+    }
+
+    #[test]
+    fn route_toggle_cycles_through_migration_stages() {
+        let mut config = config_with(vec![rule("/api/*", "http://a")]);
+        // Auto starts the cycle at Mock.
+        assert_eq!(config.toggle_route_migration("/api/*"), Some(MigrationMode::Mock));
+        assert_eq!(config.toggle_route_migration("/api/*"), Some(MigrationMode::Shadow));
+        assert_eq!(config.toggle_route_migration("/api/*"), Some(MigrationMode::Real));
+        assert_eq!(config.toggle_route_migration("/api/*"), Some(MigrationMode::Mock));
+        assert_eq!(config.toggle_route_migration("/unknown"), None);
+    }
+
+    #[test]
+    fn group_toggle_defaults_to_auto_when_absent() {
+        let mut config = config_with(vec![]);
+        assert_eq!(config.toggle_group_migration("billing"), MigrationMode::Mock);
+        assert_eq!(config.toggle_group_migration("billing"), MigrationMode::Shadow);
+    }
+
+    // ─── Migration reporting ────────────────────────────────────────────────
+
+    #[test]
+    fn migration_routes_report_effective_modes() {
+        let mut grouped = rule("/api/*", "http://a");
+        grouped.migration_mode = MigrationMode::Real;
+        grouped.migration_group = Some("billing".to_string());
+        let plain = rule("/plain", "http://b");
+
+        let mut config = config_with(vec![grouped, plain]);
+        config.update_group_migration_mode("billing", MigrationMode::Shadow);
+
+        let routes = config.get_migration_routes();
+        assert_eq!(routes.len(), 2);
+        let grouped_info = routes.iter().find(|r| r.pattern == "/api/*").unwrap();
+        assert_eq!(grouped_info.migration_mode, MigrationMode::Shadow);
+        assert_eq!(grouped_info.route_mode, MigrationMode::Real);
+        assert_eq!(grouped_info.migration_group.as_deref(), Some("billing"));
+        let plain_info = routes.iter().find(|r| r.pattern == "/plain").unwrap();
+        assert_eq!(plain_info.migration_mode, plain_info.route_mode);
+    }
+
+    #[test]
+    fn migration_groups_include_routeless_entries() {
+        let mut grouped = rule("/api/*", "http://a");
+        grouped.migration_group = Some("billing".to_string());
+        let mut config = config_with(vec![grouped]);
+        config.update_group_migration_mode("empty", MigrationMode::Real);
+
+        let groups = config.get_migration_groups();
+        assert_eq!(groups.len(), 2);
+        assert_eq!(groups["billing"].route_count, 1);
+        assert_eq!(groups["empty"].route_count, 0);
+        assert_eq!(groups["empty"].migration_mode, MigrationMode::Real);
+    }
+
+    // ─── MigrationMode serialization ────────────────────────────────────────
+
+    #[test]
+    fn migration_mode_serializes_lowercase() {
+        assert_eq!(serde_json::to_value(MigrationMode::Shadow).unwrap(), json!("shadow"));
+        assert_eq!(
+            serde_json::from_value::<MigrationMode>(json!("real")).unwrap(),
+            MigrationMode::Real
+        );
+        // A rule JSON without migration_mode falls back to the Auto default.
+        let rule: ProxyRule = serde_json::from_value(json!({
+            "path_pattern": "/a",
+            "target_url": "http://a",
+            "enabled": true,
+            "pattern": "/a",
+            "upstream_url": "http://a"
+        }))
+        .unwrap();
+        assert_eq!(rule.migration_mode, MigrationMode::Auto);
+    }
+}
