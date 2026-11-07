@@ -14,6 +14,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import cve_lab_catalog as catalog
 import cve_lab_engine as engine
+import cve_lab_nuclei as nuclei
 import cve_lab_evidence as evidence
 import cve_lab_transport as transport
 
@@ -254,6 +255,97 @@ class VerdictTests(unittest.TestCase):
     def test_origin_error_on_root_control_is_inconclusive(self):
         self.records[1]["status"] = 502
         self.assertEqual(self.verdict(), "inconclusive")
+
+
+
+class TlsVerifyTests(unittest.TestCase):
+    """--skip-tls-verify is an explicit opt-in; the default path verifies."""
+
+    def test_unverified_context_disables_checks(self):
+        import ssl
+
+        context = transport.unverified_context()
+        self.assertFalse(context.check_hostname)
+        self.assertEqual(context.verify_mode, ssl.CERT_NONE)
+
+    def test_request_verifies_by_default_and_passes_context_when_given(self):
+        with patch.object(transport.http.client, "HTTPSConnection") as connection:
+            transport.request("https://lab.example", "/login")
+        self.assertIsNone(connection.call_args.kwargs.get("context"))
+
+        sentinel = object()
+        with patch.object(transport.http.client, "HTTPSConnection") as connection:
+            transport.request("https://lab.example", "/login", context=sentinel)
+        self.assertIs(connection.call_args.kwargs.get("context"), sentinel)
+
+    def test_plain_http_connections_never_receive_a_context(self):
+        with patch.object(transport.http.client, "HTTPConnection") as connection:
+            transport.request("http://lab.example", "/login")
+        self.assertNotIn("context", connection.call_args.kwargs)
+
+    def test_run_records_tls_verify_state_and_warns_when_disabled(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+            lab, "prepare"
+        ) as prepare, contextlib.redirect_stdout(stdout):
+            output = Path(directory) / "out"
+            self.assertEqual(
+                lab.main(
+                    [
+                        "run",
+                        lab.CVE,
+                        "--target",
+                        "https://lab.example",
+                        "--output-dir",
+                        str(output),
+                        "--skip-tls-verify",
+                    ]
+                ),
+                1,
+            )
+            prepare.assert_called_once()
+            self.assertIn("TLS VERIFICATION DISABLED", stdout.getvalue())
+            report = json.loads((output / "report.json").read_text())
+            self.assertFalse(report["tls_verify"])
+
+    def test_run_keeps_verification_on_by_default(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+            lab, "prepare"
+        ) as prepare, contextlib.redirect_stdout(io.StringIO()):
+            output = Path(directory) / "out"
+            self.assertEqual(
+                lab.main(
+                    ["run", lab.CVE, "--target", "https://lab.example", "--output-dir", str(output)]
+                ),
+                1,
+            )
+            prepare.assert_called_once()
+            report = json.loads((output / "report.json").read_text())
+            self.assertTrue(report["tls_verify"])
+
+    def test_probe_adds_insecure_only_when_opted_in(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            findings = json.dumps(
+                {
+                    "template-id": "mockforge-nextjs-29927-observation",
+                    "response": "HTTP/1.1 200 OK\r\n",
+                }
+            )
+            with patch.object(nuclei, "owned_remove"), patch.object(
+                nuclei,
+                "command",
+                return_value=completed(stdout=f"{findings}\n"),
+            ) as command:
+                nuclei.probe("docker", "http://127.0.0.1:1", output, "baseline", "run1")
+                args = command.call_args.args[0]
+                self.assertNotIn("-insecure", args)
+
+                command.reset_mock()
+                nuclei.probe(
+                    "docker", "http://127.0.0.1:1", output, "baseline", "run1", insecure=True
+                )
+                self.assertIn("-insecure", command.call_args.args[0])
 
 
 if __name__ == "__main__":
