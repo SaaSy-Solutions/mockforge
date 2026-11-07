@@ -47,15 +47,6 @@ pub struct ResolvedDependency {
     pub dependencies: Vec<Dependency>,
 }
 
-/// Dependency graph node
-#[allow(dead_code)]
-#[derive(Debug, Clone)]
-struct DependencyNode {
-    name: String,
-    version: Version,
-    dependencies: Vec<String>, // List of dependent package names
-}
-
 /// Dependency resolver
 pub struct DependencyResolver {
     /// Available package versions

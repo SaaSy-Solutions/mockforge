@@ -417,23 +417,6 @@ impl ResponseGenerator {
         None
     }
 
-    /// Generate response from a Response object
-    #[allow(dead_code)]
-    fn generate_from_response(
-        spec: &OpenApiSpec,
-        response: &Response,
-        content_type: Option<&str>,
-        expand_tokens: bool,
-    ) -> Result<Value> {
-        Self::generate_from_response_with_scenario(
-            spec,
-            response,
-            content_type,
-            expand_tokens,
-            None,
-        )
-    }
-
     /// Generate response from a Response object with scenario support
     #[allow(dead_code)]
     fn generate_from_response_with_scenario(
@@ -536,34 +519,6 @@ impl ResponseGenerator {
 
         // No content found, return empty object
         Ok(Value::Object(serde_json::Map::new()))
-    }
-
-    /// Generate response from a MediaType with optional scenario selection
-    #[allow(dead_code)]
-    fn generate_from_media_type(
-        spec: &OpenApiSpec,
-        media_type: &openapiv3::MediaType,
-        expand_tokens: bool,
-    ) -> Result<Value> {
-        Self::generate_from_media_type_with_scenario(spec, media_type, expand_tokens, None)
-    }
-
-    /// Generate response from a MediaType with scenario support and selection mode
-    #[allow(dead_code)]
-    fn generate_from_media_type_with_scenario(
-        spec: &OpenApiSpec,
-        media_type: &openapiv3::MediaType,
-        expand_tokens: bool,
-        scenario: Option<&str>,
-    ) -> Result<Value> {
-        Self::generate_from_media_type_with_scenario_and_mode(
-            spec,
-            media_type,
-            expand_tokens,
-            scenario,
-            None,
-            None,
-        )
     }
 
     /// Generate response from a MediaType with scenario support and selection mode (6 args)
@@ -743,17 +698,6 @@ impl ResponseGenerator {
         } else {
             Ok(Value::Object(serde_json::Map::new()))
         }
-    }
-
-    /// Extract value from an example reference
-    /// Optionally expands items arrays based on pagination metadata if persona is provided
-    #[allow(dead_code)]
-    fn extract_example_value(
-        spec: &OpenApiSpec,
-        example_ref: &ReferenceOr<openapiv3::Example>,
-        expand_tokens: bool,
-    ) -> Result<Value> {
-        Self::extract_example_value_with_persona(spec, example_ref, expand_tokens, None, None)
     }
 
     /// Extract value from an example reference with optional persona and schema for pagination expansion
