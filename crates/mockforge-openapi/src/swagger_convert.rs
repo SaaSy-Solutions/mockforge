@@ -750,3 +750,263 @@ mod tests {
         assert!(result["paths"]["/users"]["get"].is_object());
     }
 }
+
+#[cfg(test)]
+mod swagger_conversion_tests {
+    use super::*;
+
+    #[test]
+    fn rejects_non_swagger_2_documents() {
+        let err = convert_swagger_to_openapi3(&json!({"openapi": "3.0.0"})).unwrap_err();
+        assert!(err.contains("Not a Swagger 2.0"), "{err}");
+        let err = convert_swagger_to_openapi3(&json!({"swagger": "1.2"})).unwrap_err();
+        assert!(err.contains("Not a Swagger 2.0"), "{err}");
+    }
+
+    #[test]
+    fn servers_without_host_use_relative_urls() {
+        // basePath only → relative server URL.
+        let servers = convert_servers(&json!({"basePath": "/api"}));
+        assert_eq!(servers, vec![json!({"url": "/api"})]);
+
+        // Nothing at all → root-relative.
+        let servers = convert_servers(&json!({}));
+        assert_eq!(servers, vec![json!({"url": "/"})]);
+    }
+
+    #[test]
+    fn definitions_become_schemas_with_refs_rewritten() {
+        let swagger = json!({
+            "swagger": "2.0",
+            "info": {"title": "Pets", "version": "1.0"},
+            "paths": {},
+            "definitions": {
+                "Person": {"type": "object", "properties": {"name": {"type": "string"}}},
+                "Pet": {
+                    "type": "object",
+                    "properties": {
+                        "friend": {"$ref": "#/definitions/Person"},
+                        "self": {"$ref": "#/definitions/Pet"}
+                    }
+                }
+            }
+        });
+
+        let result = convert_swagger_to_openapi3(&swagger).unwrap();
+        let schemas = &result["components"]["schemas"];
+        // The nested refs are rewritten into components/schemas paths.
+        assert_eq!(schemas["Pet"]["properties"]["friend"]["$ref"], "#/components/schemas/Person");
+        assert_eq!(schemas["Pet"]["properties"]["self"]["$ref"], "#/components/schemas/Pet");
+        // Non-ref fields pass through untouched.
+        assert_eq!(schemas["Person"]["properties"]["name"]["type"], "string");
+    }
+
+    #[test]
+    fn body_parameter_becomes_request_body_with_consumes_content() {
+        let swagger = json!({
+            "swagger": "2.0",
+            "info": {"title": "t", "version": "1"},
+            "consumes": ["application/json"],
+            "paths": {
+                "/pets": {
+                    "post": {
+                        "operationId": "createPet",
+                        "parameters": [
+                            {"name": "body", "in": "body", "required": true,
+                             "schema": {"$ref": "#/definitions/Pet"}}
+                        ],
+                        "responses": {"201": {"description": "created"}}
+                    }
+                }
+            },
+            "definitions": {"Pet": {"type": "object"}}
+        });
+
+        let result = convert_swagger_to_openapi3(&swagger).unwrap();
+        let op = &result["paths"]["/pets"]["post"];
+        // The body parameter disappears from parameters and becomes requestBody.
+        assert!(op.get("parameters").is_none());
+        assert_eq!(op["requestBody"]["required"], true);
+        assert_eq!(
+            op["requestBody"]["content"]["application/json"]["schema"]["$ref"],
+            "#/components/schemas/Pet"
+        );
+        // Non-body parameters are still emitted; the required 201 response
+        // gets its schema-less content from the default produces fallback.
+        assert_eq!(op["responses"]["201"]["description"], "created");
+    }
+
+    #[test]
+    fn operation_level_consumes_override_global() {
+        let swagger = json!({
+            "swagger": "2.0",
+            "info": {"title": "t", "version": "1"},
+            "consumes": ["application/json"],
+            "paths": {
+                "/pets": {
+                    "post": {
+                        "consumes": ["application/xml"],
+                        "parameters": [{"name": "body", "in": "body", "schema": {"type": "object"}}],
+                        "responses": {}
+                    }
+                }
+            }
+        });
+
+        let result = convert_swagger_to_openapi3(&swagger).unwrap();
+        let content = &result["paths"]["/pets"]["post"]["requestBody"]["content"];
+        assert!(content.get("application/xml").is_some());
+        assert!(content.get("application/json").is_none());
+    }
+
+    #[test]
+    fn form_data_parameters_become_urlencoded_request_body() {
+        let swagger = json!({
+            "swagger": "2.0",
+            "info": {"title": "t", "version": "1"},
+            "paths": {
+                "/pets": {
+                    "post": {
+                        "parameters": [
+                            {"name": "name", "in": "formData", "type": "string", "required": true},
+                            {"name": "age", "in": "formData", "type": "integer"}
+                        ],
+                        "responses": {}
+                    }
+                }
+            }
+        });
+
+        let result = convert_swagger_to_openapi3(&swagger).unwrap();
+        let body = &result["paths"]["/pets"]["post"]["requestBody"];
+        assert_eq!(body["required"], true);
+        let schema = &body["content"]["application/x-www-form-urlencoded"]["schema"];
+        assert_eq!(schema["type"], "object");
+        assert_eq!(schema["properties"]["name"]["type"], "string");
+        assert_eq!(schema["required"], json!(["name"]));
+    }
+
+    #[test]
+    fn file_upload_uses_multipart_content_type() {
+        let swagger = json!({
+            "swagger": "2.0",
+            "info": {"title": "t", "version": "1"},
+            "paths": {
+                "/upload": {
+                    "post": {
+                        "parameters": [{"name": "file", "in": "formData", "type": "file"}],
+                        "responses": {}
+                    }
+                }
+            }
+        });
+
+        let result = convert_swagger_to_openapi3(&swagger).unwrap();
+        let body = &result["paths"]["/upload"]["post"]["requestBody"];
+        assert!(body["content"].get("multipart/form-data").is_some());
+        // No required formData params → the body itself is optional.
+        assert_eq!(body["required"], false);
+    }
+
+    #[test]
+    fn responses_move_schema_and_examples_into_content() {
+        let swagger = json!({
+            "swagger": "2.0",
+            "info": {"title": "t", "version": "1"},
+            "produces": ["application/json"],
+            "paths": {
+                "/pets": {
+                    "get": {
+                        "responses": {
+                            "200": {
+                                "description": "ok",
+                                "schema": {"$ref": "#/definitions/Pet"},
+                                "examples": {"application/json": {"id": 1}}
+                            },
+                            "404": {}
+                        },
+                        "x-rate-limited": true
+                    }
+                }
+            },
+            "definitions": {"Pet": {"type": "object"}}
+        });
+
+        let result = convert_swagger_to_openapi3(&swagger).unwrap();
+        let op = &result["paths"]["/pets"]["get"];
+        let ok = &op["responses"]["200"];
+        assert_eq!(ok["content"]["application/json"]["schema"]["$ref"], "#/components/schemas/Pet");
+        assert_eq!(ok["content"]["application/json"]["example"], json!({"id": 1}));
+        // Responses without description get a placeholder.
+        assert_eq!(op["responses"]["404"]["description"], "Response");
+        // Operation extensions are preserved.
+        assert_eq!(op["x-rate-limited"], true);
+    }
+
+    #[test]
+    fn response_without_produces_defaults_to_json_content() {
+        let swagger = json!({
+            "swagger": "2.0",
+            "info": {"title": "t", "version": "1"},
+            "paths": {
+                "/pets": {
+                    "get": {
+                        "responses": {"200": {"description": "ok", "schema": {"type": "array"}}}
+                    }
+                }
+            }
+        });
+
+        let result = convert_swagger_to_openapi3(&swagger).unwrap();
+        let content = &result["paths"]["/pets"]["get"]["responses"]["200"]["content"];
+        assert_eq!(content["application/json"]["schema"]["type"], "array");
+    }
+
+    #[test]
+    fn path_level_parameters_are_pushed_into_operations() {
+        let swagger = json!({
+            "swagger": "2.0",
+            "info": {"title": "t", "version": "1"},
+            "paths": {
+                "/pets/{id}": {
+                    "parameters": [
+                        {"name": "id", "in": "path", "required": true, "type": "string"}
+                    ],
+                    "get": {"responses": {}}
+                }
+            }
+        });
+
+        let result = convert_swagger_to_openapi3(&swagger).unwrap();
+        // Path-level parameters are inherited into every operation during
+        // expansion; the path-level list itself is emptied.
+        assert_eq!(result["paths"]["/pets/{id}"]["parameters"], json!([]));
+        let param = &result["paths"]["/pets/{id}"]["get"]["parameters"][0];
+        assert_eq!(param["name"], "id");
+        assert_eq!(param["in"], "path");
+        assert_eq!(param["schema"]["type"], "string");
+    }
+
+    #[test]
+    fn tags_security_and_external_docs_are_copied() {
+        let swagger = json!({
+            "swagger": "2.0",
+            "info": {"title": "t", "version": "1"},
+            "tags": [{"name": "pets"}],
+            "security": [{"api_key": []}],
+            "externalDocs": {"url": "https://docs.example.com"},
+            "x-vendor-extension": {"supported": true},
+            "securityDefinitions": {
+                "api_key": {"type": "apiKey", "name": "X-Api-Key", "in": "header"}
+            },
+            "paths": {}
+        });
+
+        let result = convert_swagger_to_openapi3(&swagger).unwrap();
+        assert_eq!(result["tags"], json!([{"name": "pets"}]));
+        assert_eq!(result["security"], json!([{"api_key": []}]));
+        assert_eq!(result["externalDocs"]["url"], "https://docs.example.com");
+        assert_eq!(result["x-vendor-extension"], json!({"supported": true}));
+        assert_eq!(result["components"]["securitySchemes"]["api_key"]["name"], "X-Api-Key");
+    }
+}

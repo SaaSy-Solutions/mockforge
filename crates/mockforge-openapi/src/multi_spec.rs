@@ -596,3 +596,415 @@ pub fn merge_specs(
         raw_document: Some(base_doc),
     })
 }
+
+#[cfg(test)]
+mod multi_spec_tests {
+    use super::*;
+    use serde_json::json;
+    use std::path::PathBuf;
+
+    /// Build a minimal valid spec whose raw document carries the given
+    /// paths/components verbatim (conflict detection reads raw documents).
+    fn spec_with_document(document: serde_json::Value) -> OpenApiSpec {
+        OpenApiSpec::from_json(document).expect("valid fixture spec")
+    }
+
+    fn simple_document(
+        paths: serde_json::Value,
+        components: Option<serde_json::Value>,
+    ) -> serde_json::Value {
+        let mut doc = json!({
+            "openapi": "3.0.0",
+            "info": {"title": "Fixture", "version": "1.0"},
+            "paths": paths,
+        });
+        if let Some(components) = components {
+            doc["components"] = components;
+        }
+        doc
+    }
+
+    // ─── ConflictStrategy parsing ───────────────────────────────────────────
+
+    #[test]
+    fn strategy_parses_names_and_defaults_to_error() {
+        assert_eq!(ConflictStrategy::from("first"), ConflictStrategy::First);
+        assert_eq!(ConflictStrategy::from("last"), ConflictStrategy::Last);
+        assert_eq!(ConflictStrategy::from("error"), ConflictStrategy::Error);
+        // Anything unrecognized falls back to fail-fast.
+        assert_eq!(ConflictStrategy::from("bogus"), ConflictStrategy::Error);
+        assert_eq!(ConflictStrategy::from(""), ConflictStrategy::Error);
+    }
+
+    // ─── Grouping ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn groups_specs_by_openapi_document_version() {
+        let mut v0302 = spec_with_document(simple_document(json!({}), None));
+        v0302.raw_document =
+            Some(json!({"openapi": "3.0.2", "info": {"title": "t", "version": "1"}}));
+        let mut unknown = spec_with_document(simple_document(json!({}), None));
+        unknown.raw_document = None;
+
+        let groups = group_specs_by_openapi_version(vec![
+            (PathBuf::from("a.json"), spec_with_document(simple_document(json!({}), None))),
+            (PathBuf::from("b.json"), spec_with_document(simple_document(json!({}), None))),
+            (PathBuf::from("c.json"), v0302),
+            (PathBuf::from("d.json"), unknown),
+        ]);
+
+        assert_eq!(groups.len(), 3);
+        assert_eq!(groups["3.0.0"].len(), 2);
+        assert_eq!(groups["3.0.2"].len(), 1);
+        assert_eq!(groups["unknown"].len(), 1);
+    }
+
+    #[test]
+    fn unversioned_specs_group_under_unknown() {
+        let mut no_openapi = spec_with_document(simple_document(json!({}), None));
+        no_openapi.raw_document = Some(json!({"info": {"title": "t"}}));
+
+        let groups = group_specs_by_openapi_version(vec![(PathBuf::from("a.json"), no_openapi)]);
+        assert_eq!(groups.len(), 1);
+        assert!(groups.contains_key("unknown"));
+    }
+
+    #[test]
+    fn groups_specs_by_api_version() {
+        let mut v1 = spec_with_document(simple_document(json!({}), None));
+        v1.raw_document =
+            Some(json!({"openapi": "3.0.0", "info": {"title": "t", "version": "1.0"}}));
+        let mut v2 = spec_with_document(simple_document(json!({}), None));
+        v2.raw_document =
+            Some(json!({"openapi": "3.0.0", "info": {"title": "t", "version": "2.0"}}));
+        let mut no_version = spec_with_document(simple_document(json!({}), None));
+        no_version.raw_document = Some(json!({}));
+
+        let groups = group_specs_by_api_version(vec![
+            (PathBuf::from("a.json"), v1),
+            (PathBuf::from("b.json"), v2),
+            (PathBuf::from("c.json"), no_version),
+        ]);
+
+        assert_eq!(groups.len(), 3);
+        assert!(groups.contains_key("1.0"));
+        assert!(groups.contains_key("2.0"));
+        assert!(groups.contains_key("unknown"));
+    }
+
+    // ─── Conflict detection ─────────────────────────────────────────────────
+
+    #[test]
+    fn disjoint_specs_have_no_conflicts() {
+        let a = (
+            PathBuf::from("a.json"),
+            spec_with_document(simple_document(
+                json!({"/a": {"get": {"operationId": "getA"}}}),
+                Some(json!({"schemas": {"A": {"type": "string"}}})),
+            )),
+        );
+        let b = (
+            PathBuf::from("b.json"),
+            spec_with_document(simple_document(
+                json!({"/b": {"post": {"operationId": "postB"}}}),
+                Some(json!({"schemas": {"B": {"type": "string"}}})),
+            )),
+        );
+        assert!(detect_conflicts(&[a, b]).is_empty());
+    }
+
+    #[test]
+    fn same_method_and_path_is_a_route_conflict() {
+        let route = json!({"/users": {"get": {"operationId": "getUsers"}}});
+        let conflicts = detect_conflicts(&[
+            (
+                PathBuf::from("a.json"),
+                spec_with_document(simple_document(route.clone(), None)),
+            ),
+            (PathBuf::from("b.json"), spec_with_document(simple_document(route, None))),
+        ]);
+
+        assert_eq!(conflicts.len(), 1);
+        match &conflicts[0] {
+            Conflict::RouteConflict {
+                method,
+                path,
+                files,
+            } => {
+                assert_eq!(method, "GET");
+                assert_eq!(path, "/users");
+                let names: Vec<_> = files.iter().map(|f| f.display().to_string()).collect();
+                assert!(names.contains(&"a.json".to_string()));
+                assert!(names.contains(&"b.json".to_string()));
+            }
+            _ => panic!("expected a route conflict"),
+        }
+    }
+
+    #[test]
+    fn same_path_with_different_methods_is_not_a_conflict() {
+        let a = (
+            PathBuf::from("a.json"),
+            spec_with_document(simple_document(json!({"/users": {"get": {}}}), None)),
+        );
+        let b = (
+            PathBuf::from("b.json"),
+            spec_with_document(simple_document(json!({"/users": {"post": {}}}), None)),
+        );
+        assert!(detect_conflicts(&[a, b]).is_empty());
+    }
+
+    #[test]
+    fn differing_components_conflict_but_identical_ones_do_not() {
+        let user_v1 = json!({"schemas": {"User": {"type": "object", "properties": {"name": {"type": "string"}}}}});
+        let user_v2 = json!({"schemas": {"User": {"type": "object", "properties": {"id": {"type": "integer"}}}}});
+
+        // Different definitions for the same key → conflict.
+        let conflicts = detect_conflicts(&[
+            (
+                PathBuf::from("a.json"),
+                spec_with_document(simple_document(json!({}), Some(user_v1.clone()))),
+            ),
+            (
+                PathBuf::from("b.json"),
+                spec_with_document(simple_document(json!({}), Some(user_v2))),
+            ),
+        ]);
+        assert_eq!(conflicts.len(), 1);
+        match &conflicts[0] {
+            Conflict::ComponentConflict {
+                component_type,
+                key,
+                ..
+            } => {
+                assert_eq!(component_type, "schemas");
+                assert_eq!(key, "User");
+            }
+            _ => panic!("expected a component conflict"),
+        }
+
+        // Byte-identical definitions → no conflict.
+        let conflicts = detect_conflicts(&[
+            (
+                PathBuf::from("a.json"),
+                spec_with_document(simple_document(json!({}), Some(user_v1.clone()))),
+            ),
+            (
+                PathBuf::from("b.json"),
+                spec_with_document(simple_document(json!({}), Some(user_v1))),
+            ),
+        ]);
+        assert!(conflicts.is_empty());
+    }
+
+    // ─── Merging ────────────────────────────────────────────────────────────
+
+    #[test]
+    fn empty_spec_list_is_rejected() {
+        let err = merge_specs(vec![], ConflictStrategy::Error).unwrap_err();
+        assert!(
+            matches!(err, MergeConflictError::ComponentConflict { ref key, .. } if key == "no_specs")
+        );
+    }
+
+    #[test]
+    fn single_spec_is_returned_unchanged() {
+        let spec = spec_with_document(simple_document(
+            json!({"/a": {"get": {"operationId": "getA"}}}),
+            None,
+        ));
+        let merged = merge_specs(vec![(PathBuf::from("a.json"), spec)], ConflictStrategy::Error)
+            .expect("single spec merges trivially");
+        assert_eq!(merged.raw_document.as_ref().unwrap()["info"]["title"], "Fixture");
+    }
+
+    #[test]
+    fn disjoint_specs_merge_paths_and_components() {
+        let a = (
+            PathBuf::from("a.json"),
+            spec_with_document(simple_document(
+                json!({"/a": {"get": {"operationId": "getA"}}}),
+                Some(json!({"schemas": {"A": {"type": "string"}}})),
+            )),
+        );
+        let b = (
+            PathBuf::from("b.json"),
+            spec_with_document(simple_document(
+                json!({"/b": {"post": {"operationId": "postB"}}}),
+                Some(json!({"schemas": {"B": {"type": "integer"}}})),
+            )),
+        );
+
+        let merged = merge_specs(vec![a, b], ConflictStrategy::Error).expect("merge succeeds");
+        let doc = merged.raw_document.as_ref().expect("raw document preserved");
+        assert!(doc["paths"].get("/a").is_some());
+        assert!(doc["paths"].get("/b").is_some());
+        assert!(doc["components"]["schemas"].get("A").is_some());
+        assert!(doc["components"]["schemas"].get("B").is_some());
+    }
+
+    #[test]
+    fn error_strategy_reports_all_conflicts() {
+        let route = json!({"/users": {"get": {"operationId": "getUsers"}}});
+        let err = merge_specs(
+            vec![
+                (
+                    PathBuf::from("a.json"),
+                    spec_with_document(simple_document(route.clone(), None)),
+                ),
+                (PathBuf::from("b.json"), spec_with_document(simple_document(route, None))),
+            ],
+            ConflictStrategy::Error,
+        )
+        .unwrap_err();
+
+        match err {
+            MergeConflictError::MultipleConflicts { conflicts } => {
+                assert_eq!(conflicts.len(), 1);
+            }
+            _ => panic!("expected MultipleConflicts"),
+        }
+
+        // The rendered error explains the conflicts and the resolution flags.
+        let rendered = merge_specs(
+            vec![
+                (
+                    PathBuf::from("a.json"),
+                    spec_with_document(simple_document(
+                        json!({"/users": {"get": {"operationId": "getUsers"}}}),
+                        None,
+                    )),
+                ),
+                (
+                    PathBuf::from("b.json"),
+                    spec_with_document(simple_document(
+                        json!({"/users": {"get": {"operationId": "getUsers"}}}),
+                        None,
+                    )),
+                ),
+            ],
+            ConflictStrategy::Error,
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(rendered.contains("GET"), "{rendered}");
+        assert!(rendered.contains("/users"), "{rendered}");
+        assert!(rendered.contains("Resolution options"), "{rendered}");
+        assert!(rendered.contains("--merge-conflicts=first"), "{rendered}");
+    }
+
+    #[tokio::test]
+    async fn first_strategy_keeps_base_definition() {
+        let a = (
+            PathBuf::from("a.json"),
+            spec_with_document(simple_document(
+                json!({"/users": {"get": {"operationId": "firstVersion"}}}),
+                Some(json!({"schemas": {"User": {"type": "string"}}})),
+            )),
+        );
+        let b = (
+            PathBuf::from("b.json"),
+            spec_with_document(simple_document(
+                json!({"/users": {"get": {"operationId": "secondVersion"}}}),
+                Some(json!({"schemas": {"User": {"type": "integer"}}})),
+            )),
+        );
+
+        let merged = merge_specs(vec![a, b], ConflictStrategy::First).expect("first merges");
+        let doc = merged.raw_document.as_ref().unwrap();
+        assert_eq!(doc["paths"]["/users"]["get"]["operationId"], "firstVersion");
+        assert_eq!(doc["components"]["schemas"]["User"], json!({"type": "string"}));
+    }
+
+    #[tokio::test]
+    async fn last_strategy_prefers_later_definition() {
+        let a = (
+            PathBuf::from("a.json"),
+            spec_with_document(simple_document(
+                json!({"/users": {"get": {"operationId": "firstVersion"}}}),
+                Some(json!({"schemas": {"User": {"type": "string"}}})),
+            )),
+        );
+        let b = (
+            PathBuf::from("b.json"),
+            spec_with_document(simple_document(
+                json!({"/users": {"get": {"operationId": "secondVersion"}}}),
+                Some(json!({"schemas": {"User": {"type": "integer"}}})),
+            )),
+        );
+
+        let merged = merge_specs(vec![a, b], ConflictStrategy::Last).expect("last merges");
+        let doc = merged.raw_document.as_ref().unwrap();
+        assert_eq!(doc["paths"]["/users"]["get"]["operationId"], "secondVersion");
+        assert_eq!(doc["components"]["schemas"]["User"], json!({"type": "integer"}));
+    }
+
+    // ─── Directory loading ──────────────────────────────────────────────────
+
+    fn valid_spec_json(title: &str) -> String {
+        json!({
+            "openapi": "3.0.0",
+            "info": {"title": title, "version": "1.0"},
+            "paths": {}
+        })
+        .to_string()
+    }
+
+    #[tokio::test]
+    async fn loads_json_yaml_and_yml_files_recursively_sorted() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::fs::write(
+            dir.path().join("b.yaml"),
+            "openapi: 3.0.0\ninfo:\n  title: B\n  version: \"1.0\"\npaths: {}\n",
+        )
+        .expect("write b.yaml");
+        std::fs::write(dir.path().join("a.json"), valid_spec_json("A")).expect("write a.json");
+        std::fs::create_dir(dir.path().join("nested")).expect("mkdir");
+        std::fs::write(
+            dir.path().join("nested/c.yml"),
+            "openapi: 3.0.0\ninfo:\n  title: C\n  version: \"1.0\"\npaths: {}\n",
+        )
+        .expect("write c.yml");
+        std::fs::write(dir.path().join("notes.txt"), "not a spec").expect("write notes.txt");
+        std::fs::write(dir.path().join("broken.json"), "{ not json").expect("write broken.json");
+
+        let specs = load_specs_from_directory(dir.path()).await.expect("load specs");
+        let titles: Vec<String> =
+            specs.iter().map(|(path, _)| path.display().to_string()).collect();
+
+        // .txt is ignored, broken JSON is skipped with a warning, and the
+        // remaining files come back in lexicographic order.
+        assert_eq!(titles.len(), 3, "{titles:?}");
+        assert!(titles[0].ends_with("a.json"), "{titles:?}");
+        assert!(titles[1].ends_with("b.yaml"), "{titles:?}");
+        assert!(titles[2].ends_with("c.yml"), "{titles:?}");
+    }
+
+    #[tokio::test]
+    async fn empty_directory_loads_no_specs() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let specs = load_specs_from_directory(dir.path()).await.expect("load specs");
+        assert!(specs.is_empty());
+    }
+
+    #[tokio::test]
+    async fn missing_directory_is_an_error() {
+        let err = load_specs_from_directory(Path::new("/nonexistent/mockforge/specs"))
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("does not exist"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn loading_from_files_fails_fast_on_bad_paths() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let good = dir.path().join("a.json");
+        std::fs::write(&good, valid_spec_json("A")).expect("write a.json");
+
+        let specs = load_specs_from_files(vec![good.clone()]).await.expect("load specs");
+        assert_eq!(specs.len(), 1);
+
+        let err = load_specs_from_files(vec![dir.path().join("missing.json")]).await.unwrap_err();
+        assert!(err.to_string().contains("missing.json"), "{err}");
+    }
+}
