@@ -5,12 +5,30 @@ use mockforge_recorder::{
     query::{execute_query, QueryFilter},
     Recorder, RecorderDatabase,
 };
-use rumqttc::{AsyncClient, Event, EventLoop, Incoming, LastWill, MqttOptions, QoS};
+use rumqttc::{
+    AsyncClient, ConnectionError, Event, EventLoop, Incoming, LastWill, MqttOptions, QoS,
+};
 use std::{sync::Arc, time::Duration};
+
+/// Poll the event loop, riding out `NetworkTimeout` stalls. For
+/// `AsyncClient` users rumqttc fixes the connect/read timeout at 5 s
+/// (`EventLoop::new` never exposes `NetworkOptions`), so one scheduler
+/// stall on a loaded runner otherwise kills the loop permanently (#1384).
+/// After a stall the socket is usually still healthy, so poll again; any
+/// other error still fails the test, with context.
+async fn poll_event(events: &mut EventLoop) -> Event {
+    loop {
+        match events.poll().await {
+            Ok(event) => return event,
+            Err(ConnectionError::NetworkTimeout) => continue,
+            Err(error) => panic!("MQTT event loop failed: {error}"),
+        }
+    }
+}
 
 async fn received(events: &mut EventLoop, topic: &str, payload: &[u8], retained: bool) {
     loop {
-        if let Event::Incoming(Incoming::Publish(message)) = events.poll().await.unwrap() {
+        if let Event::Incoming(Incoming::Publish(message)) = poll_event(events).await {
             assert_eq!(message.topic, topic);
             assert_eq!(message.payload.as_ref(), payload);
             assert_eq!(message.retain, retained);
@@ -27,12 +45,14 @@ async fn publish(
     retain: bool,
 ) {
     client.publish(topic, QoS::AtLeastOnce, retain, payload.to_vec()).await.unwrap();
-    while !matches!(events.poll().await.unwrap(), Event::Incoming(Incoming::PubAck(_))) {}
+    while !matches!(poll_event(events).await, Event::Incoming(Incoming::PubAck(_))) {}
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn mqtt_wire_publish_delivery_persist_payload_and_metadata() {
-    tokio::time::timeout(Duration::from_secs(20), exercise_recording())
+    // Backstop for a genuinely hung broker, with enough headroom that a
+    // loaded runner riding out network-timeout stalls still passes.
+    tokio::time::timeout(Duration::from_secs(90), exercise_recording())
         .await
         .expect("MQTT wire deadline");
 }
@@ -59,7 +79,7 @@ async fn exercise_recording() {
     let (subscriber, mut events) =
         AsyncClient::new(MqttOptions::new("recording-subscriber", "127.0.0.1", port), 16);
     subscriber.subscribe("recorded/#", QoS::AtLeastOnce).await.unwrap();
-    while !matches!(events.poll().await.unwrap(), Event::Incoming(Incoming::SubAck(_))) {}
+    while !matches!(poll_event(&mut events).await, Event::Incoming(Incoming::SubAck(_))) {}
     let (publisher, mut publisher_events) =
         AsyncClient::new(MqttOptions::new("recording-publisher", "127.0.0.1", port), 16);
     publish(&publisher, &mut publisher_events, "recorded/topic", b"payload", false).await;
@@ -79,7 +99,7 @@ async fn exercise_recording() {
         false,
     ));
     let (will_client, mut will_events) = AsyncClient::new(will_options, 4);
-    while !matches!(will_events.poll().await.unwrap(), Event::Incoming(Incoming::ConnAck(_))) {}
+    while !matches!(poll_event(&mut will_events).await, Event::Incoming(Incoming::ConnAck(_))) {}
     // Drop the transport without DISCONNECT so the broker emits the will.
     drop(will_events);
     drop(will_client);
