@@ -18,7 +18,7 @@ def classify(baseline, target, before, after, records, block_status):
         checks.append({"check": check, "outcome": "ok" if ok else "not satisfied"})
         return ok
 
-    if baseline["status"] != 200 or not baseline["dashboard"]:
+    if baseline["status"] != 200 or not baseline["marker"]:
         record("direct baseline reproduces the vulnerability", False)
         return "inconclusive", "direct application vulnerability was not reproduced", checks
     record("direct baseline reproduces the vulnerability", True)
@@ -66,7 +66,7 @@ def classify(baseline, target, before, after, records, block_status):
         checks.append(
             {
                 "check": "signature request was blocked at the target",
-                "outcome": "not satisfied — reached the origin with status "
+                "outcome": "not satisfied, reached the origin with status "
                 f"{seen[0].get('status')}",
             }
         )

@@ -3,26 +3,36 @@
 import hashlib
 import json
 import re
-from cve_lab_catalog import CATALOG, LABEL, SIGNATURE
+from cve_lab_catalog import LABEL
 from cve_lab_engine import command, owned_remove
 
 
-def template(token):
-    # This template emits a transport observation for any HTTP response. Only
-    # classify() decides protection; a Nuclei match here is NOT a vulnerability.
-    return f"""id: mockforge-nextjs-29927-observation
+def template(pack, token):
+    """Emit the observation template for a pack's signature request.
+
+    This template emits a transport observation for any HTTP response. Only
+    classify() decides protection; a Nuclei match here is NOT a vulnerability.
+    """
+    probe = pack["probe"]
+    headers = {
+        name: value.replace("{token}", token) for name, value in probe["headers"].items()
+    }
+    header_lines = "\n".join(f'      {name}: "{value}"' for name, value in headers.items())
+    body_block = ""
+    if probe.get("body") is not None:
+        body_block = f"\n    body:\n      - \"{probe['body'].replace('{token}', token)}\""
+    return f"""id: {probe['template_id']}
 info:
-  name: MockForge Next.js controlled lab observation
+  name: {probe['template_name']}
   author: mockforge
   severity: info
 http:
-  - method: GET
+  - method: {probe['method']}
     path:
-      - "{{{{BaseURL}}}}/?__mockforge_cve={token}"
+      - "{{{{BaseURL}}}}{probe['path'].replace('{token}', token)}"
     headers:
-      X-Mockforge-Cve: "{token}"
-      x-middleware-subrequest: "{SIGNATURE}"
-    redirects: false
+{header_lines}
+    redirects: false{body_block}
     matchers:
       - type: dsl
         dsl:
@@ -30,10 +40,11 @@ http:
 """
 
 
-def probe(engine, base, output, phase, run_id):
+def probe(engine, base, output, phase, run_id, pack):
+    probe = pack["probe"]
     token = run_id + "-" + phase
     path = output / f"{phase}.yaml"
-    path.write_text(template(token))
+    path.write_text(template(pack, token))
     name = "mockforge-cve-client-" + token
     try:
         result = command(
@@ -52,7 +63,7 @@ def probe(engine, base, output, phase, run_id):
                 "--pids-limit=128",
                 "-v",
                 f"{output.resolve()}:/work:ro",
-                CATALOG["runner_image"],
+                pack["catalog"]["runner_image"],
                 "-u",
                 base,
                 "-t",
@@ -82,7 +93,7 @@ def probe(engine, base, output, phase, run_id):
         ]
         if (
             len(findings) != 1
-            or findings[0].get("template-id") != "mockforge-nextjs-29927-observation"
+            or findings[0].get("template-id") != probe["template_id"]
         ):
             raise RuntimeError(
                 f"{phase}: Nuclei did not produce exactly one HTTP observation"
@@ -94,7 +105,7 @@ def probe(engine, base, output, phase, run_id):
         return {
             "token": token,
             "status": int(match[1]),
-            "dashboard": "Dashboard Content" in raw,
+            "marker": probe["marker"] in raw,
             "response_sha256": hashlib.sha256(raw.encode()).hexdigest(),
         }
     finally:
