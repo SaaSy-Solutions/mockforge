@@ -10,7 +10,7 @@ import sys
 import time
 import http.client
 from contextlib import contextmanager
-from cve_lab_catalog import CATALOG, LABEL
+from cve_lab_catalog import LABEL
 from cve_lab_transport import request
 import re
 
@@ -70,9 +70,9 @@ def doctor(engine):
     }
 
 
-def prepare(engine):
+def prepare(engine, pack):
     doctor(engine)
-    for image in (CATALOG["application_image"], CATALOG["runner_image"]):
+    for image in (pack["catalog"]["application_image"], pack["catalog"]["runner_image"]):
         if command([engine, "image", "inspect", image], check=False).returncode:
             print(f"Downloading pinned image {image}", flush=True)
             command([engine, "pull", image], timeout=900)
@@ -96,35 +96,38 @@ def owned_remove(engine, name, run_id):
 
 
 @contextmanager
-def lab(engine, run_id, output):
+def lab(engine, run_id, output, pack):
+    app = pack["app"]
     name = "mockforge-cve-" + run_id
     try:
-        command(
-            [
-                engine,
-                "run",
-                "-d",
-                "--name",
-                name,
-                "--label",
-                f"{LABEL}={run_id}",
-                "--cap-drop=ALL",
-                "--security-opt=no-new-privileges",
-                "--memory=1g",
-                "--pids-limit=256",
-                "-p",
-                "127.0.0.1::3000",
-                "-e",
-                "NODE_ENV=production",
-                CATALOG["application_image"],
-            ]
-        )
-        ports = command([engine, "port", name, "3000/tcp"]).stdout.strip().splitlines()
+        run_args = [
+            engine,
+            "run",
+            "-d",
+            "--name",
+            name,
+            "--label",
+            f"{LABEL}={run_id}",
+            "--cap-drop=ALL",
+            "--security-opt=no-new-privileges",
+            "--memory=1g",
+            "--pids-limit=256",
+            "-p",
+            f"127.0.0.1::{app['port']}",
+        ]
+        for key, value in app["env"].items():
+            run_args.extend(["-e", f"{key}={value}"])
+        run_args.append(pack["catalog"]["application_image"])
+        command(run_args)
+        ports = command([engine, "port", name, app["port"]]).stdout.strip().splitlines()
         backend = "http://" + ports[0]
         deadline = time.monotonic() + 90
         while time.monotonic() < deadline:
             try:
-                ready = request(backend, "/login")[0] == 200
+                ready = (
+                    request(backend, app["readiness"]["path"])[0]
+                    == app["readiness"]["status"]
+                )
             except (OSError, ValueError, http.client.HTTPException):
                 ready = False
             if ready:

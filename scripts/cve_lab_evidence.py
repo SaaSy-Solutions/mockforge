@@ -4,7 +4,7 @@ from cve_lab_transport import observations
 
 
 def classify(baseline, target, before, after, records, block_status):
-    if baseline["status"] != 200 or not baseline["dashboard"]:
+    if baseline["status"] != 200 or not baseline["marker"]:
         return "inconclusive", "direct application vulnerability was not reproduced"
     if not all(
         c["status"] == 200
