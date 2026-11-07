@@ -1,5 +1,6 @@
 """Managed lab verdict and lifecycle contracts; no container engine required."""
 
+import argparse
 import contextlib
 import importlib.util
 import io
@@ -254,6 +255,49 @@ class VerdictTests(unittest.TestCase):
     def test_origin_error_on_root_control_is_inconclusive(self):
         self.records[1]["status"] = 502
         self.assertEqual(self.verdict(), "inconclusive")
+
+
+
+class RunPlanTests(unittest.TestCase):
+    """The run plan states the recorder endpoint and listen-address needs upfront."""
+
+    def args(self, **overrides):
+        defaults = {
+            "target": "https://lb.example",
+            "listen_address": "127.0.0.1",
+            "origin_port": 18082,
+        }
+        defaults.update(overrides)
+        return argparse.Namespace(**defaults)
+
+    def test_plan_states_recorder_endpoint_and_target(self):
+        lines = lab.run_plan_lines(self.args())
+        text = "\n".join(lines)
+        self.assertIn("Recorder endpoint: 127.0.0.1:18082", text)
+        self.assertIn("Target under test: https://lb.example", text)
+
+    def test_default_listen_address_warns_about_remote_targets(self):
+        text = "\n".join(lab.run_plan_lines(self.args()))
+        self.assertIn("--listen-address <an isolated lab interface IP>", text)
+
+    def test_explicit_listen_address_does_not_warn(self):
+        text = "\n".join(
+            lab.run_plan_lines(self.args(listen_address="192.168.2.10"))
+        )
+        self.assertNotIn("--listen-address", text.replace("Recorder endpoint:", ""))
+
+    def test_direct_runs_say_no_lb_is_tested(self):
+        text = "\n".join(lab.run_plan_lines(self.args(target=None)))
+        self.assertIn("No --target", text)
+        self.assertIn("no LB/WAAP is tested", text)
+
+    def test_list_advertises_origin_port_and_guidance(self):
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            self.assertEqual(lab.main(["list"]), 0)
+        catalog_out = json.loads(stdout.getvalue())
+        self.assertEqual(catalog_out["origin_port"], 18082)
+        self.assertIn("--listen-address", catalog_out["listen_address_guidance"])
 
 
 if __name__ == "__main__":
