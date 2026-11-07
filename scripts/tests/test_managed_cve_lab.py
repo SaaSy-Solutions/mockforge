@@ -1,13 +1,16 @@
 """Managed lab verdict and lifecycle contracts; no container engine required."""
 
+import argparse
 import contextlib
 import importlib.util
 import io
 import json
 from pathlib import Path
+import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 from unittest.mock import patch
 
@@ -47,7 +50,7 @@ class LifecycleTests(unittest.TestCase):
                     )
 
     def test_cleanup_removes_owned_container_only(self):
-        with patch.object(
+        with patch.object(engine, "doctor"), patch.object(
             engine,
             "command",
             side_effect=[
@@ -70,7 +73,7 @@ class LifecycleTests(unittest.TestCase):
                 engine.owned_remove("docker", "container", "our-run")
 
     def test_cleanup_failed_inspect_of_existing_container_is_not_absence(self):
-        with patch.object(
+        with patch.object(engine, "doctor"), patch.object(
             engine,
             "command",
             side_effect=[completed(returncode=1), completed("container\n")],
@@ -123,7 +126,7 @@ class LifecycleTests(unittest.TestCase):
                 engine, "owned_remove"
             ) as remove:
                 with self.assertRaisesRegex(RuntimeError, "client failed"):
-                    with engine.lab("docker", "our-run", Path(directory)):
+                    with engine.lab("docker", "our-run", Path(directory), catalog.PACKS[catalog.CVE]):
                         raise RuntimeError("client failed")
             remove.assert_called_once_with("docker", "mockforge-cve-our-run", "our-run")
             self.assertEqual(
@@ -176,8 +179,8 @@ class InputTests(unittest.TestCase):
 
 class VerdictTests(unittest.TestCase):
     def setUp(self):
-        self.baseline = {"status": 200, "dashboard": True}
-        self.target = {"token": "attack", "status": 403, "dashboard": False}
+        self.baseline = {"status": 200, "marker": True}
+        self.target = {"token": "attack", "status": 403, "marker": False}
         self.before = {
             "token": "before",
             "status": 200,
@@ -197,17 +200,20 @@ class VerdictTests(unittest.TestCase):
         ]
 
     def verdict(self):
+        return self.outcome()[0]
+
+    def outcome(self):
         return evidence.classify(
             self.baseline, self.target, self.before, self.after, self.records, 403
-        )[0]
+        )
 
     def test_correlated_controls_and_blocked_signature_pass(self):
         self.assertEqual(self.verdict(), "pass")
 
     def test_baseline_must_demonstrate_vulnerability(self):
         for baseline in (
-            {"status": 403, "dashboard": True},
-            {"status": 200, "dashboard": False},
+            {"status": 403, "marker": True},
+            {"status": 200, "marker": False},
         ):
             with self.subTest(baseline=baseline):
                 self.baseline = baseline
@@ -255,6 +261,319 @@ class VerdictTests(unittest.TestCase):
     def test_origin_error_on_root_control_is_inconclusive(self):
         self.records[1]["status"] = 502
         self.assertEqual(self.verdict(), "inconclusive")
+
+class PackRegistryTests(unittest.TestCase):
+    """Pack data drives the runner; the reviewed pack stays byte-compatible."""
+
+    def test_legacy_exports_match_the_shipped_pack(self):
+        self.assertEqual(catalog.CVE, "CVE-2025-29927")
+        self.assertEqual(catalog.CATALOG, catalog.PACKS[catalog.CVE]["catalog"])
+        self.assertEqual(
+            catalog.SIGNATURE,
+            catalog.PACKS[catalog.CVE]["probe"]["headers"]["x-middleware-subrequest"],
+        )
+
+    def test_shipped_pack_carries_runner_config(self):
+        pack = catalog.PACKS["CVE-2025-29927"]
+        for key in ("catalog", "probe", "app"):
+            self.assertIn(key, pack)
+        self.assertEqual(pack["app"]["port"], "3000/tcp")
+        self.assertEqual(pack["app"]["readiness"], {"path": "/login", "status": 200})
+
+    def test_template_renders_the_signature_request(self):
+        import cve_lab_nuclei as nuclei
+
+        text = nuclei.template(catalog.PACKS["CVE-2025-29927"], "run1-baseline")
+        self.assertIn("id: mockforge-nextjs-29927-observation", text)
+        self.assertIn("method: GET", text)
+        self.assertIn('X-Mockforge-Cve: "run1-baseline"', text)
+        self.assertIn("x-middleware-subrequest: \"middleware:", text)
+        self.assertIn("__mockforge_cve=run1-baseline", text)
+
+    def test_template_renders_post_bodies_for_body_packs(self):
+        import copy
+
+        import cve_lab_nuclei as nuclei
+
+        synthetic = copy.deepcopy(catalog.PACKS["CVE-2025-29927"])
+        synthetic["probe"].update(
+            {
+                "template_id": "mockforge-synthetic-observation",
+                "template_name": "MockForge synthetic observation",
+                "method": "POST",
+                "body": "<?php echo '{token}';?>",
+            }
+        )
+        text = nuclei.template(synthetic, "tok")
+        self.assertIn("method: POST", text)
+        self.assertIn("<?php echo 'tok';?>", text)
+        self.assertIn("id: mockforge-synthetic-observation", text)
+
+    def test_prepare_pulls_only_the_packs_pinned_images(self):
+        pack = catalog.PACKS["CVE-2025-29927"]
+        images = (
+            pack["catalog"]["application_image"],
+            pack["catalog"]["runner_image"],
+        )
+        with patch.object(engine, "doctor"), patch.object(
+            engine,
+            "command",
+            side_effect=[
+                completed(returncode=1),
+                completed(),
+                completed(),
+                completed(returncode=1),
+                completed(),
+                completed(),
+            ],
+        ) as command:
+            engine.prepare("docker", pack)
+        pulled = [
+            call.args[0] for call in command.call_args_list if call.args[0][1] == "pull"
+        ]
+        self.assertEqual(pulled, [["docker", "pull", images[0]], ["docker", "pull", images[1]]])
+
+
+class TransportForwardingTests(unittest.TestCase):
+    """The recorder forwards GET and POST with bodies on owned loopback ports."""
+
+    def setUp(self):
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+        seen = []
+
+        class Backend(BaseHTTPRequestHandler):
+            def _reply(self):
+                length = int(self.headers.get("Content-Length") or 0)
+                body = self.rfile.read(length) if length else b""
+                seen.append((self.command, self.path, body))
+                self.send_response(201)
+                self.send_header("Content-Length", "2")
+                self.end_headers()
+                self.wfile.write(b"ok")
+
+            do_GET = _reply
+            do_POST = _reply
+
+            def log_message(self, *_args):
+                pass
+
+        self.backend = ThreadingHTTPServer(("127.0.0.1", 0), Backend)
+        threading.Thread(target=self.backend.serve_forever, daemon=True).start()
+        self.backend_port = self.backend.server_address[1]
+        self.seen = seen
+
+    def tearDown(self):
+        self.backend.shutdown()
+        self.backend.server_close()
+
+    @contextlib.contextmanager
+    def recorder(self):
+        with socket.socket() as reservation:
+            reservation.bind(("127.0.0.1", 0))
+            port = reservation.getsockname()[1]
+        records = []
+        with transport.receiver(
+            port, "127.0.0.1", f"http://127.0.0.1:{self.backend_port}"
+        ) as records:
+            yield f"http://127.0.0.1:{port}", records
+
+    def test_get_requests_are_forwarded_and_observed(self):
+        with self.recorder() as (base, records):
+            status, _headers, body = transport.request(
+                base,
+                "/login?__mockforge_cve=tok1",
+                {"X-Mockforge-Cve": "tok1"},
+            )
+        self.assertEqual(status, 201)
+        self.assertEqual(body, b"ok")
+        self.assertEqual(self.seen[0][0], "GET")
+        self.assertEqual(records[0]["method"], "GET")
+        self.assertIn("tok1", records[0]["tokens"])
+
+    def test_post_bodies_are_forwarded_and_observed(self):
+        with self.recorder() as (base, records):
+            status, _headers, body = transport.request(
+                base,
+                "/?%ADd+auto_prepend_file%3Dphp://input&__mockforge_cve=tok2",
+                {"X-MockForge-Cve": "tok2"},
+                method="POST",
+                body=b"<?php echo 'tok2';?>",
+            )
+        self.assertEqual(status, 201)
+        self.assertEqual(body, b"ok")
+        self.assertEqual(self.seen[0][0], "POST")
+        self.assertEqual(self.seen[0][2], b"<?php echo 'tok2';?>")
+        self.assertEqual(records[0]["method"], "POST")
+        self.assertIn("tok2", records[0]["tokens"])
+
+    def test_oversized_post_bodies_are_rejected(self):
+        import http.client as http_client
+
+        with patch.object(transport, "MAX_FORWARDED_BODY", 8), self.recorder() as (
+            base,
+            _records,
+        ):
+            url = transport.target_url(base)
+            connection = http_client.HTTPConnection(url.hostname, url.port, timeout=5)
+            try:
+                connection.putrequest("POST", "/?__mockforge_cve=tok3")
+                connection.putheader("Content-Length", "16")
+                connection.endheaders(message_body=b"0123456789abcdef")
+                response = connection.getresponse()
+                self.assertEqual(response.status, 413)
+            finally:
+                connection.close()
+        # The recorder refused before forwarding anything to the backend.
+        self.assertEqual(self.seen, [])
+
+
+
+class VerdictDescriptionTests(unittest.TestCase):
+    """Reports state exposed / not exposed plainly, with per-check detail."""
+
+    def setUp(self):
+        super().setUp()
+        self.base_report = {
+            "verdict": "pass",
+            "reason": "expected rejection with no correlated origin request and healthy controls",
+            "target": "https://lb.example",
+            "pack": {"cve": "CVE-2025-29927"},
+            "evidence_checks": [
+                {"check": "direct baseline reproduces the vulnerability", "outcome": "ok"},
+                {"check": "signature request was blocked at the target", "outcome": "ok"},
+            ],
+        }
+
+    def test_pass_says_not_exposed_with_target_and_cve(self):
+        text = evidence.describe(self.base_report)
+        self.assertIn("https://lb.example is NOT exposed to CVE-2025-29927", text)
+        self.assertIn("pass: ", text)
+        self.assertIn("Reason: expected rejection", text)
+
+    def test_fail_says_exposed_with_reason_and_details(self):
+        self.base_report.update(
+            verdict="fail",
+            reason="signature request reached the origin; blocking assertion failed",
+            evidence_checks=[
+                {"check": "direct baseline reproduces the vulnerability", "outcome": "ok"},
+                {
+                    "check": "signature request was blocked at the target",
+                    "outcome": "not satisfied, reached the origin with status 200",
+                },
+            ],
+        )
+        text = evidence.describe(self.base_report)
+        self.assertIn("https://lb.example is EXPOSED to CVE-2025-29927", text)
+        self.assertIn("attack traffic reached your origin", text)
+        self.assertIn("reached the origin with status 200", text)
+
+    def test_inconclusive_defers_the_exposure_judgment(self):
+        self.base_report.update(verdict="inconclusive", reason="benign controls did not corroborate origin reachability")
+        text = evidence.describe(self.base_report)
+        self.assertIn("no exposure determination could be made for https://lb.example", text)
+
+    def test_baseline_confirmed_mentions_no_lb_was_tested(self):
+        report = {"verdict": "baseline-confirmed", "reason": "Direct lab reproduction only; no LB tested", "pack": {"cve": "CVE-2025-29927"}}
+        text = evidence.describe(report)
+        self.assertIn("no LB/WAAP was tested", text)
+        self.assertIn("no exposure determination was made", text)
+
+    def test_direct_runs_use_the_lab_application_placeholder(self):
+        report = {"verdict": "pass", "reason": "r", "pack": {"cve": "CVE-2025-29927"}}
+        self.assertIn("the direct lab application is NOT exposed", evidence.describe(report))
+
+
+class EvidenceCheckTests(unittest.TestCase):
+    """classify() records each assertion so reports can show the deciding check."""
+
+    def setUp(self):
+        self.baseline = {"status": 200, "marker": True}
+        self.target = {"token": "attack", "status": 403, "marker": False}
+        self.before = {
+            "token": "before",
+            "status": 200,
+            "root_token": "before-root",
+            "root_status": 307,
+        }
+        self.after = {
+            "token": "after",
+            "status": 200,
+            "root_token": "after-root",
+            "root_status": 307,
+        }
+        self.records = [
+            {"tokens": [control[key]], "status": status}
+            for control in (self.before, self.after)
+            for key, status in (("token", 200), ("root_token", 307))
+        ]
+
+    def outcome(self):
+        return evidence.classify(
+            self.baseline, self.target, self.before, self.after, self.records, 403
+        )
+
+    def test_pass_records_every_check_ok(self):
+        _verdict, _reason, checks = self.outcome()
+        self.assertTrue(all(check["outcome"] == "ok" for check in checks))
+        names = [check["check"] for check in checks]
+        self.assertIn("direct baseline reproduces the vulnerability", names)
+        self.assertIn("signature request was blocked at the target", names)
+
+    def test_fail_names_the_origin_reach_with_status(self):
+        self.records.append({"tokens": ["attack"], "status": 200})
+        _verdict, _reason, checks = self.outcome()
+        blocked = [check for check in checks if check["check"] == "signature request was blocked at the target"]
+        self.assertEqual(len(blocked), 1)
+        self.assertIn("status 200", blocked[0]["outcome"])
+
+    def test_short_circuit_stops_at_the_first_failed_check(self):
+        self.baseline = {"status": 403, "marker": True}
+        _verdict, _reason, checks = self.outcome()
+        self.assertEqual(len(checks), 1)
+
+
+
+class RunPlanTests(unittest.TestCase):
+    """The run plan states the recorder endpoint and listen-address needs upfront."""
+
+    def args(self, **overrides):
+        defaults = {
+            "target": "https://lb.example",
+            "listen_address": "127.0.0.1",
+            "origin_port": 18082,
+        }
+        defaults.update(overrides)
+        return argparse.Namespace(**defaults)
+
+    def test_plan_states_recorder_endpoint_and_target(self):
+        lines = lab.run_plan_lines(self.args())
+        text = "\n".join(lines)
+        self.assertIn("Recorder endpoint: 127.0.0.1:18082", text)
+        self.assertIn("Target under test: https://lb.example", text)
+
+    def test_default_listen_address_warns_about_remote_targets(self):
+        text = "\n".join(lab.run_plan_lines(self.args()))
+        self.assertIn("--listen-address <an isolated lab interface IP>", text)
+
+    def test_explicit_listen_address_does_not_warn(self):
+        text = "\n".join(
+            lab.run_plan_lines(self.args(listen_address="192.168.2.10"))
+        )
+        self.assertNotIn("--listen-address", text.replace("Recorder endpoint:", ""))
+
+    def test_direct_runs_say_no_lb_is_tested(self):
+        text = "\n".join(lab.run_plan_lines(self.args(target=None)))
+        self.assertIn("No --target", text)
+        self.assertIn("no LB/WAAP is tested", text)
+
+    def test_list_advertises_origin_port_and_guidance(self):
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            self.assertEqual(lab.main(["list"]), 0)
+        catalog_out = json.loads(stdout.getvalue())
+        self.assertEqual(catalog_out["origin_port"], 18082)
+        self.assertIn("--listen-address", catalog_out["listen_address_guidance"])
 
 
 
@@ -326,6 +645,7 @@ class TlsVerifyTests(unittest.TestCase):
     def test_probe_adds_insecure_only_when_opted_in(self):
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory)
+            pack = catalog.PACKS[catalog.CVE]
             findings = json.dumps(
                 {
                     "template-id": "mockforge-nextjs-29927-observation",
@@ -337,13 +657,21 @@ class TlsVerifyTests(unittest.TestCase):
                 "command",
                 return_value=completed(stdout=f"{findings}\n"),
             ) as command:
-                nuclei.probe("docker", "http://127.0.0.1:1", output, "baseline", "run1")
+                nuclei.probe(
+                    "docker", "http://127.0.0.1:1", output, "baseline", "run1", pack
+                )
                 args = command.call_args.args[0]
                 self.assertNotIn("-insecure", args)
 
                 command.reset_mock()
                 nuclei.probe(
-                    "docker", "http://127.0.0.1:1", output, "baseline", "run1", insecure=True
+                    "docker",
+                    "http://127.0.0.1:1",
+                    output,
+                    "baseline",
+                    "run1",
+                    pack,
+                    insecure=True,
                 )
                 self.assertIn("-insecure", command.call_args.args[0])
 

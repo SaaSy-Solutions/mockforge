@@ -2,7 +2,6 @@
 
 import http.client
 import ssl
-import ssl
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import hashlib
 import threading
@@ -42,7 +41,7 @@ def unverified_context():
     return context
 
 
-def request(base, path, headers=None, context=None):
+def request(base, path, headers=None, method="GET", body=None, context=None):
     url = target_url(base)
     options = {"timeout": 5}
     if url.scheme == "https":
@@ -53,14 +52,17 @@ def request(base, path, headers=None, context=None):
         cls = http.client.HTTPConnection
     conn = cls(url.hostname, url.port, **options)
     try:
-        conn.request("GET", path, headers=headers or {})
+        conn.request(method, path, body=body, headers=headers or {})
         response = conn.getresponse()
-        body = response.read(2 * 1024 * 1024 + 1)
-        if len(body) > 2 * 1024 * 1024:
+        payload = response.read(2 * 1024 * 1024 + 1)
+        if len(payload) > 2 * 1024 * 1024:
             raise ValueError("response exceeds 2 MiB")
-        return response.status, response.getheaders(), body
+        return response.status, response.getheaders(), payload
     finally:
         conn.close()
+
+
+MAX_FORWARDED_BODY = 2 * 1024 * 1024
 
 
 @contextmanager
@@ -69,25 +71,39 @@ def receiver(port, address, backend):
     lock = threading.Lock()
 
     class Handler(BaseHTTPRequestHandler):
-        def do_GET(self):
+        def _forward(self):
             token = parse_qs(urlsplit(self.path).query).get("__mockforge_cve", [None])[
                 0
             ]
             header = self.headers.get("X-Mockforge-Cve")
             observation = {
+                "method": self.command,
                 "path": self.path,
                 "tokens": [token, header],
                 "signature": self.headers.get("x-middleware-subrequest"),
             }
             with lock:
                 records.append(observation)
+            body = None
+            if self.command == "POST":
+                length = int(self.headers.get("Content-Length") or 0)
+                if length < 0 or length > MAX_FORWARDED_BODY:
+                    self.send_error(413)
+                    return
+                body = self.rfile.read(length) if length else None
             try:
                 headers = {
                     k: v
                     for k, v in self.headers.items()
                     if k.lower() not in ("host", "connection", "accept-encoding")
                 }
-                status, response_headers, body = request(backend, self.path, headers)
+                status, response_headers, payload = request(
+                    backend,
+                    self.path,
+                    headers,
+                    method=self.command,
+                    body=body,
+                )
                 observation["status"] = status
                 self.send_response(status)
                 for name, value in response_headers:
@@ -97,12 +113,18 @@ def receiver(port, address, backend):
                         "content-length",
                     ):
                         self.send_header(name, value)
-                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Content-Length", str(len(payload)))
                 self.end_headers()
-                self.wfile.write(body)
+                self.wfile.write(payload)
             except (OSError, ValueError, http.client.HTTPException) as exc:
                 observation["error"] = str(exc)
                 self.send_error(502)
+
+        def do_GET(self):
+            self._forward()
+
+        def do_POST(self):
+            self._forward()
 
         def log_message(self, *_args):
             pass
