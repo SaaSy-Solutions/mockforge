@@ -13,7 +13,7 @@
 
 use mockforge_http::management_auth::MANAGEMENT_TOKEN_HEADER;
 use mockforge_test::MockForgeServer;
-use reqwest::Client;
+use reqwest::{Client, StatusCode};
 use serde_json::json;
 use std::time::Duration;
 
@@ -42,39 +42,124 @@ async fn test_rust_sdk_integration() {
     // hardcoded `admin_port = 9080` only "passed" because it silently hit
     // an unrelated mockforge instance that happened to listen on 9080.
     let http_port = server.http_port();
-    let admin_port = http_port;
+    let base = format!("http://127.0.0.1:{http_port}");
+    let token = server.management_token();
     let client = Client::new();
 
-    // Simulate Rust SDK usage: create stub programmatically
+    // Simulate Rust SDK usage: create stub programmatically. `status_code`
+    // is a top-level field on the mock config; a `status` key nested inside
+    // `response` is ignored by the server, so the tests below assert the
+    // configured status end-to-end to prove the config really took effect.
     let stub_response = client
-        .post(format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
-        .header(MANAGEMENT_TOKEN_HEADER, server.management_token())
+        .post(format!("{base}/__mockforge/api/mocks"))
+        .header(MANAGEMENT_TOKEN_HEADER, token)
         .json(&json!({
             "path": "/api/rust-sdk-test",
             "method": "GET",
             "response": {
-                "status": 200,
                 "body": {"sdk": "rust", "embedded": true}
-            }
+            },
+            "status_code": 201
         }))
         .send()
         .await
         .expect("Failed to create stub");
 
-    assert!(stub_response.status().is_success() || stub_response.status().as_u16() == 201);
+    assert_eq!(
+        stub_response.status(),
+        StatusCode::CREATED,
+        "stub creation must return 201 Created"
+    );
+    let created: serde_json::Value =
+        stub_response.json().await.expect("Created stub must be JSON");
+    let mock_id = created["id"]
+        .as_str()
+        .expect("Created stub must have an ID")
+        .to_string();
 
-    // Verify stub works
+    // Decisive roundtrip (#1281): the stub must now be served on the HTTP
+    // port with its exact configured status and body. These assertions are
+    // unconditional — a silently dropped stub must fail here, not be skipped.
     let response = client
-        .get(format!("http://localhost:{}/api/rust-sdk-test", http_port))
+        .get(format!("{base}/api/rust-sdk-test"))
         .send()
         .await
         .expect("Failed to make request");
+    assert_eq!(
+        response.status(),
+        StatusCode::CREATED,
+        "dynamic mock must be served on the HTTP port right after creation"
+    );
+    let body: serde_json::Value = response.json().await.expect("Failed to parse JSON");
+    assert_eq!(body, json!({"sdk": "rust", "embedded": true}));
 
-    if response.status().is_success() {
-        let body: serde_json::Value = response.json().await.expect("Failed to parse JSON");
-        assert_eq!(body["sdk"], "rust");
-        assert_eq!(body["embedded"], true);
-    }
+    // CRUD read: the created stub must appear in the management list.
+    let list_response = client
+        .get(format!("{base}/__mockforge/api/mocks"))
+        .header(MANAGEMENT_TOKEN_HEADER, token)
+        .send()
+        .await
+        .expect("Failed to list mocks");
+    assert!(list_response.status().is_success(), "listing mocks must succeed");
+    let listed: serde_json::Value = list_response.json().await.expect("Mock list must be JSON");
+    let ids: Vec<&str> = listed["mocks"]
+        .as_array()
+        .expect("Mock list must have a mocks array")
+        .iter()
+        .filter_map(|m| m["id"].as_str())
+        .collect();
+    assert!(
+        ids.contains(&mock_id.as_str()),
+        "created mock {mock_id} must appear in the management list"
+    );
+
+    // CRUD update: switch the status code and verify it on the wire.
+    let mut updated = created.clone();
+    updated["status_code"] = json!(202);
+    let update_response = client
+        .put(format!("{base}/__mockforge/api/mocks/{mock_id}"))
+        .header(MANAGEMENT_TOKEN_HEADER, token)
+        .json(&updated)
+        .send()
+        .await
+        .expect("Failed to update stub");
+    assert!(update_response.status().is_success(), "stub update must succeed");
+    let response = client
+        .get(format!("{base}/api/rust-sdk-test"))
+        .send()
+        .await
+        .expect("Failed to make request after update");
+    assert_eq!(
+        response.status(),
+        StatusCode::ACCEPTED,
+        "updated status_code must be reflected on the wire"
+    );
+
+    // CRUD delete: the stub must stop being served. This also proves the
+    // assertions above can detect absence — they are not vacuously green.
+    let delete_response = client
+        .delete(format!("{base}/__mockforge/api/mocks/{mock_id}"))
+        .header(MANAGEMENT_TOKEN_HEADER, token)
+        .send()
+        .await
+        .expect("Failed to delete stub");
+    assert_eq!(
+        delete_response.status(),
+        StatusCode::NO_CONTENT,
+        "stub deletion must return 204 No Content"
+    );
+    let response = client
+        .get(format!("{base}/api/rust-sdk-test"))
+        .send()
+        .await
+        .expect("Failed to make request after delete");
+    let after_delete: serde_json::Value =
+        response.json().await.ok().unwrap_or(serde_json::Value::Null);
+    assert_ne!(
+        after_delete,
+        json!({"sdk": "rust", "embedded": true}),
+        "deleted mock must stop being served"
+    );
 
     server.stop().expect("Failed to stop server");
 }
@@ -405,39 +490,52 @@ async fn test_sdk_common_functionality() {
     // Test stub creation (all SDKs use this) — use the HTTP port for the
     // management API (no auth required there).
     let stub_response = client
-        .post(format!("http://localhost:{}/__mockforge/api/mocks", http_port))
+        .post(format!("http://127.0.0.1:{http_port}/__mockforge/api/mocks"))
         .header(MANAGEMENT_TOKEN_HEADER, server.management_token())
         .json(&json!({
             "path": "/api/common-test",
             "method": "GET",
             "response": {
-                "status": 200,
                 "body": {"test": "common"}
-            }
+            },
+            "status_code": 200
         }))
         .send()
         .await
         .expect("Failed to create stub");
 
-    let status = stub_response.status();
-    let body = stub_response.text().await.unwrap_or_default();
-    assert!(
-        status.is_success() || status.as_u16() == 201,
-        "stub POST returned {} body={}",
-        status,
-        body
+    assert_eq!(
+        stub_response.status(),
+        StatusCode::CREATED,
+        "stub POST must return 201 Created"
     );
+    let created: serde_json::Value =
+        stub_response.json().await.expect("Created stub must be JSON");
+    let mock_id = created["id"]
+        .as_str()
+        .expect("Created stub must have an ID")
+        .to_string();
 
-    // Test stub retrieval (all SDKs use this)
-    let get_stub_response = client
-        .get(format!("http://localhost:{}/__mockforge/api/mocks", http_port))
+    // Test stub retrieval (all SDKs use this) — the created stub must be
+    // listed; a dropped stub (#1281) must fail here rather than skip the check.
+    let list_response = client
+        .get(format!("http://127.0.0.1:{http_port}/__mockforge/api/mocks"))
         .header(MANAGEMENT_TOKEN_HEADER, server.management_token())
         .send()
-        .await;
-
-    if let Ok(resp) = get_stub_response {
-        assert!(resp.status().is_success() || resp.status().as_u16() == 404);
-    }
+        .await
+        .expect("Failed to list mocks");
+    assert!(list_response.status().is_success(), "listing mocks must succeed");
+    let listed: serde_json::Value = list_response.json().await.expect("Mock list must be JSON");
+    let ids: Vec<&str> = listed["mocks"]
+        .as_array()
+        .expect("Mock list must have a mocks array")
+        .iter()
+        .filter_map(|m| m["id"].as_str())
+        .collect();
+    assert!(
+        ids.contains(&mock_id.as_str()),
+        "created mock {mock_id} must appear in the management list"
+    );
 
     server.stop().expect("Failed to stop server");
 }
