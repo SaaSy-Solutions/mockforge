@@ -1,6 +1,8 @@
 """Managed CVE lab transport operations."""
 
 import http.client
+import ssl
+import ssl
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import hashlib
 import threading
@@ -28,14 +30,28 @@ def target_url(value):
     return url
 
 
-def request(base, path, headers=None):
+def unverified_context():
+    """Explicit opt-in context for self-signed test certificates.
+
+    Mirrors the CLI's --skip-tls-verify option: callers must pass this
+    deliberately; the default request path verifies certificates.
+    """
+    context = ssl.create_default_context()
+    context.check_hostname = False
+    context.verify_mode = ssl.CERT_NONE
+    return context
+
+
+def request(base, path, headers=None, context=None):
     url = target_url(base)
-    cls = (
-        http.client.HTTPSConnection
-        if url.scheme == "https"
-        else http.client.HTTPConnection
-    )
-    conn = cls(url.hostname, url.port, timeout=5)
+    options = {"timeout": 5}
+    if url.scheme == "https":
+        cls = http.client.HTTPSConnection
+        # HTTPSConnection only; HTTPConnection has no context parameter.
+        options["context"] = context
+    else:
+        cls = http.client.HTTPConnection
+    conn = cls(url.hostname, url.port, **options)
     try:
         conn.request("GET", path, headers=headers or {})
         response = conn.getresponse()
@@ -110,14 +126,14 @@ def receiver(port, address, backend):
         thread.join(timeout=6)
 
 
-def control(base, run_id, phase):
+def control(base, run_id, phase, context=None):
     token = f"{run_id}-{phase}-{uuid.uuid4().hex}"
     status, _headers, body = request(
-        base, f"/login?__mockforge_cve={token}", {"X-Mockforge-Cve": token}
+        base, f"/login?__mockforge_cve={token}", {"X-Mockforge-Cve": token}, context=context
     )
     root_token = token + "-root"
     root_status = request(
-        base, f"/?__mockforge_cve={root_token}", {"X-Mockforge-Cve": root_token}
+        base, f"/?__mockforge_cve={root_token}", {"X-Mockforge-Cve": root_token}, context=context
     )[0]
     return {
         "token": token,
