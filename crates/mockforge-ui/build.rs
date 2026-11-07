@@ -54,7 +54,10 @@ fn main() {
     if let Err(e) = vergen::EmitBuilder::builder().build_timestamp().git_sha(true).emit() {
         println!("cargo:warning=Failed to generate version info: {}", e);
     }
-    println!("cargo:rerun-if-changed=ui/build.rs");
+    // Watch the build script itself by its real path (the crate root, not
+    // `ui/`). A nonexistent watched path makes cargo mark this unit stale
+    // on every run, rebuilding the crate each check (#1484).
+    println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=ui/src/");
 
     let crate_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
@@ -87,9 +90,13 @@ fn main() {
         println!("cargo:warning=UI build script not found, using fallback files from public/");
     }
 
-    println!("cargo:rerun-if-changed={}", ui_dist_path.join("index.html").display());
-    println!("cargo:rerun-if-changed={}", ui_dist_path.join("manifest.json").display());
-    println!("cargo:rerun-if-changed={}", ui_dist_path.join("assets").display());
+    // Watch the dist directory itself rather than its children: in the
+    // fallback layout (no built frontend) `index.html`, `manifest.json`
+    // and `assets/` don't exist yet, and watching a missing path dirties
+    // the fingerprint on every run (#1484). Cargo scans watched
+    // directories recursively, so a later frontend build still reruns
+    // this script.
+    println!("cargo:rerun-if-changed={}", ui_dist_path.display());
     println!("cargo:rerun-if-changed={}", ui_public_path.join("manifest.json").display());
     println!("cargo:rerun-if-changed={}", ui_public_path.join("sw.js").display());
 
