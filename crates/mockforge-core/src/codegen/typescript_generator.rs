@@ -709,3 +709,308 @@ if (require.main === module) {{
         config.port.unwrap_or(3000)
     )
 }
+
+#[cfg(test)]
+mod typescript_generator_tests {
+    use super::*;
+    use serde_json::json;
+
+    /// Build a spec whose components hold the given schemas.
+    fn spec_with_components(components: serde_json::Value) -> OpenApiSpec {
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": {"title": "Fixture API", "version": "1.0.0"},
+            "paths": {},
+            "components": components,
+        });
+        OpenApiSpec::from_json(spec_json).expect("valid fixture spec")
+    }
+
+    /// Build a one-operation spec for the given method and path.
+    fn fixture_spec(method: &str, path: &str, operation: serde_json::Value) -> OpenApiSpec {
+        let mut path_item = serde_json::Map::new();
+        path_item.insert(method.to_lowercase(), operation);
+        let mut paths = serde_json::Map::new();
+        paths.insert(path.to_string(), serde_json::Value::Object(path_item));
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": {"title": "Fixture API", "version": "1.0.0"},
+            "paths": paths,
+        });
+        OpenApiSpec::from_json(spec_json).expect("valid fixture spec")
+    }
+
+    fn generated_code(spec: &OpenApiSpec, config: &CodegenConfig) -> String {
+        generate(spec, config).expect("code generation succeeds")
+    }
+
+    fn schema_named<'a>(spec: &'a OpenApiSpec, name: &str) -> &'a Schema {
+        match spec.schemas().expect("components present").get(name) {
+            Some(ReferenceOr::Item(schema)) => schema,
+            _ => panic!("schema {name} not found as an inline item"),
+        }
+    }
+
+    fn route(method: &str, path: &str, operation_id: Option<&str>) -> RouteInfo {
+        RouteInfo {
+            method: method.to_string(),
+            path: path.to_string(),
+            operation_id: operation_id.map(str::to_string),
+            path_params: Vec::new(),
+            query_params: Vec::new(),
+            request_body_schema: None,
+            response_schema: None,
+            response_example: None,
+            response_status: 200,
+        }
+    }
+
+    // ─── Type mapping ───────────────────────────────────────────────────────
+
+    #[test]
+    fn primitive_type_mappings() {
+        let spec = spec_with_components(json!({"schemas": {
+            "AString": {"type": "string"},
+            "AnInteger": {"type": "integer"},
+            "ANumber": {"type": "number"},
+            "ABoolean": {"type": "boolean"},
+        }}));
+        assert_eq!(
+            schema_to_typescript_type(schema_named(&spec, "AString"), &spec).unwrap(),
+            "string"
+        );
+        assert_eq!(
+            schema_to_typescript_type(schema_named(&spec, "AnInteger"), &spec).unwrap(),
+            "number"
+        );
+        assert_eq!(
+            schema_to_typescript_type(schema_named(&spec, "ANumber"), &spec).unwrap(),
+            "number"
+        );
+        assert_eq!(
+            schema_to_typescript_type(schema_named(&spec, "ABoolean"), &spec).unwrap(),
+            "boolean"
+        );
+    }
+
+    #[test]
+    fn array_type_mappings() {
+        let spec = spec_with_components(json!({"schemas": {
+            "StringList": {"type": "array", "items": {"type": "string"}},
+            "PetList": {"type": "array", "items": {"$ref": "#/components/schemas/Pet"}},
+            "FreeList": {"type": "array"},
+        }}));
+        assert_eq!(
+            schema_to_typescript_type(schema_named(&spec, "StringList"), &spec).unwrap(),
+            "string[]"
+        );
+        // References map to the sanitized type name, not an inline shape.
+        assert_eq!(
+            schema_to_typescript_type(schema_named(&spec, "PetList"), &spec).unwrap(),
+            "Pet[]"
+        );
+        // Arrays without an item schema degrade to any[].
+        assert_eq!(
+            schema_to_typescript_type(schema_named(&spec, "FreeList"), &spec).unwrap(),
+            "any[]"
+        );
+    }
+
+    #[test]
+    fn inline_object_maps_to_record() {
+        let spec = spec_with_components(json!({"schemas": {
+            "Inline": {"type": "object", "properties": {"id": {"type": "integer"}}},
+        }}));
+        assert_eq!(
+            schema_to_typescript_type(schema_named(&spec, "Inline"), &spec).unwrap(),
+            "Record<string, any>"
+        );
+    }
+
+    // ─── Name sanitization ──────────────────────────────────────────────────
+
+    #[test]
+    fn sanitize_type_name_to_pascal_case() {
+        assert_eq!(sanitize_type_name("user-account"), "UserAccount");
+        assert_eq!(sanitize_type_name("my_schema"), "MySchema");
+        assert_eq!(sanitize_type_name("pet store"), "PetStore");
+        // Already-valid lowercase names get their first character uppercased.
+        assert_eq!(sanitize_type_name("user"), "User");
+        assert_eq!(sanitize_type_name(""), "Unknown");
+    }
+
+    #[test]
+    fn sanitize_property_name_quotes_invalid_identifiers() {
+        assert_eq!(sanitize_property_name("valid_name$1"), "valid_name$1");
+        assert_eq!(sanitize_property_name("weird-name"), "\"weird-name\"");
+        assert_eq!(sanitize_property_name("with space"), "\"with space\"");
+    }
+
+    // ─── Path and naming helpers ────────────────────────────────────────────
+
+    #[test]
+    fn express_path_conversion() {
+        assert_eq!(
+            convert_openapi_path_to_express("/users/{id}", &["id".to_string()]),
+            "/users/:id"
+        );
+        assert_eq!(
+            convert_openapi_path_to_express(
+                "/orgs/{orgId}/repos/{repoId}",
+                &["orgId".to_string(), "repoId".to_string()]
+            ),
+            "/orgs/:orgId/repos/:repoId"
+        );
+        assert_eq!(convert_openapi_path_to_express("/health", &[]), "/health");
+    }
+
+    #[test]
+    fn handler_name_camel_cases_operation_id() {
+        assert_eq!(generate_handler_name(&route("GET", "/users", Some("list-users"))), "listUsers");
+        assert_eq!(
+            generate_handler_name(&route("GET", "/users", Some("get_user_by_id"))),
+            "getUserById"
+        );
+        assert_eq!(
+            generate_handler_name(&route("GET", "/users", Some("users.create"))),
+            "usersCreate"
+        );
+    }
+
+    #[test]
+    fn handler_name_falls_back_to_method_and_path() {
+        // The leading slash becomes a separator, producing a double underscore
+        // between the method and the first segment.
+        assert_eq!(generate_handler_name(&route("GET", "/users/{id}", None)), "get__users_id");
+        assert_eq!(generate_handler_name(&route("POST", "/users", None)), "post__users");
+    }
+
+    // ─── Interface generation ───────────────────────────────────────────────
+
+    #[test]
+    fn interfaces_mark_optional_and_quoted_properties() {
+        let spec = spec_with_components(json!({"schemas": {
+            "Pet": {
+                "type": "object",
+                "required": ["id", "name"],
+                "properties": {
+                    "id": {"type": "integer"},
+                    "name": {"type": "string"},
+                    "nickname": {"type": "string"},
+                    "weird-key": {"type": "string"}
+                }
+            }
+        }}));
+        let code = generated_code(&spec, &CodegenConfig::default());
+        assert!(code.contains("export interface Pet {"));
+        assert!(code.contains("    id: number;\n"));
+        assert!(code.contains("    name: string;\n"));
+        // Optional properties get the `?` marker; names that are not valid
+        // identifiers are quoted.
+        assert!(code.contains("    nickname?: string;\n"));
+        assert!(code.contains("    \"weird-key\"?: string;\n"));
+    }
+
+    #[test]
+    fn cors_middleware_depends_on_config() {
+        let spec = spec_with_components(json!({"schemas": {
+            "Pet": {"type": "object", "properties": {"id": {"type": "integer"}}}
+        }}));
+
+        let enabled = CodegenConfig {
+            enable_cors: true,
+            ..Default::default()
+        };
+        let code = generated_code(&spec, &enabled);
+        assert!(code.contains("Access-Control-Allow-Origin"));
+
+        let disabled = CodegenConfig::default();
+        let code = generated_code(&spec, &disabled);
+        assert!(!code.contains("Access-Control-Allow-Origin"));
+    }
+
+    // ─── Example handling ───────────────────────────────────────────────────
+
+    #[test]
+    fn inline_example_embedded_as_template_literal() {
+        let spec = fixture_spec(
+            "GET",
+            "/pets",
+            json!({
+                "operationId": "listPets",
+                "responses": {"200": {"description": "ok", "content": {"application/json": {
+                    "schema": {"type": "object", "properties": {"id": {"type": "integer"}}},
+                    "example": {"id": 7}
+                }}}}
+            }),
+        );
+        let code = generated_code(&spec, &CodegenConfig::default());
+        assert!(code.contains("JSON.parse(`{\"id\":7}`)"));
+    }
+
+    #[test]
+    fn example_special_characters_escaped_in_template_literal() {
+        // Value contains a backtick, a template interpolation, and a backslash —
+        // all three must be escaped to keep the template literal intact.
+        let spec = fixture_spec(
+            "GET",
+            "/pets",
+            json!({
+                "operationId": "listPets",
+                "responses": {"200": {"description": "ok", "content": {"application/json": {
+                    "example": {"code": "a`b${c}d\\e"}
+                }}}}
+            }),
+        );
+        let code = generated_code(&spec, &CodegenConfig::default());
+        assert!(code.contains(r#"JSON.parse(`{"code":"a\`b\${c}d\\\\e"}`)"#));
+    }
+
+    // ─── Server shape ───────────────────────────────────────────────────────
+
+    #[test]
+    fn routes_registered_with_express_syntax() {
+        let spec = fixture_spec(
+            "GET",
+            "/pets/{id}",
+            json!({
+                "operationId": "getPet",
+                "responses": {"200": {"description": "ok"}}
+            }),
+        );
+        let code = generated_code(&spec, &CodegenConfig::default());
+        assert!(code.contains("this.app.get('/pets/:id', this.handle_getpet.bind(this));"));
+        assert!(code.contains("res.status(200).json("));
+    }
+
+    #[test]
+    fn delay_uses_settimeout_when_configured() {
+        let spec = fixture_spec(
+            "GET",
+            "/pets",
+            json!({"operationId": "listPets", "responses": {"200": {"description": "ok"}}}),
+        );
+        let config = CodegenConfig {
+            default_delay_ms: Some(120),
+            ..Default::default()
+        };
+        let code = generated_code(&spec, &config);
+        assert!(code.contains("setTimeout(resolve, 120)"));
+    }
+
+    #[test]
+    fn configured_port_used_in_class_and_main() {
+        let spec = fixture_spec(
+            "GET",
+            "/pets",
+            json!({"operationId": "listPets", "responses": {"200": {"description": "ok"}}}),
+        );
+        let config = CodegenConfig {
+            port: Some(8081),
+            ..Default::default()
+        };
+        let code = generated_code(&spec, &config);
+        assert!(code.contains("private port: number = 8081;"));
+        assert!(code.contains("new GeneratedMockServer(8081)"));
+    }
+}

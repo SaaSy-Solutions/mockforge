@@ -670,3 +670,418 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 "#
     .to_string()
 }
+
+#[cfg(test)]
+mod rust_generator_tests {
+    use super::*;
+    use serde_json::json;
+
+    /// Build a one-operation spec for the given method and path.
+    fn fixture_spec(method: &str, path: &str, operation: serde_json::Value) -> OpenApiSpec {
+        let mut path_item = serde_json::Map::new();
+        path_item.insert(method.to_lowercase(), operation);
+        let mut paths = serde_json::Map::new();
+        paths.insert(path.to_string(), serde_json::Value::Object(path_item));
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": {"title": "Fixture API", "version": "1.0.0"},
+            "paths": paths,
+        });
+        OpenApiSpec::from_json(spec_json).expect("valid fixture spec")
+    }
+
+    fn get_spec_with_response(responses: serde_json::Value) -> OpenApiSpec {
+        fixture_spec("GET", "/things", json!({"operationId": "listThings", "responses": responses}))
+    }
+
+    fn generated_code(spec: &OpenApiSpec, config: &CodegenConfig) -> String {
+        generate(spec, config).expect("code generation succeeds")
+    }
+
+    fn route(method: &str, path: &str, operation_id: Option<&str>) -> RouteInfo {
+        RouteInfo {
+            method: method.to_string(),
+            path: path.to_string(),
+            operation_id: operation_id.map(str::to_string),
+            path_params: Vec::new(),
+            query_params: Vec::new(),
+            request_body_schema: None,
+            response_schema: None,
+            response_example: None,
+            response_status: 200,
+        }
+    }
+
+    // ─── Path and naming helpers ────────────────────────────────────────────
+
+    #[test]
+    fn extracts_path_parameters_from_braces() {
+        assert_eq!(extract_path_parameters("/users/{id}"), vec!["id"]);
+        assert_eq!(
+            extract_path_parameters("/orgs/{orgId}/repos/{repoId}"),
+            vec!["orgId", "repoId"]
+        );
+        assert!(extract_path_parameters("/users").is_empty());
+        assert!(extract_path_parameters("/health").is_empty());
+    }
+
+    #[test]
+    fn handler_name_sanitizes_operation_id() {
+        assert_eq!(
+            generate_handler_name(&route("GET", "/users", Some("list-users"))),
+            "list_users"
+        );
+        assert_eq!(
+            generate_handler_name(&route("GET", "/users", Some("v1.users.list"))),
+            "v1_users_list"
+        );
+        // Camel-case operation IDs are lowercased wholesale.
+        assert_eq!(generate_handler_name(&route("GET", "/users", Some("getUsers"))), "getusers");
+    }
+
+    #[test]
+    fn handler_name_falls_back_to_method_and_path() {
+        // The leading slash becomes a separator, producing a double underscore
+        // between the method and the first segment.
+        assert_eq!(generate_handler_name(&route("GET", "/users/{id}", None)), "get__users_id");
+        assert_eq!(generate_handler_name(&route("POST", "/users", None)), "post__users");
+    }
+
+    #[test]
+    fn axum_path_conversion() {
+        assert_eq!(format_axum_path("/users/{id}", &["id".to_string()]), "/users/:id");
+        assert_eq!(
+            format_axum_path(
+                "/orgs/{orgId}/repos/{repoId}",
+                &["orgId".to_string(), "repoId".to_string()]
+            ),
+            "/orgs/:orgId/repos/:repoId"
+        );
+        assert_eq!(format_axum_path("/health", &[]), "/health");
+    }
+
+    // ─── Route registration ─────────────────────────────────────────────────
+
+    #[test]
+    fn route_registered_with_axum_path_and_handler() {
+        let spec = fixture_spec(
+            "GET",
+            "/users/{id}",
+            json!({"operationId": "getUser", "responses": {"200": {"description": "ok"}}}),
+        );
+        let code = generated_code(&spec, &CodegenConfig::default());
+        assert!(code.contains(r#".route("/users/:id", get(handle_getuser))"#));
+        // Single path parameter is extracted directly; the trailing comma of
+        // the last extractor is stripped from the signature.
+        assert!(code.contains("Path(id): Path<String>"));
+    }
+
+    // ─── Response selection ─────────────────────────────────────────────────
+
+    #[test]
+    fn success_response_uses_schema_mock_and_status() {
+        let spec = get_spec_with_response(json!({
+            "200": {"description": "ok", "content": {"application/json": {"schema": {
+                "type": "object",
+                "properties": {"count": {"type": "integer"}}
+            }}}}
+        }));
+        let code = generated_code(&spec, &CodegenConfig::default());
+        assert!(code.contains("StatusCode::from_u16(200)"));
+        // Unconstrained integers mock to 42.
+        assert!(code.contains(r#""count": serde_json::json!(42)"#));
+    }
+
+    #[test]
+    fn range_2xx_maps_to_status_200() {
+        let spec = get_spec_with_response(json!({
+            "2XX": {"description": "ok", "content": {"application/json": {"schema": {
+                "type": "boolean"
+            }}}}
+        }));
+        let code = generated_code(&spec, &CodegenConfig::default());
+        assert!(code.contains("StatusCode::from_u16(200)"));
+        assert!(code.contains("serde_json::json!(true)"));
+    }
+
+    #[test]
+    fn non_success_only_falls_back_to_basic_200_response() {
+        let spec = get_spec_with_response(json!({
+            "404": {"description": "missing"}
+        }));
+        let code = generated_code(&spec, &CodegenConfig::default());
+        assert!(code.contains("StatusCode::from_u16(200)"));
+        assert!(code.contains(r#""method": "GET""#));
+        assert!(code.contains(r#""path": "/things""#));
+    }
+
+    #[test]
+    fn response_201_status_is_preserved() {
+        let spec = fixture_spec(
+            "POST",
+            "/things",
+            json!({
+                "operationId": "createThing",
+                "responses": {"201": {"description": "created"}}
+            }),
+        );
+        let code = generated_code(&spec, &CodegenConfig::default());
+        assert!(code.contains("StatusCode::from_u16(201)"));
+    }
+
+    // ─── Example handling ───────────────────────────────────────────────────
+
+    #[test]
+    fn inline_example_embedded_verbatim() {
+        let spec = get_spec_with_response(json!({
+            "200": {"description": "ok", "content": {"application/json": {
+                "schema": {"type": "object", "properties": {"status": {"type": "string"}}},
+                "example": {"status": "active"}
+            }}}
+        }));
+        let code = generated_code(&spec, &CodegenConfig::default());
+        assert!(code.contains(r#"serde_json::from_str("{\"status\":\"active\"}").unwrap()"#));
+    }
+
+    #[test]
+    fn named_examples_map_used_when_no_inline_example() {
+        let spec = get_spec_with_response(json!({
+            "200": {"description": "ok", "content": {"application/json": {
+                "schema": {"type": "object", "properties": {"id": {"type": "integer"}}},
+                "examples": {"first": {"value": {"id": 7}}}
+            }}}
+        }));
+        let code = generated_code(&spec, &CodegenConfig::default());
+        assert!(code.contains(r#"serde_json::from_str("{\"id\":7}").unwrap()"#));
+    }
+
+    #[test]
+    fn example_special_characters_escaped_in_rust_literal() {
+        // Value contains a newline, a double quote, and a backslash — the
+        // generated string literal must escape all three to stay valid Rust.
+        let spec = get_spec_with_response(json!({
+            "200": {"description": "ok", "content": {"application/json": {
+                "example": {"text": "line1\nline2 \"quoted\" C:\\path"}
+            }}}
+        }));
+        let code = generated_code(&spec, &CodegenConfig::default());
+        assert!(code.contains(r#"{\"text\":\"line1\\nline2 \\\"quoted\\\" C:\\\\path\"}"#));
+    }
+
+    #[test]
+    fn defaults_strategy_ignores_examples() {
+        let spec = get_spec_with_response(json!({
+            "200": {"description": "ok", "content": {"application/json": {
+                "schema": {"type": "object", "properties": {"count": {"type": "integer"}}},
+                "example": {"status": "active"}
+            }}}
+        }));
+        let config = CodegenConfig {
+            mock_data_strategy: MockDataStrategy::Defaults,
+            ..Default::default()
+        };
+        let code = generated_code(&spec, &config);
+        assert!(!code.contains("serde_json::from_str"));
+        assert!(!code.contains("active"));
+        assert!(code.contains(r#""count": serde_json::json!(42)"#));
+    }
+
+    // ─── Schema-driven mock values ──────────────────────────────────────────
+
+    #[test]
+    fn schema_enum_uses_first_value() {
+        let spec = get_spec_with_response(json!({
+            "200": {"description": "ok", "content": {"application/json": {"schema": {
+                "type": "object",
+                "properties": {"status": {"type": "string", "enum": ["active", "inactive"]}}
+            }}}}
+        }));
+        let code = generated_code(&spec, &CodegenConfig::default());
+        assert!(code.contains(r#"serde_json::json!("active")"#));
+        assert!(!code.contains("inactive"));
+    }
+
+    #[test]
+    fn integer_constraints_select_mock_values() {
+        let spec = get_spec_with_response(json!({
+            "200": {"description": "ok", "content": {"application/json": {"schema": {
+                "type": "object",
+                "properties": {
+                    "min": {"type": "integer", "minimum": 5},
+                    "capped": {"type": "integer", "maximum": 7},
+                    "free": {"type": "integer"}
+                }
+            }}}}
+        }));
+        let code = generated_code(&spec, &CodegenConfig::default());
+        assert!(code.contains(r#""min": serde_json::json!(5)"#));
+        assert!(code.contains(r#""capped": serde_json::json!(7)"#));
+        assert!(code.contains(r#""free": serde_json::json!(42)"#));
+    }
+
+    #[test]
+    fn string_formats_select_mock_values() {
+        let spec = get_spec_with_response(json!({
+            "200": {"description": "ok", "content": {"application/json": {"schema": {
+                "type": "object",
+                "properties": {
+                    "day": {"type": "string", "format": "date"},
+                    "stamp": {"type": "string", "format": "date-time"},
+                    "plain": {"type": "string"}
+                }
+            }}}}
+        }));
+        let code = generated_code(&spec, &CodegenConfig::default());
+        assert!(code.contains(r#""day": serde_json::json!("2024-01-01")"#));
+        assert!(code.contains(r#""stamp": serde_json::json!("2024-01-01T00:00:00Z")"#));
+        assert!(code.contains(r#""plain": serde_json::json!("mock string")"#));
+    }
+
+    #[test]
+    fn number_and_boolean_defaults() {
+        let spec = get_spec_with_response(json!({
+            "200": {"description": "ok", "content": {"application/json": {"schema": {
+                "type": "object",
+                "properties": {
+                    "ratio": {"type": "number"},
+                    "flag": {"type": "boolean"}
+                }
+            }}}}
+        }));
+        let code = generated_code(&spec, &CodegenConfig::default());
+        assert!(code.contains(r#""ratio": serde_json::json!(3.141592653589793)"#));
+        assert!(code.contains(r#""flag": serde_json::json!(true)"#));
+    }
+
+    #[test]
+    fn nested_object_optional_properties_excluded_below_top_level() {
+        let spec = get_spec_with_response(json!({
+            "200": {"description": "ok", "content": {"application/json": {"schema": {
+                "type": "object",
+                "required": ["profile"],
+                "properties": {
+                    "profile": {
+                        "type": "object",
+                        "required": ["name"],
+                        "properties": {
+                            "name": {"type": "string"},
+                            "nickname": {"type": "string"}
+                        }
+                    }
+                }
+            }}}}
+        }));
+        let code = generated_code(&spec, &CodegenConfig::default());
+        // The nested object only generates required properties.
+        assert!(code.contains(r#""profile": serde_json::json!({"#));
+        assert!(code.contains(r#""name": serde_json::json!("mock string")"#));
+        assert!(!code.contains("nickname"));
+    }
+
+    #[test]
+    fn deep_nesting_capped_at_depth_five() {
+        // Build a chain of six nested objects; the innermost property sits at
+        // depth 6, past the recursion cap, so it must mock to null.
+        fn nested_object_schema(depth: usize) -> serde_json::Value {
+            if depth == 0 {
+                return json!({"type": "string"});
+            }
+            let name = format!("level{depth}");
+            let mut properties = serde_json::Map::new();
+            properties.insert(name.clone(), nested_object_schema(depth - 1));
+            json!({
+                "type": "object",
+                "required": [name],
+                "properties": properties,
+            })
+        }
+        let spec = get_spec_with_response(json!({
+            "200": {"description": "ok", "content": {"application/json": {
+                "schema": nested_object_schema(6)
+            }}}
+        }));
+        let code = generated_code(&spec, &CodegenConfig::default());
+        // Depth 5 still expands into an object; depth 6 collapses to null.
+        assert!(code.contains(r#""level2": serde_json::json!({"#));
+        assert!(code.contains(r#""level1": serde_json::json!(null)"#));
+    }
+
+    // ─── Handler shape ──────────────────────────────────────────────────────
+
+    #[test]
+    fn post_request_body_produces_json_extractor() {
+        let spec = fixture_spec(
+            "POST",
+            "/things",
+            json!({
+                "operationId": "createThing",
+                "requestBody": {"required": true, "content": {"application/json": {"schema": {
+                    "type": "object", "properties": {"name": {"type": "string"}}
+                }}}},
+                "responses": {"201": {"description": "created", "content": {"application/json": {
+                    "schema": {"type": "object", "properties": {"id": {"type": "integer"}}}
+                }}}}
+            }),
+        );
+        let code = generated_code(&spec, &CodegenConfig::default());
+        assert!(code.contains("Json(body): Json<Value>"));
+        assert!(code.contains("StatusCode::from_u16(201)"));
+    }
+
+    #[test]
+    fn multiple_path_params_use_hashmap_extractor() {
+        let spec = fixture_spec(
+            "GET",
+            "/orders/{orderId}/items/{itemId}",
+            json!({
+                "operationId": "getOrderItem",
+                "responses": {"200": {"description": "ok"}}
+            }),
+        );
+        let code = generated_code(&spec, &CodegenConfig::default());
+        assert!(code.contains("Path(params): Path<HashMap<String, String>>"));
+        assert!(
+            code.contains(r#".route("/orders/:orderId/items/:itemId", get(handle_getorderitem))"#)
+        );
+    }
+
+    #[test]
+    fn query_params_produce_query_extractor() {
+        let spec = fixture_spec(
+            "GET",
+            "/things",
+            json!({
+                "operationId": "listThings",
+                "parameters": [
+                    {"name": "limit", "in": "query", "required": false, "schema": {"type": "integer"}}
+                ],
+                "responses": {"200": {"description": "ok"}}
+            }),
+        );
+        let code = generated_code(&spec, &CodegenConfig::default());
+        assert!(code.contains("Query(query): Query<HashMap<String, String>>"));
+    }
+
+    #[test]
+    fn delay_injected_when_configured() {
+        let spec = get_spec_with_response(json!({"200": {"description": "ok"}}));
+        let config = CodegenConfig {
+            default_delay_ms: Some(150),
+            ..Default::default()
+        };
+        let code = generated_code(&spec, &config);
+        assert!(code.contains("tokio::time::sleep(tokio::time::Duration::from_millis(150))"));
+    }
+
+    #[test]
+    fn configured_port_used_in_struct_and_addr() {
+        let spec = get_spec_with_response(json!({"200": {"description": "ok"}}));
+        let config = CodegenConfig {
+            port: Some(9123),
+            ..Default::default()
+        };
+        let code = generated_code(&spec, &config);
+        assert!(code.contains("port: 9123"));
+        assert!(code.contains("SocketAddr::from(([0, 0, 0, 0], 9123))"));
+    }
+}
