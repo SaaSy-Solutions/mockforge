@@ -13,7 +13,7 @@ import time
 import uuid
 from cve_lab_catalog import CATALOG, CVE, PACKS
 from cve_lab_engine import doctor, prepare, lab, cleanup
-from cve_lab_transport import target_url, receiver, control
+from cve_lab_transport import target_url, receiver, control, unverified_context
 from cve_lab_nuclei import probe
 from cve_lab_evidence import classify, describe
 
@@ -61,6 +61,7 @@ def run(args):
         "run_id": run_id,
         "pack": pack["catalog"],
         "target": args.target,
+        "tls_verify": not args.skip_tls_verify,
         "verdict": "inconclusive",
         "runtime_patch_evidence": "unverified",
         "scope": "Selected CVE lab reproduction and request-blocking regression, not comprehensive CVE coverage",
@@ -68,6 +69,14 @@ def run(args):
     (output / "ownership.json").write_text(
         json.dumps({"run_id": run_id, "engine": args.engine})
     )
+    tls_context = unverified_context() if args.skip_tls_verify else None
+    if args.skip_tls_verify:
+        print(
+            "TLS VERIFICATION DISABLED: certificate errors on the target are "
+            "ignored for this run (self-signed test certificates only). Never "
+            "use this against an untrusted network.",
+            flush=True,
+        )
     try:
         prepare(args.engine, pack)
         with lab(args.engine, run_id, output, pack) as backend:
@@ -82,9 +91,14 @@ def run(args):
                     f"Lab ready. LB upstream: {args.listen_address}:{args.origin_port}",
                     flush=True,
                 )
-                baseline_control = control(origin, run_id, "baseline-control")
+                baseline_control = control(
+                    origin, run_id, "baseline-control", context=tls_context
+                )
                 ordinary_status = baseline_control["root_status"]
-                baseline = probe(args.engine, origin, output, "baseline", run_id, pack)
+                baseline = probe(
+                    args.engine, origin, output, "baseline", run_id, pack,
+                    insecure=args.skip_tls_verify,
+                )
                 report.update(
                     baseline=baseline,
                     baseline_control=baseline_control,
@@ -100,11 +114,17 @@ def run(args):
                     )
                 if args.target:
                     target_start = len(records)
-                    before = control(args.target, run_id, "before")
+                    before = control(args.target, run_id, "before", context=tls_context)
                     tested = probe(
-                        args.engine, args.target.rstrip("/"), output, "target", run_id, pack
+                        args.engine,
+                        args.target.rstrip("/"),
+                        output,
+                        "target",
+                        run_id,
+                        pack,
+                        insecure=args.skip_tls_verify,
                     )
-                    after = control(args.target, run_id, "after")
+                    after = control(args.target, run_id, "after", context=tls_context)
                     time.sleep(0.5)
                     verdict, reason, checks = classify(
                         baseline,
@@ -189,6 +209,12 @@ def main(argv=None):
         "so pass an isolated lab interface IP when your LB/WAAP runs on another machine",
     )
     runner.add_argument("--block-status", type=int, default=403)
+    runner.add_argument(
+        "--skip-tls-verify",
+        action="store_true",
+        help="Accept self-signed or otherwise unverified certificates on --target "
+        "(explicit opt-in for lab test targets; verification is on by default)",
+    )
     runner.add_argument(
         "--output-dir", required=True, help="New report directory, never overwritten"
     )

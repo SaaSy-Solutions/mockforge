@@ -40,7 +40,7 @@ http:
 """
 
 
-def probe(engine, base, output, phase, run_id, pack):
+def probe(engine, base, output, phase, run_id, pack, insecure=False):
     probe = pack["probe"]
     token = run_id + "-" + phase
     path = output / f"{phase}.yaml"
@@ -81,6 +81,7 @@ def probe(engine, base, output, phase, run_id, pack):
                 "1",
                 "-c",
                 "1",
+                *(["-insecure"] if insecure else []),
             ],
             timeout=90,
         )
