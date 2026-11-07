@@ -32,7 +32,7 @@ This document describes coverage goals and example layouts; it is not a claim th
 ### Proposed Test Structure
 
 ```
-tests/e2e/
+tests/tests/e2e/
 ├── protocols/          # Protocol-specific E2E tests
 │   ├── http/
 │   ├── grpc/
@@ -78,7 +78,7 @@ tests/e2e/
 **Test Scenarios:**
 
 ```rust
-// tests/e2e/protocols/http/http_e2e_tests.rs
+// tests/tests/e2e/protocols/http_e2e_tests.rs
 
 #[tokio::test]
 async fn test_http_basic_get() {
@@ -150,7 +150,7 @@ async fn test_http_dynamic_stub_creation() {
 **Test Scenarios:**
 
 ```rust
-// tests/e2e/protocols/grpc/grpc_e2e_tests.rs
+// tests/tests/e2e/protocols/grpc_e2e_tests.rs
 
 #[tokio::test]
 async fn test_grpc_unary_call() {
@@ -210,7 +210,7 @@ async fn test_grpc_http_bridge() {
 **Test Scenarios:**
 
 ```rust
-// tests/e2e/protocols/websocket/websocket_e2e_tests.rs
+// tests/tests/e2e/protocols/websocket_e2e_tests.rs
 
 #[tokio::test]
 async fn test_websocket_connection() {
@@ -271,7 +271,7 @@ async fn test_websocket_broadcast() {
 **Test Scenarios:**
 
 ```rust
-// tests/e2e/protocols/graphql/graphql_e2e_tests.rs
+// tests/tests/e2e/protocols/graphql_e2e_tests.rs (coverage goal — not mounted by e2e.rs today)
 
 #[tokio::test]
 async fn test_graphql_query() {
@@ -334,7 +334,7 @@ async fn test_graphql_mutation() {
 **Test Scenarios:**
 
 ```rust
-// tests/e2e/protocols/kafka/kafka_e2e_tests.rs
+// tests/tests/e2e/protocols/kafka_e2e_tests.rs (coverage goal — not mounted by e2e.rs today)
 
 #[tokio::test]
 async fn test_kafka_produce_consume() {
@@ -362,7 +362,7 @@ async fn test_kafka_produce_consume() {
 
 ### Node.js SDK
 
-**Test File:** `tests/e2e/sdks/nodejs/nodejs_e2e.test.ts`
+**Planned file (no SDK E2E suites exist yet):** `tests/e2e/sdks/nodejs/nodejs_e2e.test.ts`
 
 ```typescript
 import { MockServer } from '@mockforge/sdk';
@@ -431,7 +431,7 @@ describe('Node.js SDK E2E', () => {
 
 ### Python SDK
 
-**Test File:** `tests/e2e/sdks/python/test_python_e2e.py`
+**Planned file (no SDK E2E suites exist yet):** `tests/e2e/sdks/python/test_python_e2e.py`
 
 ```python
 import pytest
@@ -484,7 +484,7 @@ async def test_dynamic_stub_updates(server):
 
 ### Go SDK
 
-**Test File:** `tests/e2e/sdks/go/go_e2e_test.go`
+**Planned file (no SDK E2E suites exist yet):** `tests/e2e/sdks/go/go_e2e_test.go`
 
 ```go
 package e2e
@@ -541,7 +541,7 @@ func TestBasicRequest(t *testing.T) {
 ### Shared Test Server
 
 ```rust
-// tests/e2e/helpers/test_server.rs
+// tests/tests/e2e/helpers/mod.rs (real shared helper: E2ETestServer; snippet illustrative)
 
 pub struct TestServer {
     pub http_port: u16,
@@ -592,7 +592,7 @@ async fn wait_for_ports(child: &mut Child) -> Result<(u16, u16)> {
 ### Test Fixtures
 
 ```rust
-// tests/e2e/fixtures/configs.rs
+// illustrative — no fixtures module exists yet; configs live in the test files
 
 pub fn http_config() -> ServerConfig {
     ServerConfig {
@@ -623,37 +623,34 @@ pub fn grpc_config() -> ServerConfig {
 
 ### Test Organization
 
-**By Protocol:**
-- `tests/e2e/protocols/http/`
-- `tests/e2e/protocols/grpc/`
-- `tests/e2e/protocols/websocket/`
-- etc.
+**By Protocol (implemented):**
+- `tests/tests/e2e/protocols/http_e2e_tests.rs`
+- `tests/tests/e2e/protocols/websocket_e2e_tests.rs`
+- `tests/tests/e2e/protocols/grpc_e2e_tests.rs`
+
+These are the only protocol suites mounted by `tests/tests/e2e.rs` (via
+`e2e/protocols/mod.rs`) and run by CI; the other protocols under
+[Protocol Coverage](#protocol-coverage) are coverage goals, not implemented suites.
 
 **By SDK:**
-- `tests/e2e/sdks/nodejs/`
-- `tests/e2e/sdks/python/`
-- `tests/e2e/sdks/go/`
-- etc.
+- No SDK E2E suites exist yet; see [SDK Coverage](#sdk-coverage) for the planned layout.
 
 **Cross-Protocol:**
-- `tests/e2e/cross-protocol/grpc_http_bridge.rs`
-- `tests/e2e/cross-protocol/websocket_rest.rs`
+- No cross-protocol suites exist yet.
 
 ### Running Tests
 
 ```bash
-# Run all E2E tests
-cargo test --test e2e
+# Run the mounted E2E suite (http, websocket, grpc)
+cargo test -p mockforge-integration-tests --test e2e
 
-# Run protocol-specific tests
-cargo test --test http_e2e
-cargo test --test grpc_e2e
-
-# Run SDK-specific tests
-cd tests/e2e/sdks/nodejs && npm test
-cd tests/e2e/sdks/python && pytest
-cd tests/e2e/sdks/go && go test
+# Run a single protocol suite, with a prebuilt server binary (see tests/README.md)
+MOCKFORGE_TEST_BINARY="$PWD/target/debug/mockforge" \
+  cargo test --locked -p mockforge-integration-tests --test e2e -- protocols::http_e2e_tests
 ```
+
+No SDK E2E suites exist yet, so there are no SDK test commands to run; see
+[tests/README.md](../tests/README.md) for the full, current recipe.
 
 ---
 
@@ -661,8 +658,12 @@ cd tests/e2e/sdks/go && go test
 
 ### GitHub Actions
 
+The implemented E2E CI phase lives in `.github/workflows/integration-tests.yml`
+and runs the three mounted suites with `cargo test --test e2e`. The workflow
+below is an illustrative example — there is no `e2e-tests.yml` in this repository.
+
 ```yaml
-# .github/workflows/e2e-tests.yml
+# example — not a file in this repository
 
 name: E2E Tests
 
@@ -734,9 +735,9 @@ The E2E test suite provides:
 - **Real-World Scenarios**: Common use cases
 - **CI/CD Integration**: Automated testing
 
-**Status**: Infrastructure exists, comprehensive test coverage needed
+**Status**: Only the HTTP, WebSocket, and gRPC protocol suites are implemented and CI-run (`tests/tests/e2e/`); everything else in this document describes coverage goals
 
 ---
 
-**Last Updated**: 2024-01-01
+**Last Updated**: 2026-11-07
 **Version**: 1.0
