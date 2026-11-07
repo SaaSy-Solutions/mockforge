@@ -11,11 +11,38 @@ import subprocess
 import sys
 import time
 import uuid
-from cve_lab_catalog import CVE, PACKS
+from cve_lab_catalog import CATALOG, CVE, PACKS
 from cve_lab_engine import doctor, prepare, lab, cleanup
 from cve_lab_transport import target_url, receiver, control
 from cve_lab_nuclei import probe
 from cve_lab_evidence import classify, describe
+
+
+def run_plan_lines(args):
+    """Human-readable plan printed before anything downloads or starts."""
+    lines = [
+        f"Recorder endpoint: {args.listen_address}:{args.origin_port}",
+    ]
+    if args.target:
+        lines.append(
+            f"Target under test: {args.target}, configure its LB/WAAP upstream to "
+            "forward to the recorder endpoint above before requests flow"
+        )
+        if args.listen_address == "127.0.0.1":
+            lines.append(
+                "Note: the recorder only accepts connections on 127.0.0.1. If your "
+                "LB/WAAP runs on another machine, pass --listen-address <an isolated "
+                "lab interface IP> so it can reach the recorder."
+            )
+    else:
+        lines.append(
+            "No --target: the lab reproduces the CVE directly and no LB/WAAP is tested"
+        )
+    lines.append(
+        f"Images: pinned {CATALOG['application_version']} lab and "
+        f"{CATALOG['runner_version']} runner (see `mockforge cve list`)"
+    )
+    return lines
 
 
 def run(args):
@@ -24,6 +51,8 @@ def run(args):
     ipaddress.IPv4Address(args.listen_address)
     if not 1 <= args.origin_port <= 65535 or not 400 <= args.block_status <= 599:
         raise ValueError("origin-port must be 1..65535; block-status must be 400..599")
+    for line in run_plan_lines(args):
+        print(line, flush=True)
     output = Path(args.output_dir).resolve()
     output.mkdir(parents=True, exist_ok=False)
     run_id = uuid.uuid4().hex
@@ -147,11 +176,17 @@ def main(argv=None):
         "--target",
         help="Your authorized LB HTTP(S) origin, configured to forward to origin-port",
     )
-    runner.add_argument("--origin-port", type=int, default=18082)
+    runner.add_argument(
+        "--origin-port",
+        type=int,
+        default=CATALOG["origin_port"],
+        help="Port the recorder listens on; point your LB/WAAP upstream here",
+    )
     runner.add_argument(
         "--listen-address",
         default="127.0.0.1",
-        help="Recorder bind IPv4 address; choose an isolated lab interface for a remote LB",
+        help="Recorder bind IPv4 address; 127.0.0.1 only accepts local connections, "
+        "so pass an isolated lab interface IP when your LB/WAAP runs on another machine",
     )
     runner.add_argument("--block-status", type=int, default=403)
     runner.add_argument(

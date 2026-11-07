@@ -25,6 +25,14 @@ PACKS = {
                 "https://github.com/advisories/GHSA-f82v-jwr5-mffw",
             ],
             "coverage": "One reviewed authorization-bypass case and benign controls; not all variants",
+            "origin_port": 18082,
+            "listen_address_guidance": (
+                "The recorder defaults to 127.0.0.1:18082, which only accepts local "
+                "connections. Testing an LB/WAAP on another machine requires "
+                "--listen-address <an isolated lab interface IP>; keep that interface "
+                "restricted to the test network because the recorder forwards to the "
+                "vulnerable application."
+            ),
         },
         "probe": {
             "template_id": "mockforge-nextjs-29927-observation",
