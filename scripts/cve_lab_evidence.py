@@ -1,9 +1,51 @@
-"""Managed CVE lab evidence operations."""
+"""Managed CVE lab evidence operations.
+
+Verdict logic is deliberately per-pack: each reviewed pack carries a
+``baseline_gate`` and a ``classifier`` key naming its entry in the registries
+below. Landing a new pack means adding the matching gate and classifier, not
+generalizing these until they fit everything.
+"""
 
 from cve_lab_transport import observations
 
 
-def classify(baseline, target, before, after, records, block_status):
+def verify_middleware_bypass_baseline(pack, baseline_control, baseline):
+    """Direct-run gate for the middleware-bypass pack: the ordinary request
+    must match the application redirect and the signature request must reach
+    the protected route."""
+    if (
+        baseline_control["root_status"] != pack["controls"]["ordinary_status"]
+        or baseline["status"] != 200
+        or not baseline["marker"]
+    ):
+        raise RuntimeError(
+            "Direct baseline did not demonstrate authentication bypass"
+        )
+
+
+def verify_cgi_injection_baseline(pack, baseline_control, baseline):
+    """Direct-run gate for the CGI argument-injection pack: both controls must
+    match the application's non-vulnerable behavior and the signature request
+    must execute the injected PHP."""
+    controls = pack["controls"]
+    if (
+        baseline_control["status"] != controls["benign_status"]
+        or baseline_control["root_status"] != controls["ordinary_status"]
+        or baseline["status"] != 200
+        or not baseline["marker"]
+    ):
+        raise RuntimeError(
+            "Direct baseline did not demonstrate PHP code execution"
+        )
+
+
+BASELINE_GATES = {
+    "middleware-bypass": verify_middleware_bypass_baseline,
+    "cgi-argument-injection": verify_cgi_injection_baseline,
+}
+
+
+def _classify_middleware_bypass(pack, baseline, target, before, after, records, block_status):
     """Return (verdict, reason, checks) for one target run.
 
     The verdict semantics are unchanged: pass requires a reproduced direct
@@ -84,6 +126,106 @@ def classify(baseline, target, before, after, records, block_status):
         "expected rejection with no correlated origin request and healthy controls",
         checks,
     )
+
+
+def classify(baseline, target, before, after, records, block_status):
+    """Legacy public entry point for the middleware-bypass classifier."""
+    return _classify_middleware_bypass(
+        None, baseline, target, before, after, records, block_status
+    )
+
+
+def classify_php_cgi_argument_injection(
+    pack, baseline, target, before, after, records, block_status
+):
+    """Return (verdict, reason, checks) for one PHP-CGI target run.
+
+    Pass requires a reproduced direct baseline (the injected PHP executed),
+    benign and ordinary controls that match the application's non-vulnerable
+    behavior, fully correlated origin traffic, and a blocked exploit request;
+    any origin hit for the exploit request fails the run.
+    """
+    checks = []
+    controls = pack["controls"]
+
+    def record(check, ok):
+        checks.append({"check": check, "outcome": "ok" if ok else "not satisfied"})
+        return ok
+
+    if baseline["status"] != 200 or not baseline["marker"]:
+        record("direct baseline executes the injected PHP payload", False)
+        return "inconclusive", "direct application vulnerability was not reproduced", checks
+    record("direct baseline executes the injected PHP payload", True)
+    if not all(
+        c["status"] == controls["benign_status"]
+        and len(observations(records, c["token"])) == 1
+        and observations(records, c["token"])[0].get("status")
+        == controls["benign_status"]
+        for c in (before, after)
+    ):
+        record("benign controls corroborate origin reachability", False)
+        return "inconclusive", "benign controls did not corroborate origin reachability", checks
+    record("benign controls corroborate origin reachability", True)
+    if not all(
+        c["root_status"] == controls["ordinary_status"]
+        and len(observations(records, c["root_token"])) == 1
+        and observations(records, c["root_token"])[0].get("status")
+        == controls["ordinary_status"]
+        for c in (before, after)
+    ):
+        record(
+            "ordinary requests match the application response",
+            False,
+        )
+        return (
+            "inconclusive",
+            "ordinary requests did not match the application response",
+            checks,
+        )
+    record(
+        "ordinary requests match the application response",
+        True,
+    )
+    expected_tokens = {target["token"]} | {
+        c[key] for c in (before, after) for key in ("token", "root_token")
+    }
+    if any(not expected_tokens.intersection(r["tokens"]) for r in records):
+        record("every origin request correlates with this run", False)
+        return (
+            "inconclusive",
+            "uncorrelated origin traffic prevents a blocking assertion",
+            checks,
+        )
+    record("every origin request correlates with this run", True)
+    seen = observations(records, target["token"])
+    if seen:
+        checks.append(
+            {
+                "check": "exploit request was blocked at the target",
+                "outcome": "not satisfied, reached the origin with status "
+                f"{seen[0].get('status')}",
+            }
+        )
+        return "fail", "exploit request reached the origin; blocking assertion failed", checks
+    record("exploit request was blocked at the target", True)
+    if target["status"] != block_status:
+        record(
+            f"target response matched the configured block status ({block_status})",
+            False,
+        )
+        return "inconclusive", "response did not match the configured block status", checks
+    record(f"target response matched the configured block status ({block_status})", True)
+    return (
+        "pass",
+        "expected rejection with no correlated origin request and healthy controls",
+        checks,
+    )
+
+
+CLASSIFIERS = {
+    "middleware-bypass": _classify_middleware_bypass,
+    "cgi-argument-injection": classify_php_cgi_argument_injection,
+}
 
 
 def describe(report):

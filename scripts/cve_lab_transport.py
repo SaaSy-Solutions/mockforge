@@ -66,7 +66,7 @@ MAX_FORWARDED_BODY = 2 * 1024 * 1024
 
 
 @contextmanager
-def receiver(port, address, backend):
+def receiver(port, address, backend, signature_header=None):
     records = []
     lock = threading.Lock()
 
@@ -80,7 +80,9 @@ def receiver(port, address, backend):
                 "method": self.command,
                 "path": self.path,
                 "tokens": [token, header],
-                "signature": self.headers.get("x-middleware-subrequest"),
+                "signature": (
+                    self.headers.get(signature_header) if signature_header else None
+                ),
             }
             with lock:
                 records.append(observation)
@@ -148,14 +150,28 @@ def receiver(port, address, backend):
         thread.join(timeout=6)
 
 
-def control(base, run_id, phase, context=None):
+def control(pack, base, run_id, phase, context=None):
+    """Send a pack's benign and ordinary control requests to one origin.
+
+    The benign control exercises the pack's vulnerable endpoint without the
+    injection payload; the ordinary request exercises an everyday route. Their
+    expected statuses live in ``pack["controls"]`` so the classifier can tell
+    "application answered normally" from "a blanket block answered instead".
+    """
+    controls = pack["controls"]
     token = f"{run_id}-{phase}-{uuid.uuid4().hex}"
     status, _headers, body = request(
-        base, f"/login?__mockforge_cve={token}", {"X-Mockforge-Cve": token}, context=context
+        base,
+        controls["benign_path"].replace("{token}", token),
+        {"X-Mockforge-Cve": token},
+        context=context,
     )
     root_token = token + "-root"
     root_status = request(
-        base, f"/?__mockforge_cve={root_token}", {"X-Mockforge-Cve": root_token}, context=context
+        base,
+        controls["ordinary_path"].replace("{token}", root_token),
+        {"X-Mockforge-Cve": root_token},
+        context=context,
     )[0]
     return {
         "token": token,
