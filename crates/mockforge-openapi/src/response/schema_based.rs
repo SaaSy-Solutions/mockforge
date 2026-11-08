@@ -763,56 +763,6 @@ impl ResponseGenerator {
         None
     }
 
-    /// Infer relationship count from parent entity schema
-    /// When generating a child entity list, check if parent entity has a count field
-    #[allow(dead_code)]
-    pub(crate) fn infer_count_from_parent_schema(
-        spec: &OpenApiSpec,
-        parent_entity_name: &str,
-        child_entity_name: &str,
-    ) -> Option<u64> {
-        // Look for parent entity schema
-        let _parent_schema_name = parent_entity_name.to_string();
-        let count_field_name = format!("{}_count", child_entity_name);
-
-        // Try to find the schema
-        if let Some(components) = &spec.spec.components {
-            let schemas = &components.schemas;
-            // Look for parent schema (case-insensitive)
-            for (schema_name, schema_ref) in schemas {
-                let schema_name_lower = schema_name.to_lowercase();
-                if schema_name_lower.contains(&parent_entity_name.to_lowercase()) {
-                    if let ReferenceOr::Item(schema) = schema_ref {
-                        // Check if this schema has the count field
-                        if let openapiv3::SchemaKind::Type(openapiv3::Type::Object(obj)) =
-                            &schema.schema_kind
-                        {
-                            for (prop_name, prop_schema) in &obj.properties {
-                                if prop_name.to_lowercase() == count_field_name.to_lowercase() {
-                                    // Convert ReferenceOr<Box<Schema>> to ReferenceOr<Schema>
-                                    let schema_ref: ReferenceOr<Schema> = match prop_schema {
-                                        ReferenceOr::Item(boxed) => {
-                                            ReferenceOr::Item(boxed.as_ref().clone())
-                                        }
-                                        ReferenceOr::Reference { reference } => {
-                                            ReferenceOr::Reference {
-                                                reference: reference.clone(),
-                                            }
-                                        }
-                                    };
-                                    // Extract count value from schema
-                                    return Self::extract_numeric_value_from_schema(&schema_ref);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        None
-    }
-
     /// Generate example value for a property based on its name
     pub(crate) fn generate_example_for_property(prop_name: &str) -> Value {
         let prop_lower = prop_name.to_lowercase();

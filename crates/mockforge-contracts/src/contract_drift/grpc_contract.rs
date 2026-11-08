@@ -248,42 +248,6 @@ impl GrpcContract {
         })
     }
 
-    /// Classify a proto change as additive, breaking, or both
-    ///
-    /// Returns (is_additive, is_breaking) tuple
-    /// - Additive: New methods, new optional fields, new services
-    /// - Breaking: Removed methods, required field additions, type changes, signature changes
-    #[allow(dead_code)]
-    fn classify_proto_change(mismatch: &Mismatch) -> (bool, bool) {
-        match mismatch.mismatch_type {
-            // Breaking changes
-            MismatchType::EndpointNotFound => (false, true), // Method/service removed
-            MismatchType::TypeMismatch => (false, true),     // Type changed
-            MismatchType::SchemaMismatch => (false, true),   // Signature changed
-            MismatchType::MissingRequiredField => (false, true), // Required field added
-
-            // Additive changes
-            MismatchType::UnexpectedField => {
-                // Check severity - Low severity usually means additive (new method/field)
-                match mismatch.severity {
-                    MismatchSeverity::Low | MismatchSeverity::Info => (true, false),
-                    _ => (false, false), // Medium/High severity unexpected fields might be breaking
-                }
-            }
-
-            // Potentially breaking (depends on context)
-            MismatchType::FormatMismatch | MismatchType::ConstraintViolation => {
-                match mismatch.severity {
-                    MismatchSeverity::Critical | MismatchSeverity::High => (false, true),
-                    _ => (false, false),
-                }
-            }
-
-            // Not applicable for proto changes
-            _ => (false, false),
-        }
-    }
-
     /// Compare methods between two service descriptors
     fn diff_methods(
         &self,
