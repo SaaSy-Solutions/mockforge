@@ -113,7 +113,6 @@ Key architectural boundaries:
 | `mockforge-bench` | k6 script generation, WAFBench, OWASP testing |
 | `mockforge-test` | Test framework and utilities |
 | `mockforge-test-runner` | Cloud worker consuming test_runs from a Redis queue |
-
 | `mockforge-observability` | Observability infrastructure |
 | `mockforge-tracing` | Distributed tracing |
 | `mockforge-analytics` | Usage analytics |
