@@ -71,6 +71,16 @@ def doctor(engine):
 
 
 def prepare(engine, pack):
+    # Refuse unreviewed images before any engine interaction: reviewed packs
+    # pin every image by digest, so an unpinned reference (for example a pack
+    # whose lab image is still pending its lab-host review) must stop here.
+    for image in (pack["catalog"]["application_image"], pack["catalog"]["runner_image"]):
+        if "@sha256:" not in image:
+            raise RuntimeError(
+                f"{image} is not pinned by digest; reviewed packs refuse "
+                "unreviewed images. Build and review the lab image per its "
+                "image directory, then pin the digest in the pack catalog."
+            )
     doctor(engine)
     for image in (pack["catalog"]["application_image"], pack["catalog"]["runner_image"]):
         if command([engine, "image", "inspect", image], check=False).returncode:

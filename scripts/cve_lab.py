@@ -15,11 +15,12 @@ from cve_lab_catalog import CATALOG, CVE, PACKS
 from cve_lab_engine import doctor, prepare, lab, cleanup
 from cve_lab_transport import target_url, receiver, control, unverified_context
 from cve_lab_nuclei import probe
-from cve_lab_evidence import classify, describe
+from cve_lab_evidence import BASELINE_GATES, CLASSIFIERS, describe
 
 
 def run_plan_lines(args):
     """Human-readable plan printed before anything downloads or starts."""
+    pack_catalog = PACKS[args.cve]["catalog"]
     lines = [
         f"Recorder endpoint: {args.listen_address}:{args.origin_port}",
     ]
@@ -39,9 +40,14 @@ def run_plan_lines(args):
             "No --target: the lab reproduces the CVE directly and no LB/WAAP is tested"
         )
     lines.append(
-        f"Images: pinned {CATALOG['application_version']} lab and "
-        f"{CATALOG['runner_version']} runner (see `mockforge cve list`)"
+        f"Images: pinned {pack_catalog['application_version']} lab and "
+        f"{pack_catalog['runner_version']} runner (see `mockforge cve list`)"
     )
+    if pack_catalog.get("image_status") == "pending-lab-host-review":
+        lines.append(
+            "Lab image pending review: this pack refuses to run until the "
+            "reviewed image digest is pinned (see `mockforge cve list`)"
+        )
     return lines
 
 
@@ -80,7 +86,12 @@ def run(args):
     try:
         prepare(args.engine, pack)
         with lab(args.engine, run_id, output, pack) as backend:
-            with receiver(args.origin_port, args.listen_address, backend) as records:
+            with receiver(
+                args.origin_port,
+                args.listen_address,
+                backend,
+                signature_header=pack["probe"].get("signature_header"),
+            ) as records:
                 direct_host = (
                     "127.0.0.1"
                     if args.listen_address == "0.0.0.0"
@@ -92,9 +103,8 @@ def run(args):
                     flush=True,
                 )
                 baseline_control = control(
-                    origin, run_id, "baseline-control", context=tls_context
+                    pack, origin, run_id, "baseline-control", context=tls_context
                 )
-                ordinary_status = baseline_control["root_status"]
                 baseline = probe(
                     args.engine, origin, output, "baseline", run_id, pack,
                     insecure=args.skip_tls_verify,
@@ -102,19 +112,12 @@ def run(args):
                 report.update(
                     baseline=baseline,
                     baseline_control=baseline_control,
-                    unauthenticated_status=ordinary_status,
+                    unauthenticated_status=baseline_control["root_status"],
                 )
-                if (
-                    ordinary_status != 307
-                    or baseline["status"] != 200
-                    or not baseline["marker"]
-                ):
-                    raise RuntimeError(
-                        "Direct baseline did not demonstrate authentication bypass"
-                    )
+                BASELINE_GATES[pack["baseline_gate"]](pack, baseline_control, baseline)
                 if args.target:
                     target_start = len(records)
-                    before = control(args.target, run_id, "before", context=tls_context)
+                    before = control(pack, args.target, run_id, "before", context=tls_context)
                     tested = probe(
                         args.engine,
                         args.target.rstrip("/"),
@@ -124,9 +127,10 @@ def run(args):
                         pack,
                         insecure=args.skip_tls_verify,
                     )
-                    after = control(args.target, run_id, "after", context=tls_context)
+                    after = control(pack, args.target, run_id, "after", context=tls_context)
                     time.sleep(0.5)
-                    verdict, reason, checks = classify(
+                    verdict, reason, checks = CLASSIFIERS[pack["classifier"]](
+                        pack,
                         baseline,
                         tested,
                         before,
@@ -140,7 +144,7 @@ def run(args):
                     ):
                         verdict, reason = (
                             "inconclusive",
-                            "LB controls did not match this application's login page",
+                            "LB controls did not match this application's benign control responses",
                         )
                         checks = [
                             {
@@ -227,7 +231,7 @@ def main(argv=None):
         if args.action == "doctor":
             print(json.dumps(doctor(args.engine), indent=2))
         elif args.action == "list":
-            print(json.dumps(CATALOG, indent=2))
+            print(json.dumps({cve: PACKS[cve]["catalog"] for cve in PACKS}, indent=2))
         elif args.action == "prepare":
             prepare(args.engine, PACKS[args.cve])
             print(
