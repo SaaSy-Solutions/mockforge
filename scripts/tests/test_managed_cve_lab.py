@@ -6,6 +6,7 @@ import importlib.util
 import io
 import json
 from pathlib import Path
+import shutil
 import socket
 import subprocess
 import sys
@@ -17,6 +18,8 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import cve_lab_catalog as catalog
 import cve_lab_engine as engine
+import cve_lab_http2 as http2_module
+import cve_lab_payloads as payloads
 import cve_lab_nuclei as nuclei
 import cve_lab_evidence as evidence
 import cve_lab_transport as transport
@@ -539,6 +542,7 @@ class RunPlanTests(unittest.TestCase):
 
     def args(self, **overrides):
         defaults = {
+            "cve": "CVE-2025-29927",
             "target": "https://lb.example",
             "listen_address": "127.0.0.1",
             "origin_port": 18082,
@@ -567,14 +571,409 @@ class RunPlanTests(unittest.TestCase):
         self.assertIn("No --target", text)
         self.assertIn("no LB/WAAP is tested", text)
 
-    def test_list_advertises_origin_port_and_guidance(self):
+    def test_list_advertises_every_pack_with_origin_port_and_guidance(self):
         stdout = io.StringIO()
         with contextlib.redirect_stdout(stdout):
             self.assertEqual(lab.main(["list"]), 0)
-        catalog_out = json.loads(stdout.getvalue())
-        self.assertEqual(catalog_out["origin_port"], 18082)
-        self.assertIn("--listen-address", catalog_out["listen_address_guidance"])
+        packs = json.loads(stdout.getvalue())
+        self.assertEqual(set(packs), set(catalog.PACKS))
+        for cve, entry in packs.items():
+            with self.subTest(cve=cve):
+                self.assertEqual(entry["origin_port"], 18082)
+                self.assertIn("--listen-address", entry["listen_address_guidance"])
+        self.assertIn("@sha256:", packs["CVE-2025-29927"]["application_image"])
+        self.assertIn("@sha256:", packs["CVE-2026-111497"]["application_image"])
 
+
+
+class Node2ShellPackTests(unittest.TestCase):
+    """The Node2Shell pack data, transport and verdict contracts."""
+
+    def setUp(self):
+        self.pack = catalog.PACKS["CVE-2026-111497"]
+
+    def test_pack_carries_runner_config(self):
+        for key in ("catalog", "probe", "app", "controls", "exploit", "application_script"):
+            self.assertIn(key, self.pack)
+        self.assertEqual(self.pack["app"]["port"], "3000/tcp")
+        self.assertEqual(
+            self.pack["app"]["readiness"], {"path": "/health", "status": 200}
+        )
+        self.assertEqual(self.pack["app"]["mounts"][0]["container"], "/app/server.js")
+
+    def test_pack_images_are_digest_pinned(self):
+        self.assertIn("@sha256:", self.pack["catalog"]["application_image"])
+        self.assertIn("@sha256:", self.pack["catalog"]["runner_image"])
+
+    def test_application_script_is_the_reviewed_lab_app(self):
+        script = self.pack["application_script"]
+        self.assertIn("require('node:http')", script)
+        self.assertIn("createBrotliDecompress", script)
+        self.assertIn("PHASE_ONE_BYTES = 23068693", script)
+        self.assertIn("mockforge-node2shell-lab", script)
+        # No restart policy and no respawn: a crash must be observable.
+        self.assertNotIn("fork", script)
+        self.assertNotIn("cluster", script)
+
+    def test_exploit_rides_the_raw_h2_client(self):
+        self.assertEqual(self.pack["baseline_exploit"], "http2-crash")
+        self.assertEqual(self.pack["target_exploit"], "http2-crash")
+        exploit = self.pack["exploit"]
+        self.assertEqual(exploit["method"], "POST")
+        self.assertIn("/decode?", exploit["path"])
+        self.assertIn("__mockforge_cve={token}", exploit["path"])
+        # The reviewed trigger is ~23 MB; the recorder must accept it.
+        self.assertGreaterEqual(exploit["max_forwarded_body"], 32 * 1024 * 1024)
+        self.assertEqual(self.pack["controls"]["benign_status"], 200)
+        self.assertEqual(self.pack["controls"]["ordinary_status"], 200)
+
+    def test_trigger_payload_matches_the_pinned_digest(self):
+        import hashlib
+
+        import cve_lab_payloads as payloads
+
+        stream = payloads.trigger_stream()
+        digest = hashlib.sha256(stream).hexdigest()
+        self.assertEqual(digest, payloads.TRIGGER_SHA256)
+        body = stream + payloads.TRAILING_ZEROS + payloads.second_input()
+        first, second = payloads.split_input(body)
+        self.assertGreater(second, 0)
+        self.assertEqual(first + second, len(body))
+
+    def test_probe_template_observes_a_healthy_request(self):
+        text = nuclei.template(self.pack, "run1-baseline")
+        self.assertIn("id: mockforge-node-111497-observation", text)
+        self.assertIn("method: GET", text)
+        self.assertIn("/health?__mockforge_cve=run1-baseline", text)
+
+    def test_prepare_refuses_unpinned_images_before_any_engine_call(self):
+        import copy
+
+        unpinned = copy.deepcopy(self.pack)
+        unpinned["catalog"]["application_image"] = "docker.io/library/node:latest"
+        with patch.object(engine, "command") as command:
+            with self.assertRaisesRegex(RuntimeError, "not pinned by digest"):
+                engine.prepare("docker", unpinned)
+        command.assert_not_called()
+
+    def test_gate_accepts_a_healthy_direct_run(self):
+        baseline_control = {"status": 200, "root_status": 200}
+        baseline = {"status": 200, "marker": True, "crash_confirmed": True}
+        evidence.BASELINE_GATES["decoder-crash"](
+            self.pack, baseline_control, baseline
+        )
+
+    def test_gate_rejects_mismatched_direct_runs(self):
+        for baseline_control, baseline in (
+            ({"status": 503, "root_status": 200}, {"status": 200, "marker": True}),
+            ({"status": 200, "root_status": 404}, {"status": 200, "marker": True}),
+            ({"status": 200, "root_status": 200}, {"status": 200, "marker": False}),
+        ):
+            with self.subTest(baseline_control=baseline_control):
+                with self.assertRaisesRegex(RuntimeError, "decoder crash"):
+                    evidence.BASELINE_GATES["decoder-crash"](
+                        self.pack, baseline_control, baseline
+                    )
+
+
+class Node2ShellVerdictTests(unittest.TestCase):
+    """The decoder-crash classifier mirrors the blocking semantics for the pack."""
+
+    def setUp(self):
+        self.pack = catalog.PACKS["CVE-2026-111497"]
+        self.baseline = {"status": 200, "marker": True, "crash_confirmed": True}
+        self.target = {"token": "attack", "status": 403, "marker": False}
+        self.before = {
+            "token": "before",
+            "status": 200,
+            "root_token": "before-root",
+            "root_status": 200,
+        }
+        self.after = {
+            "token": "after",
+            "status": 200,
+            "root_token": "after-root",
+            "root_status": 200,
+        }
+        self.records = [
+            {"tokens": [control[key]], "status": status}
+            for control in (self.before, self.after)
+            for key, status in (("token", 200), ("root_token", 200))
+        ]
+
+    def outcome(self):
+        return evidence.CLASSIFIERS["decoder-crash"](
+            self.pack, self.baseline, self.target, self.before, self.after, self.records, 403
+        )
+
+    def verdict(self):
+        return self.outcome()[0]
+
+    def test_blocked_exploit_with_healthy_controls_passes(self):
+        self.assertEqual(self.verdict(), "pass")
+
+    def test_baseline_must_show_the_confirmed_crash(self):
+        for baseline in (
+            {"status": 200, "marker": True},
+            {"status": 200, "marker": True, "crash_confirmed": False},
+            {"status": 422, "marker": True, "crash_confirmed": True},
+        ):
+            with self.subTest(baseline=baseline):
+                self.baseline = baseline
+                self.assertEqual(self.verdict(), "inconclusive")
+
+    def test_failed_before_control_is_inconclusive(self):
+        self.before["status"] = 503
+        self.assertEqual(self.verdict(), "inconclusive")
+
+    def test_exploit_reaching_origin_fails_even_when_it_crashed_the_origin(self):
+        self.records.append({"tokens": ["attack"], "status": None, "error": "ConnectionReset"})
+        self.after = {
+            "token": self.after["token"],
+            "root_token": self.after["root_token"],
+            "error": "connection refused by the origin",
+        }
+        verdict, reason, checks = self.outcome()
+        self.assertEqual(verdict, "fail")
+        self.assertIn("reached the origin", reason)
+        blocked = [c for c in checks if c["check"] == "exploit request was blocked at the target"]
+        self.assertEqual(len(blocked), 1)
+        self.assertIn("reached the origin", blocked[0]["outcome"])
+
+    def test_blocked_exploit_with_dead_after_control_is_inconclusive(self):
+        self.after = {
+            "token": self.after["token"],
+            "root_token": self.after["root_token"],
+            "error": "connection refused by the origin",
+        }
+        self.assertEqual(self.verdict(), "inconclusive")
+
+    def test_blanket_block_of_the_ordinary_path_is_inconclusive(self):
+        self.before["root_status"] = 403
+        self.assertEqual(self.verdict(), "inconclusive")
+
+    def test_unexpected_rejection_is_inconclusive(self):
+        self.target["status"] = 502
+        self.assertEqual(self.verdict(), "inconclusive")
+
+    def test_uncorrelated_origin_request_cannot_pass(self):
+        self.records.append({"tokens": [None, None], "status": 200})
+        self.assertEqual(self.verdict(), "inconclusive")
+
+
+class Node2ShellExploitStepTests(unittest.TestCase):
+    """The http2-crash steps turn transport evidence plus container state
+    into a confirmed baseline and a target result."""
+
+    def test_baseline_crash_confirms_from_the_container_state(self):
+        import cve_lab_exploits as exploits
+
+        pack = catalog.PACKS["CVE-2026-111497"]
+        result = {"status": 502, "headers": [], "body": b"", "reset": False,
+                  "goaway": False, "error": None}
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+            exploits.http2, "request", return_value=result
+        ) as request, patch.object(
+            exploits, "container_running", return_value=False
+        ):
+            outcome = exploits.http2_baseline_crash(
+                "docker", "http://127.0.0.1:1", Path(directory), "run1", pack
+            )
+            request.assert_called_once()
+            sent_path = request.call_args.args[3]
+            self.assertIn("__mockforge_cve=run1-baseline-exploit", sent_path)
+            self.assertTrue(outcome["crash_confirmed"])
+            evidence_file = json.loads(
+                (Path(directory) / "baseline-exploit.json").read_text()
+            )
+            self.assertEqual(evidence_file["status"], 502)
+
+    def test_baseline_without_a_crash_is_refused(self):
+        import cve_lab_exploits as exploits
+
+        pack = catalog.PACKS["CVE-2026-111497"]
+        result = {"status": 422, "headers": [], "body": b"invalid brotli",
+                  "reset": False, "goaway": False, "error": None}
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+            exploits.http2, "request", return_value=result
+        ), patch.object(exploits, "container_running", return_value=True):
+            with self.assertRaisesRegex(RuntimeError, "decoder crash"):
+                exploits.http2_baseline_crash(
+                    "docker", "http://127.0.0.1:1", Path(directory), "run1", pack
+                )
+
+    def test_target_crash_reports_transport_evidence(self):
+        import cve_lab_exploits as exploits
+
+        pack = catalog.PACKS["CVE-2026-111497"]
+        result = {"status": None, "headers": [], "body": b"", "reset": True,
+                  "goaway": False, "error": None}
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+            exploits.http2, "request", return_value=result
+        ):
+            outcome = exploits.http2_target_crash(
+                "docker", "http://127.0.0.1:1", Path(directory), "run1", pack
+            )
+        self.assertTrue(outcome["reset"])
+        self.assertIsNone(outcome["status"])
+        self.assertEqual(outcome["token"], "run1-target")
+
+
+class RecorderProtocolTests(unittest.TestCase):
+    """One listening port serves HTTP/1.1 and cleartext h2c (prior knowledge)."""
+
+    def setUp(self):
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+        seen = []
+
+        class Backend(BaseHTTPRequestHandler):
+            def _reply(self):
+                length = int(self.headers.get("Content-Length") or 0)
+                body = self.rfile.read(length) if length else b""
+                seen.append((self.command, self.path, body))
+                self.send_response(201)
+                self.send_header("Content-Length", "2")
+                self.end_headers()
+                self.wfile.write(b"ok")
+
+            do_GET = _reply
+            do_POST = _reply
+
+            def log_message(self, *_args):
+                pass
+
+        self.backend = ThreadingHTTPServer(("127.0.0.1", 0), Backend)
+        threading.Thread(target=self.backend.serve_forever, daemon=True).start()
+        self.backend_port = self.backend.server_address[1]
+        self.seen = seen
+
+    def tearDown(self):
+        self.backend.shutdown()
+        self.backend.server_close()
+
+    @contextlib.contextmanager
+    def recorder(self, **kwargs):
+        with socket.socket() as reservation:
+            reservation.bind(("127.0.0.1", 0))
+            port = reservation.getsockname()[1]
+        records = []
+        with transport.receiver(
+            port, "127.0.0.1", f"http://127.0.0.1:{self.backend_port}", **kwargs
+        ) as records:
+            yield f"http://127.0.0.1:{port}", records
+
+    def test_h1_requests_still_forward_and_observe(self):
+        with self.recorder() as (base, records):
+            status, _headers, body = transport.request(
+                base, "/login?__mockforge_cve=tok1", {"X-Mockforge-Cve": "tok1"}
+            )
+        self.assertEqual(status, 201)
+        self.assertEqual(body, b"ok")
+        self.assertIn("tok1", records[0]["tokens"])
+
+    def test_h2c_requests_forward_and_observe_on_the_same_port(self):
+        import cve_lab_http2 as http2
+
+        with self.recorder() as (base, records):
+            url = transport.target_url(base)
+            result = http2.request(
+                url.hostname,
+                url.port,
+                "POST",
+                "/decode?__mockforge_cve=tok2",
+                [("content-type", "application/brotli"), ("x-mockforge-cve", "tok2")],
+                b"payload-bytes",
+                timeout=10,
+            )
+        self.assertIsNone(result["error"])
+        self.assertEqual(result["status"], 201)
+        self.assertEqual(self.seen[0][2], b"payload-bytes")
+        self.assertIn("tok2", records[0]["tokens"])
+        self.assertEqual(records[0]["method"], "POST")
+
+    def test_h2c_oversized_bodies_are_rejected_before_forwarding(self):
+        import cve_lab_http2 as http2
+
+        with self.recorder(max_body=8) as (base, records):
+            url = transport.target_url(base)
+            result = http2.request(
+                url.hostname,
+                url.port,
+                "POST",
+                "/decode",
+                [],
+                b"0123456789abcdef",
+                timeout=10,
+            )
+        self.assertEqual(result["status"], 413)
+        self.assertEqual(self.seen, [])
+        self.assertEqual(records[0]["status"], 413)
+
+    def test_signature_header_is_recorded_only_when_configured(self):
+        import cve_lab_http2 as http2
+
+        with self.recorder(signature_header="x-middleware-subrequest") as (base, records):
+            url = transport.target_url(base)
+            result = http2.request(
+                url.hostname,
+                url.port,
+                "GET",
+                "/?__mockforge_cve=tok3",
+                [("x-mockforge-cve", "tok3"), ("x-middleware-subrequest", "middleware:chain")],
+                timeout=10,
+            )
+        self.assertEqual(result["status"], 201)
+        self.assertEqual(records[0]["signature"], "middleware:chain")
+
+    def test_control_requests_follow_the_pack_paths(self):
+        pack = {
+            "controls": {
+                "benign_path": "/health?__mockforge_cve={token}",
+                "benign_status": 200,
+                "ordinary_path": "/?__mockforge_cve={token}",
+                "ordinary_status": 200,
+            }
+        }
+        with self.recorder() as (base, records):
+            outcome = transport.control(pack, base, "run1", "phase")
+        paths = [item[1] for item in self.seen]
+        self.assertEqual(len(paths), 2)
+        self.assertTrue(paths[0].startswith("/health?__mockforge_cve=run1-phase-"))
+        ordinary_token = paths[1].split("__mockforge_cve=")[1]
+        self.assertTrue(ordinary_token.startswith("run1-phase-"))
+        self.assertTrue(ordinary_token.endswith("-root"))
+        self.assertEqual(outcome["root_token"], ordinary_token)
+        self.assertEqual(len(records), 2)
+
+    def test_real_curl_h2c_interops_with_the_recorder(self):
+        curl = shutil.which("curl")
+        if not curl:
+            self.skipTest("curl is not on PATH")
+        with self.recorder() as (base, records):
+            url = transport.target_url(base)
+            out = subprocess.run(
+                [
+                    curl,
+                    "-s",
+                    "--http2-prior-knowledge",
+                    "-X",
+                    "POST",
+                    "-H",
+                    "x-mockforge-cve: tokcurl",
+                    "--data-binary",
+                    "curl-payload",
+                    "-w",
+                    "%{http_code}",
+                    f"http://127.0.0.1:{url.port}/decode?__mockforge_cve=tokcurl",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=20,
+            )
+        self.assertTrue(out.stdout.endswith("201"), out.stdout + out.stderr)
+        self.assertEqual(self.seen[0][2], b"curl-payload")
+        self.assertIn("tokcurl", records[0]["tokens"])
 
 
 class TlsVerifyTests(unittest.TestCase):

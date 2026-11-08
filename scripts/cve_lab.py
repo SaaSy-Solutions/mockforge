@@ -15,11 +15,13 @@ from cve_lab_catalog import CATALOG, CVE, PACKS
 from cve_lab_engine import doctor, prepare, lab, cleanup
 from cve_lab_transport import target_url, receiver, control, unverified_context
 from cve_lab_nuclei import probe
-from cve_lab_evidence import classify, describe
+from cve_lab_evidence import BASELINE_GATES, CLASSIFIERS, describe
+from cve_lab_exploits import BASELINE_EXPLOITS, TARGET_EXPLOITS
 
 
 def run_plan_lines(args):
     """Human-readable plan printed before anything downloads or starts."""
+    pack_catalog = PACKS[args.cve]["catalog"]
     lines = [
         f"Recorder endpoint: {args.listen_address}:{args.origin_port}",
     ]
@@ -39,9 +41,14 @@ def run_plan_lines(args):
             "No --target: the lab reproduces the CVE directly and no LB/WAAP is tested"
         )
     lines.append(
-        f"Images: pinned {CATALOG['application_version']} lab and "
-        f"{CATALOG['runner_version']} runner (see `mockforge cve list`)"
+        f"Images: pinned {pack_catalog['application_version']} lab and "
+        f"{pack_catalog['runner_version']} runner (see `mockforge cve list`)"
     )
+    if pack_catalog.get("image_status") == "pending-lab-host-review":
+        lines.append(
+            "Lab image pending review: this pack refuses to run until the "
+            "reviewed image digest is pinned (see `mockforge cve list`)"
+        )
     return lines
 
 
@@ -79,8 +86,18 @@ def run(args):
         )
     try:
         prepare(args.engine, pack)
+        if pack.get("application_script"):
+            # The reviewed lab application ships inside the pack and is
+            # mounted read-only into the pinned image by lab().
+            (output / "server.js").write_text(pack["application_script"])
         with lab(args.engine, run_id, output, pack) as backend:
-            with receiver(args.origin_port, args.listen_address, backend) as records:
+            with receiver(
+                args.origin_port,
+                args.listen_address,
+                backend,
+                signature_header=pack["probe"].get("signature_header"),
+                max_body=(pack.get("exploit") or {}).get("max_forwarded_body"),
+            ) as records:
                 direct_host = (
                     "127.0.0.1"
                     if args.listen_address == "0.0.0.0"
@@ -92,9 +109,8 @@ def run(args):
                     flush=True,
                 )
                 baseline_control = control(
-                    origin, run_id, "baseline-control", context=tls_context
+                    pack, origin, run_id, "baseline-control", context=tls_context
                 )
-                ordinary_status = baseline_control["root_status"]
                 baseline = probe(
                     args.engine, origin, output, "baseline", run_id, pack,
                     insecure=args.skip_tls_verify,
@@ -102,31 +118,31 @@ def run(args):
                 report.update(
                     baseline=baseline,
                     baseline_control=baseline_control,
-                    unauthenticated_status=ordinary_status,
+                    unauthenticated_status=baseline_control.get("root_status"),
                 )
-                if (
-                    ordinary_status != 307
-                    or baseline["status"] != 200
-                    or not baseline["marker"]
-                ):
-                    raise RuntimeError(
-                        "Direct baseline did not demonstrate authentication bypass"
+                if pack.get("baseline_exploit"):
+                    exploit_result = BASELINE_EXPLOITS[pack["baseline_exploit"]](
+                        args.engine, origin, output, run_id, pack
                     )
+                    report.update(baseline_exploit=exploit_result)
+                    baseline = {**baseline, "crash_confirmed": exploit_result["crash_confirmed"]}
+                    report["baseline"] = baseline
+                BASELINE_GATES[pack["baseline_gate"]](pack, baseline_control, baseline)
                 if args.target:
                     target_start = len(records)
-                    before = control(args.target, run_id, "before", context=tls_context)
-                    tested = probe(
+                    before = control(pack, args.target, run_id, "before", context=tls_context)
+                    tested = TARGET_EXPLOITS[pack.get("target_exploit", "nuclei")](
                         args.engine,
                         args.target.rstrip("/"),
                         output,
-                        "target",
                         run_id,
                         pack,
                         insecure=args.skip_tls_verify,
                     )
-                    after = control(args.target, run_id, "after", context=tls_context)
+                    after = control(pack, args.target, run_id, "after", context=tls_context)
                     time.sleep(0.5)
-                    verdict, reason, checks = classify(
+                    verdict, reason, checks = CLASSIFIERS[pack["classifier"]](
+                        pack,
                         baseline,
                         tested,
                         before,
@@ -135,12 +151,16 @@ def run(args):
                         args.block_status,
                     )
                     if (
-                        before["body_sha256"] != baseline_control["body_sha256"]
-                        or after["body_sha256"] != baseline_control["body_sha256"]
+                        before.get("body_sha256") != baseline_control["body_sha256"]
+                        or after.get("body_sha256") != baseline_control["body_sha256"]
+                    ) and not (
+                        verdict == "fail" and pack["classifier"] == "decoder-crash"
                     ):
+                        # A crash pack's dead after-control corroborates a
+                        # confirmed origin reach; do not mask that fail.
                         verdict, reason = (
                             "inconclusive",
-                            "LB controls did not match this application's login page",
+                            "LB controls did not match this application's benign control responses",
                         )
                         checks = [
                             {
@@ -227,7 +247,7 @@ def main(argv=None):
         if args.action == "doctor":
             print(json.dumps(doctor(args.engine), indent=2))
         elif args.action == "list":
-            print(json.dumps(CATALOG, indent=2))
+            print(json.dumps({cve: PACKS[cve]["catalog"] for cve in PACKS}, indent=2))
         elif args.action == "prepare":
             prepare(args.engine, PACKS[args.cve])
             print(

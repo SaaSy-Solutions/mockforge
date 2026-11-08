@@ -71,6 +71,16 @@ def doctor(engine):
 
 
 def prepare(engine, pack):
+    # Refuse unreviewed images before any engine interaction: reviewed packs
+    # pin every image by digest, so an unpinned reference (for example a pack
+    # whose lab image is still pending its lab-host review) must stop here.
+    for image in (pack["catalog"]["application_image"], pack["catalog"]["runner_image"]):
+        if "@sha256:" not in image:
+            raise RuntimeError(
+                f"{image} is not pinned by digest; reviewed packs refuse "
+                "unreviewed images. Build and review the lab image per its "
+                "image directory, then pin the digest in the pack catalog."
+            )
     doctor(engine)
     for image in (pack["catalog"]["application_image"], pack["catalog"]["runner_image"]):
         if command([engine, "image", "inspect", image], check=False).returncode:
@@ -78,6 +88,21 @@ def prepare(engine, pack):
             command([engine, "pull", image], timeout=900)
         # An inspect by digest ensures the exact requested image exists locally.
         command([engine, "image", "inspect", image])
+
+
+def container_running(engine, run_id):
+    """Whether this run's application container is still alive.
+
+    Crash-evidence packs use this to distinguish a reviewed exploit outcome
+    from a healthy application.
+    """
+    result = command(
+        [engine, "inspect", "mockforge-cve-" + run_id, "--format", "{{.State.Running}}"],
+        check=False,
+    )
+    if result.returncode:
+        return False
+    return result.stdout.strip().lower() == "true"
 
 
 def owned_remove(engine, name, run_id):
@@ -117,7 +142,13 @@ def lab(engine, run_id, output, pack):
         ]
         for key, value in app["env"].items():
             run_args.extend(["-e", f"{key}={value}"])
+        for mount in app.get("mounts", ()):
+            host = mount["host"].replace("{output}", str(output))
+            run_args.extend(["-v", f"{host}:{mount['container']}:ro"])
+        if app.get("workdir"):
+            run_args.extend(["-w", app["workdir"]])
         run_args.append(pack["catalog"]["application_image"])
+        run_args.extend(app.get("command", ()))
         command(run_args)
         ports = command([engine, "port", name, app["port"]]).stdout.strip().splitlines()
         backend = "http://" + ports[0]
