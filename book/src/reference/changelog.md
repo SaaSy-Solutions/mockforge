@@ -1,3 +1,23 @@
+## [0.3.241] - 2026-11-07
+
+### Added
+
+- **[Reality]** CVE lab packs are now data-driven: each pack declares its catalog entry and its own evidence checks, and the lab recorder can forward POST bodies, which body-injection reproductions need.
+- **[Reality]** `mockforge cve run` states its conclusion plainly: `<target> is EXPOSED to <CVE>` or `<target> is NOT exposed to <CVE>`, followed by the reason and each evidence check. The checks are also stored in `report.json`.
+- **[DevX]** `mockforge cve run` prints its plan before starting (recorder endpoint, target under test, and a warning when the default 127.0.0.1 bind can't accept a remote load balancer). `mockforge cve list` shows each pack's `origin_port` and listen-address guidance.
+- **[DevX]** `mockforge cve run --skip-tls-verify` for self-signed lab targets, mirroring `mockforge bench`. Verification stays on by default; the flag covers the control requests and the test client, warns while active, and is recorded in the report.
+- **[DevX]** The managed CVE labs guide has an "Air-gapped lab hosts" section: `docker save` on a connected machine, `docker load` on the lab host, then `prepare` verifies the pinned digests without pulling.
+
+### Fixed
+
+- **[Cloud]** Tunnels refuse unauthenticated cloud destinations.
+- **[DevX]** Bundled demo samples serve their real image responses.
+- **[Cloud]** Stripe subscription webhooks reconcile ordered subscription state and handle API-version changes, repeats, unknown events and prices.
+
+### Changed
+
+- **[DevX]** Protocol support is split out of transport builds, so builds that don't need every protocol compile less.
+
 ## [0.3.240] - 2026-11-03
 
 ### Changed
