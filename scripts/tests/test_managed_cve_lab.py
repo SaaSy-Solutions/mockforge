@@ -334,8 +334,8 @@ class PackRegistryTests(unittest.TestCase):
         self.assertEqual(pulled, [["docker", "pull", images[0]], ["docker", "pull", images[1]]])
 
 
-class Php2ShellPackTests(unittest.TestCase):
-    """The PHP2Shell pack is complete except for its pending reviewed image."""
+class Cve20244577PackTests(unittest.TestCase):
+    """The CVE-2024-4577 pack is complete except for its pending reviewed image."""
 
     def setUp(self):
         self.pack = catalog.PACKS["CVE-2024-4577"]
@@ -404,7 +404,7 @@ class Php2ShellPackTests(unittest.TestCase):
         self.assertNotIn("__mockforge_cve", text)
 
 
-class Php2ShellVerdictTests(unittest.TestCase):
+class Cve20244577VerdictTests(unittest.TestCase):
     """The CGI classifier mirrors the blocking semantics for the PHP pack."""
 
     def setUp(self):

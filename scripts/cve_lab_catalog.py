@@ -78,7 +78,7 @@ PACKS = {
             "application_version": "PHP 8.3.7 cgi (Windows, vulnerable) under Wine; Apache httpd 2.4.70 CGI harness",
             # NOT a reviewed image yet: the tag is an explicit placeholder and
             # prepare/run refuse it until the digest below is replaced with the
-            # reviewed lab-host build (see examples/cve-lab/php2shell-lab-image/).
+            # reviewed lab-host build (see examples/cve-lab/cve-2024-4577-lab-image/).
             "application_image": "docker.io/mockforge/cve-lab-phpcgi-wine:pending-lab-host-review",
             "image_status": "pending-lab-host-review",
             "runner_version": "Nuclei 3.11.1",
