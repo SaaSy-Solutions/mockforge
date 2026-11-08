@@ -70,12 +70,8 @@ async fn test_rust_sdk_integration() {
         StatusCode::CREATED,
         "stub creation must return 201 Created"
     );
-    let created: serde_json::Value =
-        stub_response.json().await.expect("Created stub must be JSON");
-    let mock_id = created["id"]
-        .as_str()
-        .expect("Created stub must have an ID")
-        .to_string();
+    let created: serde_json::Value = stub_response.json().await.expect("Created stub must be JSON");
+    let mock_id = created["id"].as_str().expect("Created stub must have an ID").to_string();
 
     // Decisive roundtrip (#1281): the stub must now be served on the HTTP
     // port with its exact configured status and body. These assertions are
@@ -504,17 +500,9 @@ async fn test_sdk_common_functionality() {
         .await
         .expect("Failed to create stub");
 
-    assert_eq!(
-        stub_response.status(),
-        StatusCode::CREATED,
-        "stub POST must return 201 Created"
-    );
-    let created: serde_json::Value =
-        stub_response.json().await.expect("Created stub must be JSON");
-    let mock_id = created["id"]
-        .as_str()
-        .expect("Created stub must have an ID")
-        .to_string();
+    assert_eq!(stub_response.status(), StatusCode::CREATED, "stub POST must return 201 Created");
+    let created: serde_json::Value = stub_response.json().await.expect("Created stub must be JSON");
+    let mock_id = created["id"].as_str().expect("Created stub must have an ID").to_string();
 
     // Test stub retrieval (all SDKs use this) — the created stub must be
     // listed; a dropped stub (#1281) must fail here rather than skip the check.
