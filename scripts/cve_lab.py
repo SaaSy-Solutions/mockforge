@@ -16,6 +16,7 @@ from cve_lab_engine import doctor, prepare, lab, cleanup
 from cve_lab_transport import target_url, receiver, control, unverified_context
 from cve_lab_nuclei import probe
 from cve_lab_evidence import BASELINE_GATES, CLASSIFIERS, describe
+from cve_lab_exploits import BASELINE_EXPLOITS, TARGET_EXPLOITS
 
 
 def run_plan_lines(args):
@@ -47,6 +48,12 @@ def run_plan_lines(args):
         lines.append(
             "Lab image pending review: this pack refuses to run until the "
             "reviewed image digest is pinned (see `mockforge cve list`)"
+        )
+    if pack_catalog.get("verification_status") == "pending-lab-host-verification":
+        lines.append(
+            "Trigger pending lab-host verification: the pack runs only its "
+            "reviewed advisory-derived choreography and reports inconclusive "
+            "unless the documented corruption marker appears"
         )
     return lines
 
@@ -85,12 +92,17 @@ def run(args):
         )
     try:
         prepare(args.engine, pack)
+        for name, content in pack.get("application_files", {}).items():
+            # The reviewed lab application ships inside the pack and is
+            # mounted read-only into the pinned image by lab().
+            (output / name).write_text(content)
         with lab(args.engine, run_id, output, pack) as backend:
             with receiver(
                 args.origin_port,
                 args.listen_address,
                 backend,
                 signature_header=pack["probe"].get("signature_header"),
+                max_body=(pack.get("exploit") or {}).get("max_forwarded_body"),
             ) as records:
                 direct_host = (
                     "127.0.0.1"
@@ -114,15 +126,21 @@ def run(args):
                     baseline_control=baseline_control,
                     unauthenticated_status=baseline_control["root_status"],
                 )
+                if pack.get("baseline_exploit"):
+                    exploit_result = BASELINE_EXPLOITS[pack["baseline_exploit"]](
+                        args.engine, origin, output, run_id, pack
+                    )
+                    report.update(baseline_exploit=exploit_result)
+                    baseline = {**baseline, "crash_confirmed": exploit_result["crash_confirmed"]}
+                    report["baseline"] = baseline
                 BASELINE_GATES[pack["baseline_gate"]](pack, baseline_control, baseline)
                 if args.target:
                     target_start = len(records)
                     before = control(pack, args.target, run_id, "before", context=tls_context)
-                    tested = probe(
+                    tested = TARGET_EXPLOITS[pack.get("target_exploit", "nuclei")](
                         args.engine,
                         args.target.rstrip("/"),
                         output,
-                        "target",
                         run_id,
                         pack,
                         insecure=args.skip_tls_verify,
