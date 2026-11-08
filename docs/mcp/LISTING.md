@@ -3,6 +3,8 @@
 This file contains platform-ready copy for MockForge's shipped stdio MCP server.
 The server version follows the workspace package version: `0.3.241`.
 
+> **Before submitting:** `server.json` lists a `cargo` package (`cargo install mockforge-cli`). Confirm the official MCP registry accepts that package type at submission time; if it only accepts npm, PyPI, NuGet, OCI or MCPB packages, publish one of those first or omit `packages`. Smithery runs local stdio servers from a container build, so a Dockerfile (or Smithery's build config) is needed before a Smithery listing works.
+
 ## Official MCP Registry
 
 **Name:** `io.github.saasy-solutions/mockforge`
@@ -36,10 +38,10 @@ The server version follows the workspace package version: `0.3.241`.
 
 **Tools:**
 
-- `list_routes` — `List every operation (method + path + summary) in an OpenAPI/Swagger spec`
-- `validate_request` — `Validate a synthetic request against a spec and return conformance violations`
-- `generate_example` — `Generate a sample JSON response body for an operation's declared success schema`
-- `convert_spec` — `Up-convert a Swagger/OpenAPI 2.0 document to OpenAPI 3.0`
+- `list_routes`: `List every operation (method + path + summary) in an OpenAPI/Swagger spec`
+- `validate_request`: `Validate a synthetic request against a spec and return conformance violations`
+- `generate_example`: `Generate a sample JSON response body for an operation's declared success schema`
+- `convert_spec`: `Up-convert a Swagger/OpenAPI 2.0 document to OpenAPI 3.0`
 
 ## Smithery
 
@@ -82,10 +84,10 @@ The server version follows the workspace package version: `0.3.241`.
 
 **Tools:**
 
-- `list_routes` — `List every operation (method + path + summary) in an OpenAPI/Swagger spec`
-- `validate_request` — `Validate a synthetic request against a spec and return conformance violations`
-- `generate_example` — `Generate a sample JSON response body for an operation's declared success schema`
-- `convert_spec` — `Up-convert a Swagger/OpenAPI 2.0 document to OpenAPI 3.0`
+- `list_routes`: `List every operation (method + path + summary) in an OpenAPI/Swagger spec`
+- `validate_request`: `Validate a synthetic request against a spec and return conformance violations`
+- `generate_example`: `Generate a sample JSON response body for an operation's declared success schema`
+- `convert_spec`: `Up-convert a Swagger/OpenAPI 2.0 document to OpenAPI 3.0`
 
 **Links:** [Repository](https://github.com/SaaSy-Solutions/mockforge) · [Release notes](https://github.com/SaaSy-Solutions/mockforge/blob/main/book/src/reference/changelog.md) · [Installation](https://docs.mockforge.dev/getting-started/installation.html)
 
