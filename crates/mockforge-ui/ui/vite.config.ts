@@ -2,11 +2,15 @@ import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { visualizer } from 'rollup-plugin-visualizer'
 import path from 'path'
+import { fileURLToPath } from 'node:url'
+
+const configDir = path.dirname(fileURLToPath(import.meta.url))
 
 // https://vite.dev/config/
 export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const isCloudBuild = env.VITE_MOCKFORGE_MODE === 'cloud'
+  const cargoUiOutput = process.env.MOCKFORGE_UI_BUILD_OUT_DIR
 
   // Guard: a cloud-mode production build MUST have VITE_API_BASE_URL set.
   // Without it the compiled bundle sees `isCloud === false` at runtime, the
@@ -27,7 +31,7 @@ export default defineConfig(({ command, mode }) => {
     plugins: [
       react(),
       visualizer({
-        filename: './dist/stats.html',
+        filename: cargoUiOutput ? path.join(cargoUiOutput, 'stats.html') : './dist/stats.html',
         open: false,
         gzipSize: true,
         brotliSize: true,
@@ -36,13 +40,13 @@ export default defineConfig(({ command, mode }) => {
     ],
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, './src'),
+        '@': path.resolve(configDir, './src'),
         // MUI compatibility shims — legacy pages still import from
         // '@mui/material' / '@mui/icons-material'. These aliases redirect
         // those imports to in-tree shadcn-token replacements so we can drop
         // the MUI dependency without rewriting every page in one PR.
-        '@mui/material': path.resolve(__dirname, './src/components/ui/mui-shim.tsx'),
-        '@mui/icons-material': path.resolve(__dirname, './src/components/ui/mui-icons-shim.tsx'),
+        '@mui/material': path.resolve(configDir, './src/components/ui/mui-shim.tsx'),
+        '@mui/icons-material': path.resolve(configDir, './src/components/ui/mui-icons-shim.tsx'),
       },
       dedupe: ['react', 'react-dom'], // Ensure React is not duplicated
     },

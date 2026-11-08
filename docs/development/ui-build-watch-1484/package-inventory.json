@@ -1,0 +1,8 @@
+{
+  "command": "cargo package --locked -p mockforge-ui --list",
+  "scope": "metadata only; no compilation",
+  "file_count": 80,
+  "build_support_included": true,
+  "frontend_hook_and_dist_excluded": true,
+  "stdout_sha256": "32e29fb22dc093a925a624b1adf6deb54166248ad122d08a43fba8a0b9e8e21f"
+}

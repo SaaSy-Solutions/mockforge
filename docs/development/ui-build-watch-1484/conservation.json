@@ -1,0 +1,24 @@
+{
+  "baseline": "2794bcdebd5bd753e8b1c82e5f307f84da0ec08b",
+  "identical_sha256": {
+    "rendering-functions": "027130fc814204bc6407f25b4cff8011cd893fb9d76e0d63c40946fe1a38bb08",
+    "placeholder": "c7dd367a50f398d89418f9b06ec191d2d677449d73747771ec7e316bbdea7ec4",
+    "version-emitter": "6326f56947a6287c4688b79aa2aa618b459f949f39834584ce134a66cff750d1"
+  },
+  "manifest_only_added_helper_include": true,
+  "workspace_lock_unchanged": true,
+  "exceptions": [
+    "build-support module and source/output owner selection",
+    "existing input watches including11productioninputs and activeprebuiltfallback",
+    "OUT_DIR/ui-dist producer path, success+index selection, nofallbackmkdir",
+    "optionalvalidatedownedoutputargument, emptyonlyownedpath, Cargo-onlyconfigLoader runner",
+    "visualizerownedoutputrouting; Node18-compatibleESMconfigDir preservingaliases",
+    "test/qualification/docs files"
+  ],
+  "production_source_sha256": {
+    "crates/mockforge-ui/build.rs": "bf96b00140585f18dee9d0e8960c1f0d7146bca9f293d0929a8dff9addca0f8b",
+    "crates/mockforge-ui/build_support.rs": "fd36c44f5ed3a101307f9687c37beaa7479440a52c7818e2f93b44090bb079e5",
+    "crates/mockforge-ui/build_ui.sh": "6403f3f3456b934023ef33318eaddb13351725f8678b4780dcedc2641dd993bf",
+    "crates/mockforge-ui/ui/vite.config.ts": "ef651461f538a1e3038de57f30c422259459f59a0b4bdb8ffa4fe45e55e14a06"
+  }
+}

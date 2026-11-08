@@ -1,0 +1,61 @@
+{
+  "source": "aeba61c535868b38b72e83ead23d2941128e6309",
+  "same_script_output_mtime_ns": 1793820269669848086,
+  "full_frontend_scope": "Existing build failure and fallback; full application frontend not qualified",
+  "runs": [
+    {
+      "run": "final-production-first",
+      "command": "scripts/dev/cargo check --locked -p mockforge-ui --lib --message-format=json",
+      "artifact_count": 957,
+      "fresh_count": 955,
+      "admission": {
+        "policy_sha256": "5de45082645bb5f7236dc78f2c41fdd6ee4dcabe4c199be8abe34273f18bad7e",
+        "workload_class": "check",
+        "admission_class": "STANDARD_CHECK",
+        "admission_slot": 1,
+        "pressure_wait_seconds": 0.0,
+        "classification_reason": "Unknown or unmeasured workload",
+        "minimum_available_mib": 16384,
+        "max_concurrent": 4,
+        "reserved_checks": 2,
+        "limits": {
+          "memory_mib": 12288,
+          "cpu_percent": 200,
+          "jobs": 2
+        },
+        "cargo_command": "check",
+        "worktree": "decd0c2805c6ce3c",
+        "admission_seconds": 0.0,
+        "execution_seconds": 13.827,
+        "exit_status": 0
+      }
+    },
+    {
+      "run": "final-production-second",
+      "command": "scripts/dev/cargo check --locked -p mockforge-ui --lib --message-format=json",
+      "artifact_count": 957,
+      "fresh_count": 957,
+      "admission": {
+        "policy_sha256": "5de45082645bb5f7236dc78f2c41fdd6ee4dcabe4c199be8abe34273f18bad7e",
+        "workload_class": "check",
+        "admission_class": "STANDARD_CHECK",
+        "admission_slot": 1,
+        "pressure_wait_seconds": 0.0,
+        "classification_reason": "Unknown or unmeasured workload",
+        "minimum_available_mib": 16384,
+        "max_concurrent": 4,
+        "reserved_checks": 2,
+        "limits": {
+          "memory_mib": 12288,
+          "cpu_percent": 200,
+          "jobs": 2
+        },
+        "cargo_command": "check",
+        "worktree": "decd0c2805c6ce3c",
+        "admission_seconds": 0.001,
+        "execution_seconds": 1.045,
+        "exit_status": 0
+      }
+    }
+  ]
+}
