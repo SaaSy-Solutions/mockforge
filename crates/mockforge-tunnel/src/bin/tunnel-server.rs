@@ -52,10 +52,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("  Rate Limiting: {}", config.rate_limit.enabled);
     info!("  Audit Logging: {}", config.audit_logging_enabled);
 
-    // Initialize storage. The base store is in-memory or SQLite per
-    // config; when REGISTRY_URL is set we wrap it in
-    // RegistryTunnelStore so subdomain claims are validated against
-    // the cloud registry's tunnel_reservations table on cache miss.
+    // A cloud binary must never fall back to unrestricted local forwarding.
+    // Validate before opening storage or binding any listener.
+    #[cfg(feature = "cloud-validation")]
+    let (registry_url, registry_token) = {
+        let required = |name: &str| -> anyhow::Result<String> {
+            std::env::var(name)
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+                .ok_or_else(|| anyhow::anyhow!("{name} required by cloud-validation build"))
+        };
+        let registry_url = required("REGISTRY_URL")?;
+        let url = url::Url::parse(&registry_url)
+            .map_err(|_| anyhow::anyhow!("REGISTRY_URL must be an HTTP(S) origin"))?;
+        if !matches!(url.scheme(), "http" | "https")
+            || url.host_str().is_none()
+            || !url.username().is_empty()
+            || url.password().is_some()
+            || url.query().is_some()
+            || url.fragment().is_some()
+            || url.path() != "/"
+        {
+            return Err(anyhow::anyhow!("REGISTRY_URL must be an HTTP(S) origin").into());
+        }
+        (registry_url, required("MOCKFORGE_INTERNAL_API_TOKEN")?)
+    };
+
+    // The standalone build retains direct local forwarding. Cloud builds always
+    // wrap storage; a reservation alone never establishes a client connection.
     let inner_store: Arc<dyn TunnelStoreTrait> = {
         #[cfg(feature = "sqlx")]
         {
@@ -79,22 +103,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let store_wrapper = {
         #[cfg(feature = "cloud-validation")]
         {
-            if let Ok(registry_url) = std::env::var("REGISTRY_URL") {
-                let token = std::env::var("MOCKFORGE_INTERNAL_API_TOKEN").map_err(|_| {
-                    anyhow::anyhow!(
-                        "MOCKFORGE_INTERNAL_API_TOKEN required when REGISTRY_URL is set"
-                    )
-                })?;
-                info!("Cloud validation enabled — subdomains validated against {}", registry_url);
-                let cloud_store = mockforge_tunnel::cloud_validation::RegistryTunnelStore::new(
-                    inner_store.clone(),
-                    registry_url,
-                    token,
-                );
-                TunnelStoreWrapper::new(Arc::new(cloud_store))
-            } else {
-                TunnelStoreWrapper::new(inner_store)
-            }
+            let cloud_store = mockforge_tunnel::cloud_validation::RegistryTunnelStore::new(
+                inner_store.clone(),
+                registry_url,
+                registry_token,
+            );
+            TunnelStoreWrapper::new(Arc::new(cloud_store))
         }
         #[cfg(not(feature = "cloud-validation"))]
         {

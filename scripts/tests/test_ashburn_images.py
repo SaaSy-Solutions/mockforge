@@ -12,6 +12,18 @@ FILENAMES = ['ashburn-images.yml', 'docker-build.yml']
 
 
 class AshburnImagesTest(unittest.TestCase):
+    def test_runtime_examples_trigger_root_image_and_real_demo_smoke(self) -> None:
+        publisher = (ROOT / ".github/workflows/docker-build.yml").read_text()
+        smoke = (ROOT / ".github/workflows/ashburn-image-smoke.yml").read_text()
+        for workflow in (publisher, smoke):
+            self.assertIn("      - 'examples/**'", workflow.split("concurrency:", 1)[0])
+        self.assertIn("      - 'scripts/verify-bundled-demo.py'", smoke)
+        root_build = smoke.split("          file: Dockerfile\n", 1)[1].split("      - uses:", 1)[0]
+        self.assertIn("load: true", root_build)
+        self.assertIn("python3 scripts/verify-bundled-demo.py", root_build)
+        self.assertNotIn("--mount-specs", root_build)
+        self.assertIn("test_bundled_demo.py", smoke)
+
     def test_publishers_build_on_self_hosted_runners_with_private_state(self) -> None:
         smoke = (ROOT / ".github/workflows/ashburn-image-smoke.yml").read_text()
         self.assertNotIn("packages: write", smoke)
