@@ -1206,18 +1206,46 @@ components:
 
     #[test]
     fn persona_trait_supplies_total_when_schema_has_none() {
-        let spec = fixture_spec();
+        let spec = spec_from_yaml(
+            r#"
+openapi: 3.0.3
+info:
+  title: Hive API
+  version: "1.0.0"
+paths: {}
+components:
+  schemas:
+    HivePage:
+      type: object
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/Hive'}
+    Hive:
+      type: object
+      properties:
+        id: {type: string}
+"#,
+        );
         let persona = Persona {
             name: "beekeeper".to_string(),
-            traits: [("hive_count".to_string(), "7".to_string())].into_iter().collect(),
+            traits: [("hive_count".to_string(), "4".to_string())].into_iter().collect(),
         };
         let value = ResponseGenerator::generate_example_from_schema(
             &spec,
             component_schema(&spec, "HivePage"),
             Some(&persona),
         );
-        assert_eq!(value["total"], json!(7));
-        assert_eq!(value["items"].as_array().expect("items array").len(), 7);
+        assert_eq!(value["total"], json!(4));
+        assert_eq!(value["items"].as_array().expect("items array").len(), 4);
+
+        let value = ResponseGenerator::generate_example_from_schema(
+            &spec,
+            component_schema(&spec, "HivePage"),
+            None,
+        );
+        assert!(value.get("total").is_none());
+        assert_eq!(value["items"].as_array().expect("items array").len(), 1);
     }
 
     #[test]
