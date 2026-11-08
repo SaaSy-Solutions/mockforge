@@ -1,0 +1,14 @@
+name: saasy-solutions/mockforge
+description: Local stdio MCP server for inspecting and validating OpenAPI and Swagger specifications.
+version: 0.3.241
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    properties: {}
+  commandFunction:
+    |-
+    (config) => ({
+      command: "mockforge",
+      args: ["mcp"]
+    })
