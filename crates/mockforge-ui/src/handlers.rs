@@ -2041,6 +2041,9 @@ async fn perform_server_restart(_state: &AdminState) -> Result<()> {
 }
 
 /// Get parent process ID
+// `pid` is only read by the Linux /proc block below; on other targets the
+// fallback ignores it.
+#[cfg_attr(not(target_os = "linux"), allow(unused_variables))]
 async fn get_parent_process_id(pid: u32) -> Result<u32> {
     // Try to read from /proc/pid/stat on Linux
     #[cfg(target_os = "linux")]

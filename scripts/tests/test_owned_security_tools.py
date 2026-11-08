@@ -5,6 +5,7 @@ import importlib.util
 import io
 import json
 import os
+import platform
 from pathlib import Path
 import signal
 import subprocess
@@ -32,6 +33,17 @@ def script(name):
 
 
 VERIFY = script('Verify provisioned security audit tools on Hetzner')
+
+# The provision script's preflight pins Linux x64 and reads sys.platform and
+# platform.machine() directly, which tests cannot fake through env. The
+# provisioning tests below can only exercise their intended paths on that
+# platform; elsewhere they would all stop at the guard RuntimeError before
+# reaching the behavior under test, so they skip instead. Platform-independent
+# tests (pinned digests, CI policy checks, the platform-guard test itself)
+# stay unguarded and run everywhere.
+LINUX_X64 = sys.platform == 'linux' and platform.machine() == 'x86_64'
+SKIP_OFF_LINUX_X64 = unittest.skipUnless(
+    LINUX_X64, 'provisioning behavior is pinned to the Linux x64 runner route')
 
 
 class SecurityToolOwnershipTest(unittest.TestCase):
@@ -140,6 +152,7 @@ class SecurityToolOwnershipTest(unittest.TestCase):
         self.assertIn('uses: taiki-e/install-action@v2.87.31', step('Install pinned security audit tools'))
         self.assertIn("if: runner.environment == 'self-hosted'", step('Prepare job-owned security audit tools on Hetzner'))
 
+    @SKIP_OFF_LINUX_X64
     def test_direct_and_cargo_subcommands_use_owned_exact_tools(self):
         root, token, env = self.installed_env()
         self.assertEqual(Path(self.env['GITHUB_PATH']).read_text().splitlines(), [str(self.cargo_home / 'bin'), str(root / 'bin')])
@@ -157,6 +170,7 @@ class SecurityToolOwnershipTest(unittest.TestCase):
         self.assertIn('expected=cargo-audit-audit 0.22.2 actual=cargo-audit-audit 0.22.2 exit=0', result.stdout)
         self.assert_unmodified()
 
+    @SKIP_OFF_LINUX_X64
     def test_old_direct_spelling_fails_for_realistic_cargo_invocation(self):
         root, token, env = self.installed_env()
         old = VERIFY.replace("probe 'cargo-audit-audit 0.22.2' cargo audit --version",
@@ -166,6 +180,7 @@ class SecurityToolOwnershipTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('expected=cargo-audit 0.22.2 actual=cargo-audit-audit 0.22.2 exit=0', result.stdout)
 
+    @SKIP_OFF_LINUX_X64
     def test_cargo_audit_output_and_status_are_exact(self):
         root, token, env = self.installed_env()
         for output, status in (('cargo-audit 0.22.2', 0), ('cargo-audit-audit 0.22.3', 0),
@@ -177,6 +192,7 @@ class SecurityToolOwnershipTest(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn('expected=cargo-audit-audit 0.22.2 actual=' + output + ' exit=' + str(status), result.stdout)
 
+    @SKIP_OFF_LINUX_X64
     def test_cargo_deny_does_not_accept_a_nested_audit_style_name(self):
         root, token, env = self.installed_env()
         (root/'bin/cargo-deny').write_bytes(self.plugin_payload('cargo-deny', 'cargo-deny 0.20.2', 'cargo-deny-deny 0.20.2'))
@@ -184,6 +200,7 @@ class SecurityToolOwnershipTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('expected=cargo-deny 0.20.2 actual=cargo-deny-deny 0.20.2 exit=0', result.stdout)
 
+    @SKIP_OFF_LINUX_X64
     def test_wrong_or_missing_cargo_fails_before_plugin_probes(self):
         root, token, env = self.installed_env()
         for version in ('cargo 1.95.0 (old)', 'cargo 1.96.1 (different)', 'cargo 1.96.0-nightly (different)', ''):
@@ -199,6 +216,7 @@ class SecurityToolOwnershipTest(unittest.TestCase):
         self.assertIn('Cargo version probe: actual= exit=127', result.stdout)
         self.assertNotIn('Security version probe:', result.stdout)
 
+    @SKIP_OFF_LINUX_X64
     def test_missing_explicit_cargo_home_path_exposes_foreign_plugin_and_fails(self):
         root, token, env = self.installed_env()
         env['PATH'] = os.pathsep.join(path for path in env['PATH'].split(os.pathsep) if path != str(self.cargo_home / 'bin'))
@@ -207,6 +225,7 @@ class SecurityToolOwnershipTest(unittest.TestCase):
         self.assertIn('actual=cargo-audit 0.0.0', result.stdout)
         self.assert_unmodified()
 
+    @SKIP_OFF_LINUX_X64
     def test_foreign_same_version_direct_tools_fail_path_ownership(self):
         root, token, env = self.installed_env()
         foreign = self.root / 'foreign'; foreign.mkdir()
@@ -214,6 +233,7 @@ class SecurityToolOwnershipTest(unittest.TestCase):
         result = self.verify({**env, 'PATH': str(foreign) + os.pathsep + env['PATH']})
         self.assertNotEqual(result.returncode, 0); self.assert_unmodified()
 
+    @SKIP_OFF_LINUX_X64
     def test_wrong_version_prints_diagnostics_before_failing(self):
         root, token, env = self.installed_env()
         self.tool(root / 'bin/cargo-audit', 'cargo-audit 0.1.0')
@@ -221,17 +241,20 @@ class SecurityToolOwnershipTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('expected=cargo-audit 0.22.2 actual=cargo-audit 0.1.0 exit=0', result.stdout)
 
+    @SKIP_OFF_LINUX_X64
     def test_checksum_mismatch_and_partial_second_download_clean_own_root(self):
         with self.assertRaisesRegex(RuntimeError, 'SHA256'): self.prepare(bad_checksum=True)
         self.assert_empty()
         with self.assertRaisesRegex(OSError, 'second download failed'): self.prepare(fail_second=True)
         self.assert_empty()
 
+    @SKIP_OFF_LINUX_X64
     def test_wrong_binary_version_is_not_published_or_retained(self):
         spec = TOOLS.SPECS[1]; self.payloads[spec['tool']] = self.archive(spec, version='0.1.0')
         with self.assertRaisesRegex(RuntimeError, 'version verification'): self.prepare()
         self.assert_empty()
 
+    @SKIP_OFF_LINUX_X64
     def test_invalid_archive_missing_binary_and_extraction_bounds_fail(self):
         spec = TOOLS.SPECS[0]
         self.payloads[spec['tool']] = b'not a gzip archive'
@@ -258,6 +281,7 @@ class SecurityToolOwnershipTest(unittest.TestCase):
             with self.subTest(override=override), self.assertRaises(RuntimeError): self.prepare({**self.env, **override})
             self.assert_empty()
 
+    @SKIP_OFF_LINUX_X64
     def test_sibling_cleanup_and_foreign_receipt_refusal(self):
         a, at = self.prepare(); b, bt = self.prepare()
         self.assertNotEqual(a, b); self.assertNotEqual(at, bt)
@@ -269,6 +293,7 @@ class SecurityToolOwnershipTest(unittest.TestCase):
         with self.assertRaises(RuntimeError): TOOLS.remove_owned(b,bt,self.env)
         receipt.write_text(original); TOOLS.remove_owned(b,bt,self.env)
 
+    @SKIP_OFF_LINUX_X64
     def test_cleanup_failure_remains_a_failure_and_preserves_locator(self):
         root, token = self.prepare()
         with patch.object(TOOLS.shutil, 'rmtree', side_effect=OSError('cleanup failed')), self.assertRaisesRegex(OSError, 'cleanup failed'):
@@ -277,6 +302,7 @@ class SecurityToolOwnershipTest(unittest.TestCase):
             TOOLS.remove_owned(root, token, self.env)
         self.assertTrue((root / TOOLS.OWNER_FILE).exists()); self.assert_unmodified()
 
+    @SKIP_OFF_LINUX_X64
     def test_repeated_term_during_second_setup_preserves_existing_sibling(self):
         a, at = self.prepare(); ready=self.root/'ready'; cleaning=self.root/'cleaning'
         specs=self.fake_specs(); payload_dir=self.root/'archives';payload_dir.mkdir()

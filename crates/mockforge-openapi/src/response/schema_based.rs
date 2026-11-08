@@ -763,56 +763,6 @@ impl ResponseGenerator {
         None
     }
 
-    /// Infer relationship count from parent entity schema
-    /// When generating a child entity list, check if parent entity has a count field
-    #[allow(dead_code)]
-    pub(crate) fn infer_count_from_parent_schema(
-        spec: &OpenApiSpec,
-        parent_entity_name: &str,
-        child_entity_name: &str,
-    ) -> Option<u64> {
-        // Look for parent entity schema
-        let _parent_schema_name = parent_entity_name.to_string();
-        let count_field_name = format!("{}_count", child_entity_name);
-
-        // Try to find the schema
-        if let Some(components) = &spec.spec.components {
-            let schemas = &components.schemas;
-            // Look for parent schema (case-insensitive)
-            for (schema_name, schema_ref) in schemas {
-                let schema_name_lower = schema_name.to_lowercase();
-                if schema_name_lower.contains(&parent_entity_name.to_lowercase()) {
-                    if let ReferenceOr::Item(schema) = schema_ref {
-                        // Check if this schema has the count field
-                        if let openapiv3::SchemaKind::Type(openapiv3::Type::Object(obj)) =
-                            &schema.schema_kind
-                        {
-                            for (prop_name, prop_schema) in &obj.properties {
-                                if prop_name.to_lowercase() == count_field_name.to_lowercase() {
-                                    // Convert ReferenceOr<Box<Schema>> to ReferenceOr<Schema>
-                                    let schema_ref: ReferenceOr<Schema> = match prop_schema {
-                                        ReferenceOr::Item(boxed) => {
-                                            ReferenceOr::Item(boxed.as_ref().clone())
-                                        }
-                                        ReferenceOr::Reference { reference } => {
-                                            ReferenceOr::Reference {
-                                                reference: reference.clone(),
-                                            }
-                                        }
-                                    };
-                                    // Extract count value from schema
-                                    return Self::extract_numeric_value_from_schema(&schema_ref);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        None
-    }
-
     /// Generate example value for a property based on its name
     pub(crate) fn generate_example_for_property(prop_name: &str) -> Value {
         let prop_lower = prop_name.to_lowercase();
@@ -881,5 +831,593 @@ impl ResponseGenerator {
             // References typically point to named object schemas
             ReferenceOr::Reference { .. } => true,
         }
+    }
+}
+
+#[cfg(test)]
+mod schema_based_tests {
+    use super::*;
+    use serde_json::json;
+
+    fn spec_from_yaml(yaml: &str) -> OpenApiSpec {
+        OpenApiSpec::from_string(yaml, Some("yaml")).expect("valid fixture spec")
+    }
+
+    fn component_schema<'a>(spec: &'a OpenApiSpec, name: &str) -> &'a Schema {
+        match spec.schemas().expect("components present").get(name) {
+            Some(ReferenceOr::Item(schema)) => schema,
+            _ => panic!("schema {name} not found as an inline item"),
+        }
+    }
+
+    /// Spec exercising pagination, examples and name heuristics in one place.
+    fn fixture_spec() -> OpenApiSpec {
+        spec_from_yaml(
+            r#"
+openapi: 3.0.3
+info:
+  title: Hive API
+  version: "1.0.0"
+paths: {}
+components:
+  schemas:
+    PaginatedHives:
+      type: object
+      properties:
+        total: {type: integer, example: 5}
+        page: {type: integer, example: 1}
+        limit: {type: integer, example: 20}
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/Hive'}
+    LimitedHives:
+      type: object
+      properties:
+        total: {type: integer, example: 50}
+        page: {type: integer, example: 1}
+        limit: {type: integer, example: 5}
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/Hive'}
+    TemplatedHives:
+      type: object
+      properties:
+        total: {type: integer, example: 3}
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/Hive'}
+          example:
+            - id: h1
+              name: "Hive #1"
+    Apiary:
+      type: object
+      properties:
+        hive_count: {type: integer, example: 7}
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/Hive'}
+    HivePage:
+      type: object
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/Hive'}
+    Hive:
+      type: object
+      properties:
+        id: {type: string}
+        name: {type: string}
+    PrimString: {type: string}
+    PrimInt: {type: integer}
+    PrimNum: {type: number}
+    PrimBool: {type: boolean}
+    IntList:
+      type: array
+      items: {type: integer}
+    FreeArray: {type: array}
+    Exampled:
+      type: object
+      properties:
+        name: {type: string}
+      example: {id: 3}
+    PropExamples:
+      type: object
+      properties:
+        status: {type: string, example: live}
+    EmptyMeta:
+      type: object
+      properties:
+        meta: {type: object, properties: {}}
+        email: {$ref: '#/components/schemas/Missing'}
+        website: {$ref: '#/components/schemas/Missing'}
+        mystery: {$ref: '#/components/schemas/Missing'}
+    NotArray: {type: string}
+    NumExample: {type: integer, example: 5, default: 9}
+    NumDefault: {type: integer, default: 12}
+    NumString: {type: integer, example: abc}
+    ObjTyped:
+      type: object
+      properties: {a: {type: string}}
+    StrTyped: {type: string}
+"#,
+        )
+    }
+
+    // ─── Type-level generation ──────────────────────────────────────────────
+
+    #[test]
+    fn schema_level_example_takes_priority() {
+        let spec = fixture_spec();
+        let value = ResponseGenerator::generate_example_from_schema(
+            &spec,
+            component_schema(&spec, "Exampled"),
+            None,
+        );
+        // The schema-level example replaces all generation, including the
+        // `name` property that would otherwise be synthesized.
+        assert_eq!(value, json!({"id": 3}));
+    }
+
+    #[test]
+    fn primitive_type_defaults() {
+        let spec = fixture_spec();
+        assert_eq!(
+            ResponseGenerator::generate_example_from_schema(
+                &spec,
+                component_schema(&spec, "PrimString"),
+                None
+            ),
+            json!("example string")
+        );
+        assert_eq!(
+            ResponseGenerator::generate_example_from_schema(
+                &spec,
+                component_schema(&spec, "PrimInt"),
+                None
+            ),
+            json!(42)
+        );
+        assert_eq!(
+            ResponseGenerator::generate_example_from_schema(
+                &spec,
+                component_schema(&spec, "PrimNum"),
+                None
+            ),
+            json!(std::f64::consts::PI)
+        );
+        assert_eq!(
+            ResponseGenerator::generate_example_from_schema(
+                &spec,
+                component_schema(&spec, "PrimBool"),
+                None
+            ),
+            json!(true)
+        );
+    }
+
+    #[test]
+    fn array_generates_single_item_from_item_schema() {
+        let spec = fixture_spec();
+        let value = ResponseGenerator::generate_example_from_schema(
+            &spec,
+            component_schema(&spec, "IntList"),
+            None,
+        );
+        assert_eq!(value, json!([42]));
+    }
+
+    #[test]
+    fn array_without_items_uses_placeholder_string() {
+        let spec = fixture_spec();
+        let value = ResponseGenerator::generate_example_from_schema(
+            &spec,
+            component_schema(&spec, "FreeArray"),
+            None,
+        );
+        assert_eq!(value, json!(["item"]));
+    }
+
+    // ─── Object properties ──────────────────────────────────────────────────
+
+    #[test]
+    fn property_level_examples_are_used() {
+        let spec = fixture_spec();
+        let value = ResponseGenerator::generate_example_from_schema(
+            &spec,
+            component_schema(&spec, "PropExamples"),
+            None,
+        );
+        assert_eq!(value, json!({"status": "live"}));
+    }
+
+    #[test]
+    fn empty_object_property_stays_empty_object() {
+        let spec = fixture_spec();
+        let value = ResponseGenerator::generate_example_from_schema(
+            &spec,
+            component_schema(&spec, "EmptyMeta"),
+            None,
+        );
+        // Object-typed properties are not replaced by name-heuristic strings.
+        assert_eq!(value["meta"], json!({}));
+    }
+
+    #[test]
+    fn unresolvable_reference_falls_back_to_name_heuristics() {
+        let spec = fixture_spec();
+        let value = ResponseGenerator::generate_example_from_schema(
+            &spec,
+            component_schema(&spec, "EmptyMeta"),
+            None,
+        );
+        let email = value["email"].as_str().expect("email string");
+        assert!(email.starts_with("user") && email.ends_with("@example.com"), "{email}");
+        assert_eq!(value["website"], json!("https://example.com"));
+        assert_eq!(value["mystery"], json!("example mystery"));
+    }
+
+    // ─── Pagination heuristics ──────────────────────────────────────────────
+
+    #[test]
+    fn paginated_response_generates_total_items() {
+        let spec = fixture_spec();
+        let value = ResponseGenerator::generate_example_from_schema(
+            &spec,
+            component_schema(&spec, "PaginatedHives"),
+            None,
+        );
+        assert_eq!(value["total"], json!(5));
+        assert_eq!(value["page"], json!(1));
+        assert_eq!(value["limit"], json!(20));
+        let items = value["items"].as_array().expect("items array");
+        assert_eq!(items.len(), 5);
+        // Items are uniquified via add_item_variation.
+        assert_eq!(items[0]["id"], json!("example string_001"));
+        assert_eq!(items[4]["id"], json!("example string_005"));
+    }
+
+    #[test]
+    fn items_capped_at_limit() {
+        let spec = fixture_spec();
+        let value = ResponseGenerator::generate_example_from_schema(
+            &spec,
+            component_schema(&spec, "LimitedHives"),
+            None,
+        );
+        // total=50, limit=5 → min(total, limit) items.
+        assert_eq!(value["items"].as_array().expect("items array").len(), 5);
+    }
+
+    #[test]
+    fn paginated_array_example_used_as_template() {
+        let spec = fixture_spec();
+        let value = ResponseGenerator::generate_example_from_schema(
+            &spec,
+            component_schema(&spec, "TemplatedHives"),
+            None,
+        );
+        let items = value["items"].as_array().expect("items array");
+        assert_eq!(items.len(), 3);
+        assert_eq!(items[0]["id"], json!("h1_001"));
+        assert_eq!(items[2]["id"], json!("h1_003"));
+        assert_eq!(items[2]["name"], json!("Hive #3"));
+    }
+
+    #[test]
+    fn total_inferred_from_parent_count_field() {
+        let spec = fixture_spec();
+        // Apiary has no total/page/limit props; the generator falls back to
+        // scanning schemas for a *_count field and finds hive_count: 7.
+        // Note the scan is spec-global: it inspects every component schema.
+        let value = ResponseGenerator::generate_example_from_schema(
+            &spec,
+            component_schema(&spec, "Apiary"),
+            None,
+        );
+        assert_eq!(value["total"], json!(7));
+        assert_eq!(value["items"].as_array().expect("items array").len(), 7);
+    }
+
+    #[test]
+    fn inference_skips_out_of_range_counts() {
+        // Isolated spec: hive_count=5000 exceeds the 1000 sanity cap, and no
+        // other schema offers a usable count, so no pagination metadata is
+        // injected and the items array keeps its single default item.
+        let spec = spec_from_yaml(
+            r#"
+openapi: 3.0.3
+info:
+  title: Big Hive API
+  version: "1.0.0"
+paths: {}
+components:
+  schemas:
+    BigApiary:
+      type: object
+      properties:
+        hive_count: {type: integer, example: 5000}
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/Hive'}
+    Hive:
+      type: object
+      properties:
+        id: {type: string}
+"#,
+        );
+        let value = ResponseGenerator::generate_example_from_schema(
+            &spec,
+            component_schema(&spec, "BigApiary"),
+            None,
+        );
+        assert!(value.get("total").is_none());
+        assert_eq!(value["items"].as_array().expect("items array").len(), 1);
+    }
+
+    #[test]
+    fn persona_trait_supplies_total_when_schema_has_none() {
+        let spec = spec_from_yaml(
+            r#"
+openapi: 3.0.3
+info:
+  title: Hive API
+  version: "1.0.0"
+paths: {}
+components:
+  schemas:
+    HivePage:
+      type: object
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/Hive'}
+    Hive:
+      type: object
+      properties:
+        id: {type: string}
+"#,
+        );
+        let persona = Persona {
+            name: "beekeeper".to_string(),
+            traits: [("hive_count".to_string(), "4".to_string())].into_iter().collect(),
+        };
+        let value = ResponseGenerator::generate_example_from_schema(
+            &spec,
+            component_schema(&spec, "HivePage"),
+            Some(&persona),
+        );
+        assert_eq!(value["total"], json!(4));
+        assert_eq!(value["items"].as_array().expect("items array").len(), 4);
+
+        let value = ResponseGenerator::generate_example_from_schema(
+            &spec,
+            component_schema(&spec, "HivePage"),
+            None,
+        );
+        assert!(value.get("total").is_none());
+        assert_eq!(value["items"].as_array().expect("items array").len(), 1);
+    }
+
+    #[test]
+    fn end_to_end_paginated_response_via_generate_response() {
+        let spec = spec_from_yaml(
+            r#"
+openapi: 3.0.3
+info:
+  title: Hive API
+  version: "1.0.0"
+paths:
+  /hives:
+    get:
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PaginatedHives'}
+components:
+  schemas:
+    PaginatedHives:
+      type: object
+      properties:
+        total: {type: integer, example: 5}
+        page: {type: integer, example: 1}
+        limit: {type: integer, example: 20}
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/Hive'}
+    Hive:
+      type: object
+      properties:
+        id: {type: string}
+"#,
+        );
+        let path_item = spec
+            .spec
+            .paths
+            .paths
+            .get("/hives")
+            .and_then(ReferenceOr::as_item)
+            .expect("path item");
+        let operation = path_item.get.as_ref().expect("GET operation");
+
+        let body =
+            ResponseGenerator::generate_response(&spec, operation, 200, Some("application/json"))
+                .expect("generate response");
+        assert_eq!(body["total"], json!(5));
+        assert_eq!(body["items"].as_array().expect("items array").len(), 5);
+        assert_eq!(body["items"][0]["id"], json!("example string_001"));
+    }
+
+    // ─── extract_numeric_value_from_schema ──────────────────────────────────
+
+    #[test]
+    fn numeric_example_preferred_over_default() {
+        let spec = fixture_spec();
+        let schema_ref = spec.schemas().unwrap().get("NumExample").unwrap();
+        assert_eq!(ResponseGenerator::extract_numeric_value_from_schema(schema_ref), Some(5));
+    }
+
+    #[test]
+    fn numeric_default_used_without_example() {
+        let spec = fixture_spec();
+        let schema_ref = spec.schemas().unwrap().get("NumDefault").unwrap();
+        assert_eq!(ResponseGenerator::extract_numeric_value_from_schema(schema_ref), Some(12));
+    }
+
+    #[test]
+    fn non_numeric_example_returns_none() {
+        let spec = fixture_spec();
+        let schema_ref = spec.schemas().unwrap().get("NumString").unwrap();
+        assert_eq!(ResponseGenerator::extract_numeric_value_from_schema(schema_ref), None);
+    }
+
+    #[test]
+    fn unresolved_reference_returns_none() {
+        let reference = ReferenceOr::Reference {
+            reference: "#/components/schemas/NumExample".to_string(),
+        };
+        assert_eq!(ResponseGenerator::extract_numeric_value_from_schema(&reference), None);
+    }
+
+    // ─── generate_array_with_count ──────────────────────────────────────────
+
+    #[test]
+    fn non_array_schema_falls_back_to_numbered_items() {
+        let spec = fixture_spec();
+        let value = ResponseGenerator::generate_array_with_count(
+            &spec,
+            component_schema(&spec, "NotArray"),
+            (3, 1, 10),
+            None,
+        );
+        assert_eq!(value, json!(["item_1", "item_2", "item_3"]));
+    }
+
+    #[test]
+    fn count_capped_at_100() {
+        let spec = fixture_spec();
+        let value = ResponseGenerator::generate_array_with_count(
+            &spec,
+            component_schema(&spec, "NotArray"),
+            (200, 1, 500),
+            None,
+        );
+        assert_eq!(value.as_array().expect("array").len(), 100);
+    }
+
+    // ─── add_item_variation ─────────────────────────────────────────────────
+
+    #[test]
+    fn variation_uniquifies_string_ids() {
+        let mut item = json!({"id": "abc"});
+        ResponseGenerator::add_item_variation(&mut item, 2);
+        assert_eq!(item["id"], json!("abc_002"));
+    }
+
+    #[test]
+    fn variation_offsets_numeric_ids() {
+        let mut item = json!({"id": 10});
+        ResponseGenerator::add_item_variation(&mut item, 2);
+        assert_eq!(item["id"], json!(12));
+    }
+
+    #[test]
+    fn variation_replaces_hash_names() {
+        let mut item = json!({"name": "Hive #1"});
+        ResponseGenerator::add_item_variation(&mut item, 3);
+        assert_eq!(item["name"], json!("Hive #3"));
+    }
+
+    #[test]
+    fn variation_rotates_plain_names() {
+        let mut item = json!({"name": "Meadow Apiary"});
+        ResponseGenerator::add_item_variation(&mut item, 2);
+        assert_eq!(item["name"], json!("Prairie Apiary"));
+    }
+
+    #[test]
+    fn variation_rotates_status_with_healthy_bias() {
+        // Early items are biased to "healthy".
+        let mut item = json!({"status": "original"});
+        ResponseGenerator::add_item_variation(&mut item, 1);
+        assert_eq!(item["status"], json!("healthy"));
+
+        // Later items rotate through the remaining statuses.
+        let mut item = json!({"status": "original"});
+        ResponseGenerator::add_item_variation(&mut item, 8);
+        assert_eq!(item["status"], json!("sick"));
+    }
+
+    #[test]
+    fn variation_rewrites_addresses() {
+        let mut item = json!({"address": "123 Main St"});
+        ResponseGenerator::add_item_variation(&mut item, 2);
+        assert_eq!(item["address"], json!("125 Farm Road"));
+    }
+
+    #[test]
+    fn variation_rotates_hive_types() {
+        let mut item = json!({"hive_type": "langstroth"});
+        ResponseGenerator::add_item_variation(&mut item, 2);
+        assert_eq!(item["hive_type"], json!("top_bar"));
+    }
+
+    #[test]
+    fn variation_rewrites_timestamp_fields() {
+        let mut item = json!({"created_at": "2020-01-01T00:00:00Z"});
+        ResponseGenerator::add_item_variation(&mut item, 2);
+        let timestamp = item["created_at"].as_str().expect("timestamp string");
+        assert!(timestamp.starts_with("2023-"), "{timestamp}");
+        assert!(timestamp.ends_with("00Z"), "{timestamp}");
+        assert_eq!(timestamp.len(), 20, "{timestamp}");
+    }
+
+    // ─── generate_example_for_property ──────────────────────────────────────
+
+    #[test]
+    fn id_property_generates_uuid() {
+        let value = ResponseGenerator::generate_example_for_property("user_id");
+        let text = value.as_str().expect("uuid string");
+        assert!(uuid::Uuid::parse_str(text).is_ok(), "{text}");
+    }
+
+    #[test]
+    fn email_property_generates_address() {
+        let value = ResponseGenerator::generate_example_for_property("email");
+        let text = value.as_str().expect("email string");
+        assert!(text.starts_with("user") && text.ends_with("@example.com"), "{text}");
+    }
+
+    #[test]
+    fn url_property_generates_https_example() {
+        assert_eq!(
+            ResponseGenerator::generate_example_for_property("website_url"),
+            json!("https://example.com")
+        );
+    }
+
+    #[test]
+    fn unknown_property_uses_example_prefix() {
+        assert_eq!(
+            ResponseGenerator::generate_example_for_property("frobnicator"),
+            json!("example frobnicator")
+        );
+    }
+
+    // ─── is_object_typed_property ───────────────────────────────────────────
+
+    #[test]
+    fn object_typed_property_detection() {
+        let spec = fixture_spec();
+        let object_ref = ReferenceOr::Item(Box::new(component_schema(&spec, "ObjTyped").clone()));
+        let string_ref = ReferenceOr::Item(Box::new(component_schema(&spec, "StrTyped").clone()));
+        let reference = ReferenceOr::Reference {
+            reference: "#/components/schemas/ObjTyped".to_string(),
+        };
+        assert!(ResponseGenerator::is_object_typed_property(&object_ref));
+        assert!(!ResponseGenerator::is_object_typed_property(&string_ref));
+        // References are assumed to point at named object schemas.
+        assert!(ResponseGenerator::is_object_typed_property(&reference));
     }
 }

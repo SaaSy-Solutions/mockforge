@@ -1,3 +1,5 @@
+mod build_support;
+
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::env;
@@ -54,28 +56,24 @@ fn main() {
     if let Err(e) = vergen::EmitBuilder::builder().build_timestamp().git_sha(true).emit() {
         println!("cargo:warning=Failed to generate version info: {}", e);
     }
-    // Watch the build script itself by its real path (the crate root, not
-    // `ui/`). A nonexistent watched path makes cargo mark this unit stale
-    // on every run, rebuilding the crate each check (#1484).
-    println!("cargo:rerun-if-changed=build.rs");
-    println!("cargo:rerun-if-changed=ui/src/");
 
     let crate_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
     let ui_dist_path = Path::new(&crate_dir).join("ui/dist");
     let ui_public_path = Path::new(&crate_dir).join("ui/public");
 
-    // Ensure dist directory exists (for local dev builds)
-    if !ui_dist_path.exists() {
-        fs::create_dir_all(&ui_dist_path).expect("Failed to create ui/dist directory");
-    }
+    let out_dir = env::var_os("OUT_DIR").unwrap();
+    let out_path = Path::new(&out_dir);
+    let owned_ui_dist = out_path.join("ui-dist");
+    let mut frontend_succeeded = false;
 
     // Try to run the UI build script, but don't fail if it doesn't exist or fails
     // This allows the crate to compile even when the UI hasn't been built
     let ui_build_script = Path::new(&crate_dir).join("build_ui.sh");
     if ui_build_script.exists() {
-        let status = Command::new("bash").arg(&ui_build_script).status();
+        let status = Command::new("bash").arg(&ui_build_script).arg(&owned_ui_dist).status();
 
         if let Ok(status) = status {
+            frontend_succeeded = status.success();
             if !status.success() {
                 println!(
                     "cargo:warning=UI build script failed, but continuing with fallback files"
@@ -90,21 +88,16 @@ fn main() {
         println!("cargo:warning=UI build script not found, using fallback files from public/");
     }
 
-    // Watch the dist directory itself rather than its children: in the
-    // fallback layout (no built frontend) `index.html`, `manifest.json`
-    // and `assets/` don't exist yet, and watching a missing path dirties
-    // the fingerprint on every run (#1484). Cargo scans watched
-    // directories recursively, so a later frontend build still reruns
-    // this script.
-    println!("cargo:rerun-if-changed={}", ui_dist_path.display());
-    println!("cargo:rerun-if-changed={}", ui_public_path.join("manifest.json").display());
-    println!("cargo:rerun-if-changed={}", ui_public_path.join("sw.js").display());
+    let assets =
+        build_support::AssetSource::select(&owned_ui_dist, &ui_dist_path, frontend_succeeded);
+    for input in build_support::watched_inputs(Path::new(&crate_dir), &assets)
+        .expect("the packaged UI input directory exists")
+    {
+        println!("cargo:rerun-if-changed={}", input.display());
+    }
 
-    let out_dir = env::var_os("OUT_DIR").unwrap();
-    let out_path = Path::new(&out_dir);
-
-    generate_ui_content(out_path, &ui_dist_path);
-    generate_asset_paths(out_path, &ui_dist_path);
+    generate_ui_content(out_path, assets.directory());
+    generate_asset_paths(out_path, assets.directory());
     generate_icon_assets(out_path, &ui_public_path);
 }
 

@@ -1,0 +1,61 @@
+{
+  "source": "df44b29eea274d7febbec71a77cd417821f37f0c",
+  "scope": "Intermediate fallback-only qualification; root frontend config inputs not yet covered",
+  "runs": [
+    {
+      "run": "fixed-first",
+      "artifacts": 957,
+      "fresh": 920,
+      "admission": {
+        "policy_sha256": "5de45082645bb5f7236dc78f2c41fdd6ee4dcabe4c199be8abe34273f18bad7e",
+        "workload_class": "check",
+        "admission_class": "STANDARD_CHECK",
+        "admission_slot": 2,
+        "pressure_wait_seconds": 0.0,
+        "classification_reason": "Unknown or unmeasured workload",
+        "minimum_available_mib": 16384,
+        "max_concurrent": 4,
+        "reserved_checks": 2,
+        "limits": {
+          "memory_mib": 12288,
+          "cpu_percent": 200,
+          "jobs": 2
+        },
+        "cargo_command": "check",
+        "worktree": "decd0c2805c6ce3c",
+        "admission_seconds": 368.909,
+        "execution_seconds": 202.277,
+        "exit_status": 0
+      }
+    },
+    {
+      "run": "fixed-second",
+      "artifacts": 957,
+      "fresh": 957,
+      "admission": {
+        "policy_sha256": "5de45082645bb5f7236dc78f2c41fdd6ee4dcabe4c199be8abe34273f18bad7e",
+        "workload_class": "check",
+        "admission_class": "STANDARD_CHECK",
+        "admission_slot": 1,
+        "pressure_wait_seconds": 0.0,
+        "classification_reason": "Unknown or unmeasured workload",
+        "minimum_available_mib": 16384,
+        "max_concurrent": 4,
+        "reserved_checks": 2,
+        "limits": {
+          "memory_mib": 12288,
+          "cpu_percent": 200,
+          "jobs": 2
+        },
+        "cargo_command": "check",
+        "worktree": "decd0c2805c6ce3c",
+        "admission_seconds": 211.198,
+        "execution_seconds": 2.138,
+        "exit_status": 0
+      }
+    }
+  ],
+  "ui_script_output_mtime_ns_both_runs": 1793811598981565848,
+  "frontend_hook_failed_warning": true,
+  "helper_sha256": "63a95809051c60fa72664fb5d69009891236c27c44e273f1988c5c6f831972f7"
+}

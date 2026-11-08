@@ -115,20 +115,6 @@ where
         .collect())
 }
 
-/// Extract the base name of a custom check.
-/// Custom sub-checks have format "custom:name:header:..." or "custom:name:body:..."
-/// The base name is just the primary check (e.g., "custom:pets-returns-200").
-#[allow(dead_code)]
-fn extract_custom_base_name(check_name: &str) -> String {
-    // "custom:" prefix is 7 chars. Find the next colon after that.
-    let after_prefix = &check_name[7..];
-    if let Some(pos) = after_prefix.find(":header:").or(after_prefix.find(":body:")) {
-        check_name[..7 + pos].to_string()
-    } else {
-        check_name.to_string()
-    }
-}
-
 /// Round 41 (#79) — `true` when `check_name` is the PRIMARY status
 /// check for a custom YAML entry, not a header / body sub-check.
 /// Sub-checks have the form `custom:name:header:<header>` or
