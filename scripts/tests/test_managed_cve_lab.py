@@ -265,6 +265,15 @@ class VerdictTests(unittest.TestCase):
 class PackRegistryTests(unittest.TestCase):
     """Pack data drives the runner; the reviewed pack stays byte-compatible."""
 
+    def setUp(self):
+        import tempfile
+
+        self._temp = tempfile.TemporaryDirectory()
+        self.directory1 = self._temp.name
+
+    def tearDown(self):
+        self._temp.cleanup()
+
     def test_legacy_exports_match_the_shipped_pack(self):
         self.assertEqual(catalog.CVE, "CVE-2025-29927")
         self.assertEqual(catalog.CATALOG, catalog.PACKS[catalog.CVE]["catalog"])
@@ -332,6 +341,75 @@ class PackRegistryTests(unittest.TestCase):
             call.args[0] for call in command.call_args_list if call.args[0][1] == "pull"
         ]
         self.assertEqual(pulled, [["docker", "pull", images[0]], ["docker", "pull", images[1]]])
+
+    def test_prepare_touches_no_registry_when_images_are_present(self):
+        """Offline pin (a): with both pinned images already local, prepare
+        only inspects by digest - it never pulls, so later runs need no
+        registry connection."""
+        pack = catalog.PACKS["CVE-2025-29927"]
+        # prepare's loop inspects each image twice when it is already
+        # present: the pull-if-missing check and the by-digest assertion.
+        with patch.object(engine, "doctor"), patch.object(
+            engine,
+            "command",
+            return_value=completed(),
+        ) as command:
+            engine.prepare("docker", pack)
+        self.assertEqual(len(command.call_args_list), 4)
+        for call in command.call_args_list:
+            self.assertEqual(call.args[0][1], "image")
+            self.assertEqual(call.args[0][2], "inspect")
+        pulls = [call for call in command.call_args_list if call.args[0][1] == "pull"]
+        self.assertEqual(pulls, [])
+
+    def test_lab_uses_only_the_pinned_application_image_on_loopback(self):
+        """Offline pin (a): the application container runs from the pack's
+        pinned image and publishes on loopback only; nothing pulls."""
+        pack = catalog.PACKS["CVE-2025-29927"]
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+            engine,
+            "command",
+            side_effect=[
+                completed(),
+                completed("127.0.0.1:12345\n"),
+                completed("application log"),
+            ],
+        ) as command, patch.object(
+            engine, "request", return_value=(200, [], b"login")
+        ), patch.object(
+            engine, "owned_remove"
+        ):
+            with engine.lab("docker", "our-run", Path(directory), pack):
+                pass
+            run_args = command.call_args_list[0].args[0]
+            pulls = [call.args[0] for call in command.call_args_list if call.args[0][1] == "pull"]
+        self.assertIn(pack["catalog"]["application_image"], run_args)
+        self.assertIn("-p", run_args)
+        self.assertIn("127.0.0.1::3000/tcp", run_args)
+        self.assertEqual(pulls, [])
+
+    def test_probe_uses_the_pinned_runner_image_with_update_checks_disabled(self):
+        """Offline pin (a): the Nuclei client runs from the pack's pinned
+        image with its update check disabled, so no registry or vendor
+        connection happens during a run."""
+        output = Path(self.directory1)
+        pack = catalog.PACKS["CVE-2025-29927"]
+        findings = json.dumps(
+            {
+                "template-id": "mockforge-nextjs-29927-observation",
+                "response": "HTTP/1.1 200 OK\r\n",
+            }
+        )
+        with patch.object(nuclei, "owned_remove"), patch.object(
+            nuclei, "command", return_value=completed(stdout=f"{findings}\n")
+        ) as command:
+            nuclei.probe(
+                "docker", "http://127.0.0.1:1", output, "baseline", "run1", pack
+            )
+        args = command.call_args.args[0]
+        self.assertIn(pack["catalog"]["runner_image"], args)
+        self.assertIn("-duc", args)
+        self.assertNotIn("pull", args)
 
 
 class Cve20244577PackTests(unittest.TestCase):
