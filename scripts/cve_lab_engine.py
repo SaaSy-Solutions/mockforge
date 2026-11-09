@@ -167,6 +167,16 @@ def lab(engine, run_id, output, pack):
         run_args.extend(app.get("command", ()))
         command(run_args)
         ports = command([engine, "port", name, app["port"]]).stdout.strip().splitlines()
+        if not ports:
+            # No published mapping means the container never bound app["port"]
+            # (it exited or failed to start, e.g. the server could not bind the
+            # port). Surface the clean readiness diagnostic that run() catches
+            # instead of letting an IndexError escape as a raw traceback.
+            raise RuntimeError(
+                "Application did not expose "
+                + app["port"]
+                + "; it failed to start (see application.log)"
+            )
         backend = "http://" + ports[0]
         deadline = time.monotonic() + 90
         while time.monotonic() < deadline:

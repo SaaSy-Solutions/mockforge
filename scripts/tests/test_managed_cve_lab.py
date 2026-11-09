@@ -133,6 +133,27 @@ class LifecycleTests(unittest.TestCase):
                 (Path(directory) / "application.log").read_text(), "application log"
             )
 
+    def test_missing_port_mapping_raises_clean_diagnostic(self):
+        # When the container never binds app["port"] (it exited or failed to
+        # start), `docker port` returns no mapping. The engine must raise the
+        # readiness RuntimeError that run() catches, not let an IndexError
+        # escape as a raw traceback. General robustness fix for every pack.
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(
+                engine,
+                "command",
+                side_effect=[
+                    completed(),  # run -d
+                    completed(""),  # port -> no mapping
+                    completed("application log"),  # logs
+                ],
+            ), patch.object(engine, "owned_remove"):
+                with self.assertRaisesRegex(RuntimeError, "failed to start"):
+                    with engine.lab(
+                        "docker", "our-run", Path(directory), catalog.PACKS[catalog.CVE]
+                    ):
+                        pass
+
 
 class InputTests(unittest.TestCase):
     def test_unsupported_cve_is_rejected_before_download(self):
@@ -822,11 +843,18 @@ class Php2Shell2026PackTests(unittest.TestCase):
         for pack in self.packs:
             for key in ("catalog", "probe", "app", "controls", "exploit", "application_files"):
                 self.assertIn(key, pack)
-            self.assertEqual(pack["app"]["port"], "80/tcp")
+            # Unprivileged port: the harness runs --cap-drop=ALL, so Apache
+            # cannot bind :80 (no CAP_NET_BIND_SERVICE).
+            self.assertEqual(pack["app"]["port"], "8080/tcp")
             self.assertEqual(
                 pack["app"]["readiness"], {"path": "/health.php", "status": 200}
             )
             self.assertTrue(pack["app"]["mounts"])
+            mount_targets = {m["container"] for m in pack["app"]["mounts"]}
+            self.assertIn("/etc/apache2/ports.conf", mount_targets)
+            self.assertIn(
+                "/etc/apache2/sites-enabled/000-default.conf", mount_targets
+            )
 
     def test_images_are_digest_pinned_and_verification_is_declared(self):
         for pack in self.packs:
@@ -849,6 +877,8 @@ class Php2Shell2026PackTests(unittest.TestCase):
         self.assertIn("mockforge-php2shell-2026", files["health.php"])
         self.assertIn("X-Worker-Pid", files["index.php"])
         self.assertIn("php_value memory_limit", files[".htaccess"])
+        self.assertIn("Listen 8080", files["ports.conf"])
+        self.assertIn("*:8080", files["000-default.conf"])
 
     def test_exploit_steps_declare_the_advisory_choreography(self):
         self.assertEqual(self.packs[0]["baseline_exploit"], "modphp-oom")

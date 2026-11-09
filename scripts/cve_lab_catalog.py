@@ -56,6 +56,25 @@ PHP2SHELL_2026_FILES = {
         "# directive path the advisory names as a mod_php consumer route.\n"
         "php_value memory_limit 16M\n"
     ),
+    # The lab harness starts every container with --cap-drop=ALL, which removes
+    # CAP_NET_BIND_SERVICE, so Apache cannot bind the privileged default port 80.
+    # Serve on an unprivileged port (8080) instead of weakening the harness.
+    "ports.conf": (
+        "# Reviewed lab configuration: bind the unprivileged port 8080 because the\n"
+        "# lab harness runs with --cap-drop=ALL (no CAP_NET_BIND_SERVICE for :80).\n"
+        "Listen 8080\n"
+    ),
+    "000-default.conf": (
+        "# Reviewed lab configuration: serve the mod_php app on the unprivileged\n"
+        "# port 8080 that ports.conf binds under --cap-drop=ALL.\n"
+        "<VirtualHost *:8080>\n"
+        "    DocumentRoot /var/www/html\n"
+        "    <Directory /var/www/html>\n"
+        "        AllowOverride All\n"
+        "        Require all granted\n"
+        "    </Directory>\n"
+        "</VirtualHost>\n"
+    ),
 }
 
 LABEL = "io.mockforge.cve.run"
@@ -217,7 +236,7 @@ PACKS = {
             "marker": "mockforge-php2shell-2026",
         },
         "app": {
-            "port": "80/tcp",
+            "port": "8080/tcp",
             "env": {},
             "readiness": {"path": "/health.php", "status": 200},
             "workdir": "/var/www/html",
@@ -227,6 +246,8 @@ PACKS = {
                 {"host": "{output}/upload.php", "container": "/var/www/html/upload.php"},
                 {"host": "{output}/lab.ini", "container": "/usr/local/etc/php/conf.d/zz-mockforge-lab.ini"},
                 {"host": "{output}/.htaccess", "container": "/var/www/html/.htaccess"},
+                {"host": "{output}/ports.conf", "container": "/etc/apache2/ports.conf"},
+                {"host": "{output}/000-default.conf", "container": "/etc/apache2/sites-enabled/000-default.conf"},
             ],
         },
         "application_files": PHP2SHELL_2026_FILES,
@@ -290,7 +311,7 @@ PACKS = {
             "marker": "mockforge-php2shell-2026",
         },
         "app": {
-            "port": "80/tcp",
+            "port": "8080/tcp",
             "env": {},
             "readiness": {"path": "/health.php", "status": 200},
             "workdir": "/var/www/html",
@@ -300,6 +321,8 @@ PACKS = {
                 {"host": "{output}/upload.php", "container": "/var/www/html/upload.php"},
                 {"host": "{output}/lab.ini", "container": "/usr/local/etc/php/conf.d/zz-mockforge-lab.ini"},
                 {"host": "{output}/.htaccess", "container": "/var/www/html/.htaccess"},
+                {"host": "{output}/ports.conf", "container": "/etc/apache2/ports.conf"},
+                {"host": "{output}/000-default.conf", "container": "/etc/apache2/sites-enabled/000-default.conf"},
             ],
         },
         "application_files": PHP2SHELL_2026_FILES,
