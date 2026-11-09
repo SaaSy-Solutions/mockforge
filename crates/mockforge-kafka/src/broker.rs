@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::RwLock;
@@ -7,14 +7,17 @@ use tokio::sync::RwLock;
 use crate::consumer_groups::ConsumerGroupManager;
 use crate::filter::MessageFilter;
 use crate::fixture_executor::FixtureRuntime;
+use crate::init_producer_id::{
+    parse_init_producer_id, serialize_init_producer_id_response, InitProducerIdResponse,
+    ProducerIdAllocator, INIT_PRODUCER_ID_MAX_VERSION, INIT_PRODUCER_ID_MIN_VERSION,
+};
 use crate::metrics::KafkaMetrics;
 use crate::partitions::KafkaMessage;
 use crate::protocol::{KafkaProtocolHandler, KafkaRequest, KafkaRequestType, KafkaResponse};
 use crate::spec_registry::KafkaSpecRegistry;
 use crate::topics::Topic;
 use mockforge_core::config::{KafkaConfig, KafkaFault, KafkaFaultKind};
-use mockforge_core::Result;
-use std::sync::OnceLock;
+use mockforge_core::{Error, Result};
 
 /// Outcome of evaluating a fault rule against a single (topic, partition).
 #[derive(Debug, Clone, Copy)]
@@ -158,6 +161,8 @@ pub struct KafkaMockBroker {
     recorder: Option<Arc<mockforge_recorder::Recorder>>,
     /// Optional record-retention filter for Produce requests.
     message_filter: Option<Arc<dyn MessageFilter>>,
+    /// Producer ids handed out by InitProducerId, shared by all connections.
+    producer_ids: Arc<Mutex<ProducerIdAllocator>>,
 }
 
 impl KafkaMockBroker {
@@ -251,6 +256,7 @@ impl KafkaMockBroker {
                 _ => None,
             },
             message_filter,
+            producer_ids: Arc::new(Mutex::new(ProducerIdAllocator::new())),
         })
     }
 
@@ -587,11 +593,60 @@ impl KafkaMockBroker {
             KafkaRequestType::OffsetFetch => self.handle_offset_fetch(message_buf, &request).await,
             KafkaRequestType::ListGroups => self.handle_list_groups().await,
             KafkaRequestType::DescribeGroups => self.handle_describe_groups().await,
+            KafkaRequestType::InitProducerId => {
+                self.handle_init_producer_id(message_buf, &request).await
+            }
             KafkaRequestType::ApiVersions => self.handle_api_versions().await,
             KafkaRequestType::CreateTopics => self.handle_create_topics().await,
             KafkaRequestType::DeleteTopics => self.handle_delete_topics().await,
             KafkaRequestType::DescribeConfigs => self.handle_describe_configs().await,
         }
+    }
+
+    /// Handle InitProducerId v0..=4: hand the (idempotent or transactional) producer an id and
+    /// epoch. See `init_producer_id.rs`.
+    async fn handle_init_producer_id(
+        &self,
+        message_buf: &[u8],
+        request: &KafkaRequest,
+    ) -> Result<KafkaResponse> {
+        const ERR_UNSUPPORTED_VERSION: i16 = 35;
+        let version = request.api_version;
+        if !(INIT_PRODUCER_ID_MIN_VERSION..=INIT_PRODUCER_ID_MAX_VERSION).contains(&version) {
+            tracing::warn!(
+                "rejecting InitProducerId v{version} (supported: {INIT_PRODUCER_ID_MIN_VERSION}..={INIT_PRODUCER_ID_MAX_VERSION})"
+            );
+            // Classic encoding so any client can parse the error and retry with a lower version.
+            let body = serialize_init_producer_id_response(
+                INIT_PRODUCER_ID_MIN_VERSION,
+                request.correlation_id,
+                &InitProducerIdResponse {
+                    error_code: ERR_UNSUPPORTED_VERSION,
+                    producer_id: -1,
+                    producer_epoch: -1,
+                },
+            );
+            return Ok(KafkaResponse::Preserialized(body));
+        }
+
+        let body_slice = message_buf
+            .get(request.body_offset..)
+            .ok_or_else(|| Error::internal("init_producer_id body_offset past buffer end"))?;
+        let parsed = parse_init_producer_id(version, body_slice)
+            .map_err(|e| Error::internal(format!("InitProducerId v{version} parse: {e}")))?;
+        let response =
+            self.producer_ids.lock().unwrap_or_else(PoisonError::into_inner).init(&parsed);
+        tracing::debug!(
+            transactional_id = ?parsed.transactional_id,
+            producer_id = response.producer_id,
+            producer_epoch = response.producer_epoch,
+            "InitProducerId"
+        );
+        Ok(KafkaResponse::Preserialized(serialize_init_producer_id_response(
+            version,
+            request.correlation_id,
+            &response,
+        )))
     }
 
     async fn handle_metadata(&self) -> Result<KafkaResponse> {
