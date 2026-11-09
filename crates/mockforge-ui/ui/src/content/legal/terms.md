@@ -1,4 +1,4 @@
-These Terms of Service ("Terms") are an agreement between you and **SaaSy Solutions LLC** ("SaaSy Solutions", "we", "us") governing your use of MockForge Cloud, including app.mockforge.dev, api.mockforge.dev, hosted mock endpoints, the plugin, template and scenario marketplaces, and related services (together, the "Service"). If you use the Service on behalf of an organization, you agree to these Terms for that organization and confirm you have authority to do so.
+These Terms of Service ("Terms") are an agreement between you and **MockForge LLC** ("we", "us") governing your use of MockForge Cloud, including app.mockforge.dev, api.mockforge.dev, hosted mock endpoints, the plugin, template and scenario marketplaces, and related services (together, the "Service"). If you use the Service on behalf of an organization, you agree to these Terms for that organization and confirm you have authority to do so.
 
 The open-source MockForge software you run yourself is licensed separately under the MIT or Apache-2.0 license and is not governed by these Terms.
 

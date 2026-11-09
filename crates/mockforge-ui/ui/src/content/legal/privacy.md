@@ -1,4 +1,4 @@
-This Privacy Policy explains how **SaaSy Solutions LLC** ("we", "us") collects, uses and shares personal data when you use MockForge Cloud (app.mockforge.dev, api.mockforge.dev, hosted mock endpoints and related services) and the mockforge.dev website. The self-hosted, open-source MockForge software does not send us any data unless you connect it to MockForge Cloud.
+This Privacy Policy explains how **MockForge LLC** ("we", "us") collects, uses and shares personal data when you use MockForge Cloud (app.mockforge.dev, api.mockforge.dev, hosted mock endpoints and related services) and the mockforge.dev website. The self-hosted, open-source MockForge software does not send us any data unless you connect it to MockForge Cloud.
 
 ## 1. Data we collect
 
@@ -68,4 +68,4 @@ We will post changes here and update the date above. For material changes we wil
 
 ## 10. Contact
 
-SaaSy Solutions LLC: privacy@mockforge.dev
+MockForge LLC: privacy@mockforge.dev
