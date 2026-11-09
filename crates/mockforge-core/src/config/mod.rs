@@ -635,6 +635,12 @@ pub fn apply_env_overrides(mut config: ServerConfig) -> ServerConfig {
         }
     }
 
+    if let Ok(bytes) = std::env::var("MOCKFORGE_KAFKA_MAX_REQUEST_BYTES") {
+        if let Ok(bytes) = bytes.parse() {
+            config.kafka.max_request_bytes = bytes;
+        }
+    }
+
     // OpenTelemetry / OTLP overrides. When `MOCKFORGE_OTLP_ENDPOINT` is set,
     // turn on the observability tracing config and route exports to the
     // given URL. Hosted-mock deployments get this set automatically by the
