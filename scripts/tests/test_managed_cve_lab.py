@@ -895,5 +895,418 @@ class TlsVerifyTests(unittest.TestCase):
                 self.assertIn("-insecure", command.call_args.args[0])
 
 
+class DataDrivenCaseTests(unittest.TestCase):
+    """The data-driven case mechanism: extra cases are pack data, checked
+    generically, with no per-case code."""
+
+    def synthetic_pack(self):
+        return {
+            "catalog": {
+                "schema_version": 1,
+                "pack_revision": 1,
+                "cve": "CVE-0000-0001",
+                "title": "Synthetic data-driven pack",
+                "platform": "test",
+                "application_version": "synthetic application 1.0",
+                "application_image": "docker.io/example/app@sha256:" + "0" * 64,
+                "runner_version": "Nuclei 3.11.1",
+                "runner_image": "docker.io/projectdiscovery/nuclei@sha256:" + "5" * 64,
+                "references": [],
+                "coverage": "synthetic",
+                "origin_port": 18082,
+                "listen_address_guidance": "synthetic",
+            },
+            "probe": {
+                "template_id": "mockforge-synthetic-observation",
+                "template_name": "MockForge synthetic observation",
+                "method": "GET",
+                "path": "/?__mockforge_cve={token}",
+                "headers": {"X-Mockforge-Cve": "{token}"},
+                "body": None,
+                "signature_header": None,
+                "marker": "synthetic-marker",
+            },
+            "app": {
+                "port": "3000/tcp",
+                "env": {},
+                "readiness": {"path": "/", "status": 200},
+            },
+            "controls": {
+                "benign_path": "/benign?__mockforge_cve={token}",
+                "benign_status": 200,
+                "ordinary_path": "/?__mockforge_cve={token}",
+                "ordinary_status": 200,
+            },
+            "extra_cases": [
+                {
+                    "id": "robots",
+                    "path": "/robots.txt?__mockforge_cve={token}",
+                    "expect_status": 200,
+                },
+                {
+                    "id": "apiversion",
+                    "method": "GET",
+                    "path": "/api/version?__mockforge_cve={token}",
+                    "headers": {"Accept": "application/json"},
+                    "expect_status": 404,
+                },
+            ],
+            "baseline_gate": "data-driven",
+            "classifier": "data-driven",
+        }
+
+    def test_control_sends_extra_cases_and_returns_their_outcomes(self):
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+        seen = []
+
+        class Backend(BaseHTTPRequestHandler):
+            def _reply(self):
+                seen.append((self.command, self.path, dict(self.headers)))
+                self.send_response(404 if "api/version" in self.path else 200)
+                self.send_header("Content-Length", "2")
+                self.end_headers()
+                self.wfile.write(b"ok")
+
+            do_GET = _reply
+
+            def log_message(self, *_args):
+                pass
+
+        backend = ThreadingHTTPServer(("127.0.0.1", 0), Backend)
+        threading.Thread(target=backend.serve_forever, daemon=True).start()
+        self.addCleanup(backend.shutdown)
+        self.addCleanup(backend.server_close)
+        with socket.socket() as reservation:
+            reservation.bind(("127.0.0.1", 0))
+            recorder_port = reservation.getsockname()[1]
+        records = []
+        with transport.receiver(
+            recorder_port,
+            "127.0.0.1",
+            f"http://127.0.0.1:{backend.server_address[1]}",
+        ) as records:
+            outcome = transport.control(
+                self.synthetic_pack(), f"http://127.0.0.1:{recorder_port}", "run1", "phase"
+            )
+        self.assertEqual(outcome["status"], 200)
+        self.assertEqual(outcome["root_status"], 200)
+        self.assertEqual(set(outcome["extras"]), {"robots", "apiversion"})
+        self.assertEqual(outcome["extras"]["robots"]["status"], 200)
+        self.assertEqual(outcome["extras"]["apiversion"]["status"], 404)
+        self.assertTrue(
+            outcome["extras"]["robots"]["token"].startswith("run1-phase-")
+        )
+        self.assertIn("-robots", outcome["extras"]["robots"]["token"])
+        # every request reached the backend with its own correlation token
+        self.assertEqual(len(seen), 4)
+        api = [item for item in seen if "api/version" in item[1]][0]
+        self.assertEqual(
+            api[2].get("X-Mockforge-Cve"), outcome["extras"]["apiversion"]["token"]
+        )
+        self.assertEqual(api[2].get("Accept"), "application/json")
+        # the recorder observed all four with tokens
+        self.assertEqual(len(records), 4)
+        robots_records = [
+            record
+            for record in records
+            if outcome["extras"]["robots"]["token"] in record["tokens"]
+        ]
+        self.assertEqual(len(robots_records), 1)
+        self.assertEqual(robots_records[0]["status"], 200)
+
+    def test_extra_case_evidence_verifies_status_and_origin_observation(self):
+        pack = self.synthetic_pack()
+        outcome = {
+            "extras": {
+                "robots": {"token": "tok-robots", "status": 200},
+                "apiversion": {"token": "tok-api", "status": 404},
+            }
+        }
+        records = [
+            {"tokens": ["tok-robots"], "status": 200},
+            {"tokens": ["tok-api"], "status": 404},
+        ]
+        entries, ok, tokens = evidence.extra_case_evidence(pack, outcome, records)
+        self.assertTrue(ok)
+        self.assertEqual(len(entries), 2)
+        self.assertTrue(all(entry["outcome"] == "ok" for entry in entries))
+        self.assertEqual(tokens, {"tok-robots", "tok-api"})
+
+    def test_extra_case_evidence_fails_on_wrong_status(self):
+        pack = self.synthetic_pack()
+        outcome = {
+            "extras": {
+                "robots": {"token": "tok-robots", "status": 403},
+                "apiversion": {"token": "tok-api", "status": 404},
+            }
+        }
+        records = [
+            {"tokens": ["tok-robots"], "status": 403},
+            {"tokens": ["tok-api"], "status": 404},
+        ]
+        entries, ok, _tokens = evidence.extra_case_evidence(pack, outcome, records)
+        self.assertFalse(ok)
+        robots = [entry for entry in entries if "robots" in entry["check"]][0]
+        self.assertIn("origin status 403", robots["outcome"])
+
+    def test_extra_case_evidence_fails_when_the_origin_never_saw_it(self):
+        pack = self.synthetic_pack()
+        outcome = {
+            "extras": {
+                "robots": {"token": "tok-robots", "status": 200},
+                "apiversion": {"token": "tok-api", "status": 404},
+            }
+        }
+        entries, ok, _tokens = evidence.extra_case_evidence(pack, outcome, [])
+        self.assertFalse(ok)
+        robots = [entry for entry in entries if "robots" in entry["check"]][0]
+        self.assertIn("no origin observation", robots["outcome"])
+
+    def test_extra_case_evidence_fails_on_transport_error(self):
+        pack = self.synthetic_pack()
+        outcome = {
+            "extras": {
+                "robots": {"token": "tok-robots", "error": "connection refused"},
+                "apiversion": {"token": "tok-api", "status": 404},
+            }
+        }
+        records = [{"tokens": ["tok-api"], "status": 404}]
+        entries, ok, _tokens = evidence.extra_case_evidence(pack, outcome, records)
+        self.assertFalse(ok)
+        robots = [entry for entry in entries if "robots" in entry["check"]][0]
+        self.assertIn("connection refused", robots["outcome"])
+
+    def test_extra_case_evidence_is_vacuous_without_declared_cases(self):
+        import copy
+
+        pack = self.synthetic_pack()
+        del pack["extra_cases"]
+        entries, ok, tokens = evidence.extra_case_evidence(pack, {}, [])
+        self.assertEqual(entries, [])
+        self.assertTrue(ok)
+        self.assertEqual(tokens, set())
+        # legacy entry point (pack=None) stays vacuous too
+        entries, ok, tokens = evidence.extra_case_evidence(None, {}, [])
+        self.assertEqual((entries, ok, tokens), ([], True, set()))
+
+    def outcome_for(self, pack, **overrides):
+        baseline = overrides.get(
+            "baseline", {"status": 200, "marker": True}
+        )
+        target = overrides.get("target", {"token": "attack", "status": 403})
+        before = overrides.get(
+            "before",
+            {
+                "token": "before",
+                "status": 200,
+                "root_token": "before-root",
+                "root_status": 200,
+                "extras": {
+                    "robots": {"token": "before-robots", "status": 200},
+                    "apiversion": {"token": "before-api", "status": 404},
+                },
+            },
+        )
+        after = overrides.get(
+            "after",
+            {
+                "token": "after",
+                "status": 200,
+                "root_token": "after-root",
+                "root_status": 200,
+                "extras": {
+                    "robots": {"token": "after-robots", "status": 200},
+                    "apiversion": {"token": "after-api", "status": 404},
+                },
+            },
+        )
+        records = overrides.get(
+            "records",
+            [
+                {"tokens": ["before"], "status": 200},
+                {"tokens": ["before-root"], "status": 200},
+                {"tokens": ["before-robots"], "status": 200},
+                {"tokens": ["before-api"], "status": 404},
+                {"tokens": ["after"], "status": 200},
+                {"tokens": ["after-root"], "status": 200},
+                {"tokens": ["after-robots"], "status": 200},
+                {"tokens": ["after-api"], "status": 404},
+            ],
+        )
+        return evidence.CLASSIFIERS["data-driven"](
+            pack, baseline, target, before, after, records, 403
+        )
+
+    def test_data_driven_classifier_passes_a_healthy_blocked_run(self):
+        pack = self.synthetic_pack()
+        verdict, reason, checks = self.outcome_for(pack)
+        self.assertEqual(verdict, "pass")
+        names = [check["check"] for check in checks]
+        self.assertIn("extra case robots answered 200", names)
+        self.assertIn("extra case apiversion answered 404", names)
+        self.assertTrue(all(check["outcome"] == "ok" for check in checks))
+
+    def test_data_driven_classifier_fails_when_the_signature_reaches_the_origin(self):
+        pack = self.synthetic_pack()
+        records = [
+            {"tokens": ["before"], "status": 200},
+            {"tokens": ["before-root"], "status": 200},
+            {"tokens": ["before-robots"], "status": 200},
+            {"tokens": ["before-api"], "status": 404},
+            {"tokens": ["attack"], "status": 200},
+        ]
+        verdict, reason, checks = self.outcome_for(pack, records=records)
+        self.assertEqual(verdict, "fail")
+        self.assertIn("reached the origin", reason)
+
+    def test_data_driven_classifier_is_inconclusive_on_a_wrong_extra_status(self):
+        pack = self.synthetic_pack()
+        before = {
+            "token": "before",
+            "status": 200,
+            "root_token": "before-root",
+            "root_status": 200,
+            "extras": {
+                "robots": {"token": "before-robots", "status": 500},
+                "apiversion": {"token": "before-api", "status": 404},
+            },
+        }
+        records = [
+            {"tokens": ["before"], "status": 200},
+            {"tokens": ["before-root"], "status": 200},
+            {"tokens": ["before-robots"], "status": 500},
+            {"tokens": ["before-api"], "status": 404},
+            {"tokens": ["after"], "status": 200},
+            {"tokens": ["after-root"], "status": 200},
+            {"tokens": ["after-robots"], "status": 200},
+            {"tokens": ["after-api"], "status": 404},
+        ]
+        verdict, reason, checks = self.outcome_for(pack, before=before, records=records)
+        self.assertEqual(verdict, "inconclusive")
+        self.assertIn("extra case", reason)
+
+    def test_data_driven_classifier_is_inconclusive_on_a_wrong_block_status(self):
+        pack = self.synthetic_pack()
+        target = {"token": "attack", "status": 502}
+        verdict, _reason, _checks = self.outcome_for(pack, target=target)
+        self.assertEqual(verdict, "inconclusive")
+
+    def test_data_driven_classifier_is_inconclusive_when_the_baseline_marker_is_absent(
+        self,
+    ):
+        pack = self.synthetic_pack()
+        verdict, _reason, _checks = self.outcome_for(
+            pack, baseline={"status": 200, "marker": False}
+        )
+        self.assertEqual(verdict, "inconclusive")
+
+    def test_data_driven_classifier_correlates_extra_tokens(self):
+        # an uncorrelated record (no expected token) blocks a pass
+        pack = self.synthetic_pack()
+        records = [
+            {"tokens": ["before"], "status": 200},
+            {"tokens": ["before-root"], "status": 200},
+            {"tokens": ["before-robots"], "status": 200},
+            {"tokens": ["before-api"], "status": 404},
+            {"tokens": ["after"], "status": 200},
+            {"tokens": ["after-root"], "status": 200},
+            {"tokens": ["after-robots"], "status": 200},
+            {"tokens": ["after-api"], "status": 404},
+            {"tokens": [None, None], "status": 200},
+        ]
+        verdict, _reason, _checks = self.outcome_for(pack, records=records)
+        self.assertEqual(verdict, "inconclusive")
+
+    def test_existing_classifiers_add_no_checks_without_declared_cases(self):
+        # the shipped packs must be untouched by the mechanism
+        next_pack = catalog.PACKS["CVE-2025-29927"]
+        self.assertNotIn("extra_cases", next_pack)
+        baseline = {"status": 200, "marker": True}
+        target = {"token": "attack", "status": 403}
+        before = {
+            "token": "before",
+            "status": 200,
+            "root_token": "before-root",
+            "root_status": 307,
+        }
+        after = {
+            "token": "after",
+            "status": 200,
+            "root_token": "after-root",
+            "root_status": 307,
+        }
+        records = [
+            {"tokens": ["before"], "status": 200},
+            {"tokens": ["before-root"], "status": 307},
+            {"tokens": ["after"], "status": 200},
+            {"tokens": ["after-root"], "status": 307},
+        ]
+        _verdict, _reason, checks = evidence.CLASSIFIERS["middleware-bypass"](
+            next_pack, baseline, target, before, after, records, 403
+        )
+        self.assertFalse(
+            [check for check in checks if check["check"].startswith("extra case")]
+        )
+
+    def test_validator_accepts_the_synthetic_pack_and_rejects_broken_ones(self):
+        from cve_lab_catalog import validate_data_driven_pack
+
+        pack = self.synthetic_pack()
+        validate_data_driven_pack(pack)
+
+        broken = self.synthetic_pack()
+        broken["baseline_gate"] = "middleware-bypass"
+        with self.assertRaisesRegex(ValueError, "data-driven gate and classifier"):
+            validate_data_driven_pack(broken)
+
+        broken = self.synthetic_pack()
+        broken["catalog"]["application_image"] = "docker.io/example/app:latest"
+        with self.assertRaisesRegex(ValueError, "not pinned by digest"):
+            validate_data_driven_pack(broken)
+
+        broken = self.synthetic_pack()
+        del broken["controls"]["ordinary_status"]
+        with self.assertRaisesRegex(ValueError, "controls are missing"):
+            validate_data_driven_pack(broken)
+
+        broken = self.synthetic_pack()
+        broken["extra_cases"][1]["id"] = "robots"
+        with self.assertRaisesRegex(ValueError, "duplicate extra case id"):
+            validate_data_driven_pack(broken)
+
+        broken = self.synthetic_pack()
+        del broken["extra_cases"][0]["expect_status"]
+        with self.assertRaisesRegex(ValueError, "missing expect_status"):
+            validate_data_driven_pack(broken)
+
+    def test_a_new_pack_runs_end_to_end_as_pure_data(self):
+        # inject the synthetic pack, run the CLI; the pack passes validation
+        # and the run plan, and stops only at the (absent) container engine -
+        # no code change was involved anywhere.
+        pack = self.synthetic_pack()
+        catalog.PACKS[pack["catalog"]["cve"]] = pack
+        try:
+            stdout = io.StringIO()
+            with tempfile.TemporaryDirectory() as directory, patch.object(
+                lab, "prepare", side_effect=RuntimeError("no engine in unit test")
+            ), contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(
+                io.StringIO()
+            ):
+                output = Path(directory) / "out"
+                self.assertEqual(
+                    lab.main(["run", pack["catalog"]["cve"], "--output-dir", str(output)]),
+                    1,
+                )
+                report = json.loads((output / "report.json").read_text())
+        finally:
+            catalog.PACKS.pop(pack["catalog"]["cve"], None)
+        plan = stdout.getvalue()
+        self.assertIn("synthetic application 1.0", plan)
+        self.assertEqual(report["verdict"], "inconclusive")
+        self.assertEqual(report["pack"]["cve"], "CVE-0000-0001")
+
+
+
 if __name__ == "__main__":
     unittest.main()

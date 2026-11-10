@@ -11,10 +11,11 @@ import subprocess
 import sys
 import time
 import uuid
-from cve_lab_catalog import CATALOG, CVE, PACKS
+from cve_lab_catalog import CATALOG, CVE, PACKS, validate_data_driven_pack
 from cve_lab_engine import doctor, prepare, lab, cleanup
 from cve_lab_transport import target_url, receiver, control, unverified_context
 from cve_lab_nuclei import probe
+import cve_lab_evidence as evidence
 from cve_lab_evidence import BASELINE_GATES, CLASSIFIERS, describe
 
 
@@ -53,6 +54,8 @@ def run_plan_lines(args):
 
 def run(args):
     pack = PACKS[args.cve]
+    if pack["baseline_gate"] == "data-driven" or pack["classifier"] == "data-driven":
+        validate_data_driven_pack(pack)
     target_url(args.target) if args.target else None
     ipaddress.IPv4Address(args.listen_address)
     if not 1 <= args.origin_port <= 65535 or not 400 <= args.block_status <= 599:
@@ -115,6 +118,15 @@ def run(args):
                     unauthenticated_status=baseline_control["root_status"],
                 )
                 BASELINE_GATES[pack["baseline_gate"]](pack, baseline_control, baseline)
+                if pack.get("extra_cases"):
+                    _entries, extras_ok, _tokens = evidence.extra_case_evidence(
+                        pack, baseline_control, records
+                    )
+                    if not extras_ok:
+                        raise RuntimeError(
+                            "Direct baseline extra cases did not match their "
+                            "expected statuses"
+                        )
                 if args.target:
                     target_start = len(records)
                     before = control(pack, args.target, run_id, "before", context=tls_context)
