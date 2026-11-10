@@ -90,6 +90,39 @@ def prepare(engine, pack):
         command([engine, "image", "inspect", image])
 
 
+def image_status(engine, image):
+    """Whether the exact image reference exists in the local engine.
+
+    The check is the same by-digest inspect ``prepare`` performs - never a
+    parse of ``docker images`` output, which does not list digest-pulled
+    images the way tagged ones appear.
+    """
+    result = command([engine, "image", "inspect", image], check=False)
+    return "present" if result.returncode == 0 else "missing"
+
+
+def verify_images(engine, pack):
+    """Report each pack-pinned image with its local presence status.
+
+    Returns one entry per pinned image (the application and the runner) in
+    catalog order, so a run report or a dedicated check can attest exactly
+    which digest-pinned images this machine holds.
+    """
+    catalog = pack["catalog"]
+    return [
+        {
+            "role": "application",
+            "image": catalog["application_image"],
+            "status": image_status(engine, catalog["application_image"]),
+        },
+        {
+            "role": "runner",
+            "image": catalog["runner_image"],
+            "status": image_status(engine, catalog["runner_image"]),
+        },
+    ]
+
+
 def owned_remove(engine, name, run_id):
     result = command([engine, "inspect", name], check=False)
     if result.returncode:
