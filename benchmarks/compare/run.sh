@@ -34,6 +34,7 @@ if [[ "${1:-}" == "--dry-run" ]]; then
   printf 'npx --yes @mockoon/cli@%s start --data %q --port %q\n' "$MOCKOON_VERSION" "$HERE/specs/petstore.json" "$PORT"
   if [[ "$LOAD_CLIENT" == "oha" ]]; then
     printf 'oha version: %s; install if missing: cargo install oha --version %s --locked --root %q\n' "$OHA_VERSION" "$OHA_VERSION" "$HERE/.tools"
+    printf 'oha --version must report %s\n' "$OHA_VERSION"
   fi
   printf 'fixtures: petstore, large_api_100_endpoints; load client: %s\n' "$LOAD_CLIENT"
   printf 'python3 %q --binary %q --runs %q --warmup %q --warmup-duration %q --concurrency %q --duration %q --port %q --load-client %q' "$HERE/measure.py" "$MOCKFORGE_BIN" "$RUNS" "$WARMUP" "$WARMUP_DURATION" "$CONCURRENCY" "$DURATION" "$PORT" "${LOAD_CLIENT_CMD[0]}"

@@ -104,7 +104,7 @@ def rss_sampler(pid, stop, output, container=None):
 
 def client_command(client, url, concurrency, duration, method='GET'):
     if client[0] == 'oha':
-        return [*client, '-c', str(concurrency), '-z', duration, '-m', method, '--output-format', 'json', url]
+        return [*client, '-c', str(concurrency), '-z', duration, '-m', method, '--no-tui', '--output-format', 'json', url]
     if client[0] == 'wrk':
         return [*client, '-t', str(concurrency), '-c', str(concurrency), '-d', duration, url]
     return [*client, url, '--method', method, '--concurrency', str(concurrency), '--duration', str(duration_seconds(duration))]
@@ -154,18 +154,18 @@ def load_result(client, url, concurrency, duration, method='GET'):
     command = client_command(client, url, concurrency, duration, method)
     completed = subprocess.run(command, text=True, capture_output=True)
     if completed.returncode:
-        return {'client': command, 'exit_code': completed.returncode,
+        return {'client_name': client_identity(client), 'client': command, 'exit_code': completed.returncode,
                 'error': completed.stderr.strip() or 'load client failed', 'raw_output': completed.stdout.strip(),
                 'requests': None, 'errors': None, 'non_2xx': None, 'p50_ms': None, 'p95_ms': None,
                 'p99_ms': None, 'failed': True}
     if client[-1].endswith('load.py'):
         data = json.loads(completed.stdout)
-        return {'client': command, 'exit_code': 0, **data, 'error': None, 'raw_output': completed.stdout.strip()}
+        return {'client_name': client_identity(client), 'client': command, 'exit_code': 0, **data, 'error': None, 'raw_output': completed.stdout.strip()}
     data = json.loads(completed.stdout)
     status_counts = {int(code): count for code, count in data['statusCodeDistribution'].items()}
     error_count = sum(data['errorDistribution'].values())
-    metrics = data['metrics']; latency = metrics['latency_ms']
-    return {'client': command, 'exit_code': 0, 'requests': sum(status_counts.values()) + error_count,
+    metrics = data['metrics']; latency = data['latencyPercentiles']
+    return {'client_name': client_identity(client), 'client': command, 'exit_code': 0, 'requests': sum(status_counts.values()) + error_count,
             'throughput_rps': metrics['requests_per_sec'], 'errors': error_count,
             'non_2xx': sum(count for code, count in status_counts.items() if not 200 <= code < 300),
             'status_counts': status_counts, 'p50_ms': latency['p50'], 'p95_ms': latency['p95'],
@@ -182,10 +182,17 @@ def runtime_version(name, cmd, container=False, base_url='http://127.0.0.1:4010'
     if name == 'MockForge':
         return subprocess.run([cmd[0], '--version'], text=True, capture_output=True, check=True).stdout.strip()
     if name == 'Prism':
-        return subprocess.run(['npx', '--yes', cmd[1], '--version'], text=True,
-                              capture_output=True, check=True).stdout.strip()
-    return subprocess.run(['npx', '--yes', cmd[1], '--version'], text=True,
-                          capture_output=True, check=True).stdout.strip()
+        output = subprocess.run(['npx', '--yes', cmd[1], '--version'], text=True,
+                                capture_output=True, check=True).stdout.strip()
+    else:
+        output = subprocess.run(['npx', '--yes', cmd[1], '--version'], text=True,
+                                capture_output=True, check=True).stdout.strip()
+    expected = cmd[1].rsplit('@', 1)[-1]
+    match = re.search(r'\d+\.\d+\.\d+(?:[-+][\w.-]+)?', output)
+    actual = match.group(0) if match else output
+    if actual != expected:
+        raise RuntimeError(f'{name} version mismatch: expected {expected}, got {output!r}')
+    return actual
 
 
 def main():
@@ -246,25 +253,37 @@ def main():
                 sampler = threading.Thread(target=rss_sampler, args=(proc.pid, stop, peaks, container))
                 sampler.start()
                 per_operation_load = []
+                load_failed = False
                 for operation in operations:
                     measured = load_result(args.load_client, root_url + operation['path'], args.concurrency, args.duration, operation['method'])
                     per_operation_load.append({**operation, 'load': measured})
+                    if measured.get('exit_code') != 0:
+                        load_failed = True
+                        break
                 stop.set(); sampler.join()
-                if tool_name == 'WireMock':
+                if load_failed:
+                    fidelity_result = {'status': 'not-run', 'reason': 'load client failed; fixture run is invalid'}
+                elif tool_name == 'WireMock':
                     fidelity_result = {'status': 'n/a', 'reason': 'no native OpenAPI import'}
                 else:
                     fidelity = subprocess.run([sys.executable, str(BASE / 'fidelity.py'), str(fixture), root_url],
-                                              text=True, capture_output=True, check=True)
-                    fidelity_result = json.loads(fidelity.stdout)
+                                              text=True, capture_output=True)
+                    if fidelity.returncode:
+                        fidelity_result = {'status': 'failed', 'reason': fidelity.stderr.strip()}
+                    else:
+                        fidelity_result = json.loads(fidelity.stdout)
                 stop_server(proc, container)
+                fixture_failed = load_failed or fidelity_result.get('status') == 'failed'
                 successful_operations = [item['operation'] for item in per_operation_load
-                                         if not item['load'].get('failed') and item['load'].get('non_2xx') == 0
-                                         and item['load'].get('errors') == 0]
+                                         if not item['load'].get('failed') and item['load'].get('errors') == 0
+                                         and any(200 <= int(code) < 300 and count > 0
+                                                 for code, count in item['load'].get('status_counts', {}).items())]
                 fixture_results.append({'fixture': fixture.stem, 'version': version,
                     'metrics': {'cold_start_seconds_median': sorted(starts)[len(starts)//2],
                                 'cold_start_run_count': len(starts),
                                 'warmup_runs_discarded': args.warmup * (args.runs + 1),
                                 'load': {'client': client_identity(args.load_client), 'per_operation': per_operation_load,
+                                         'failed': fixture_failed,
                                          'operations_returning_2xx': successful_operations},
                                 'fidelity': fidelity_result,
                                 'peak_rss_bytes': max(peaks, default=None), 'peak_rss_mode': mode}})
