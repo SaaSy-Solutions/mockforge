@@ -3,6 +3,14 @@
 import json
 import sys
 
+
+def median(values):
+    values = sorted(values)
+    if not values:
+        return None
+    middle = len(values) // 2
+    return values[middle] if len(values) % 2 else (values[middle - 1] + values[middle]) / 2
+
 result = json.load(open(sys.argv[1]))
 fixtures = sorted({fixture['fixture'] for tool in result['tools'] for fixture in tool['fixtures']})
 for name in fixtures:
@@ -17,15 +25,16 @@ for name in fixtures:
         load = metrics['load']
         operations = load.get('per_operation', [])
         p50s = [item['load']['p50_ms'] for item in operations if item['load'].get('p50_ms') is not None]
-        median_p50 = sorted(p50s)[len(p50s) // 2] if p50s else None
+        median_p50 = median(p50s)
         operation_rps = [item['load'].get('throughput_rps') for item in operations
                          if item['load'].get('throughput_rps') is not None]
-        rps_median = sorted(operation_rps)[(len(operation_rps) - 1) // 2] if operation_rps else None
+        rps_median = median(operation_rps)
         request_count = sum(item['load'].get('requests') or 0 for item in operations)
         percentiles = []
         for key in ('p50_ms', 'p95_ms', 'p99_ms'):
             values = [item['load'][key] for item in operations if item['load'].get(key) is not None]
-            percentiles.append(f"{key[:-3]} {sorted(values)[len(values)//2]:.3f} ms" if values else f"{key[:-3]} n/a")
+            label = f"median across operations of per-operation {key[:-3]}"
+            percentiles.append(f"{label} {median(values):.3f} ms" if values else f"{label} n/a")
         status_counts = {}
         non_2xx_by_operation = []
         for item in operations:

@@ -33,8 +33,24 @@ def machine():
                     ram = int(line.split()[1]) * 1024; break
     except OSError:
         pass
-    return {'cpu_model': cpu, 'cores': os.cpu_count(), 'ram_bytes': ram,
+    return {'cpu_model': cpu, 'logical_cpu_count': os.cpu_count(),
+            'logical_cpu_count_note': 'OS-visible logical CPUs; under WSL2, this is the WSL-visible count', 'ram_bytes': ram,
             'os': platform.platform(), 'kernel': platform.release()}
+
+
+def load_average():
+    try:
+        return [float(value) for value in pathlib.Path('/proc/loadavg').read_text().split()[:3]]
+    except (OSError, ValueError):
+        return None
+
+
+def median(values):
+    ordered = sorted(values)
+    if not ordered:
+        return None
+    middle = len(ordered) // 2
+    return ordered[middle] if len(ordered) % 2 else (ordered[middle - 1] + ordered[middle]) / 2
 
 
 def ready(url, timeout=60):
@@ -49,6 +65,7 @@ def ready(url, timeout=60):
         except urllib.error.HTTPError as error:
             if 200 <= error.code < 300:
                 return time.perf_counter() - started
+            time.sleep(.05)
         except Exception:
             time.sleep(.05)
     raise RuntimeError('server did not return HTTP 2xx: ' + url)
@@ -86,7 +103,7 @@ def process_rss(pid):
 
 
 def rss_sampler(pid, stop, output, container=None):
-    peak = 0
+    peak = 0; samples = 0
     while not stop.is_set():
         try:
             if container:
@@ -99,15 +116,15 @@ def rss_sampler(pid, stop, output, container=None):
                     scale = {'B': 1, 'kB': 1000, 'MB': 1000**2, 'GB': 1000**3, 'TB': 1000**4,
                              'KiB': 1024, 'MiB': 1024**2, 'GiB': 1024**3, 'TiB': 1024**4}[unit]
                     peak = max(peak, int(float(match.group(1)) * scale))
+                    samples += 1
             else:
                 peak = max(peak, process_rss(pid))
+                samples += 1
         except (OSError, subprocess.SubprocessError, ValueError, KeyError, IndexError):
             pass
-        if not peak:
-            stop.wait(.02)
-        else:
-            stop.wait(.1)
-    output.append(peak)
+        stop.wait(.02 if not peak else .1)
+    output.append({'peak_bytes': peak, 'samples': samples,
+                   'sampling_interval_seconds': 1 if container else .1})
 
 
 def client_command(client, operation, concurrency, duration):
@@ -271,9 +288,9 @@ def load_result(client, operation, concurrency, duration):
             'error': None, 'raw_output': completed.stdout.strip()}
 
 
-def runtime_version(name, cmd, container=False, base_url='http://127.0.0.1:4010'):
+def runtime_version(name, cmd, container=False, base_url='http://127.0.0.1:4010', wiremock_version='3.13.2'):
     if name == 'WireMock' and container:
-        return os.environ.get('WIREMOCK_VERSION', '3.13.2') + ' (image tag)'
+        return wiremock_version + ' (image tag)'
     if name == 'WireMock':
         with urllib.request.urlopen(base_url + '/__admin/version', timeout=2) as response:
             return response.read().decode().strip()
@@ -299,13 +316,18 @@ def main():
     parser.add_argument('--binary', required=True); parser.add_argument('--runs', type=int, default=5)
     parser.add_argument('--warmup', type=int, default=1); parser.add_argument('--warmup-duration', default='2s')
     parser.add_argument('--concurrency', type=int, default=16); parser.add_argument('--duration', default='15s')
+    parser.add_argument('--load-runs', type=int, default=1)
     parser.add_argument('--port', type=int, default=4010); parser.add_argument('--load-client', nargs='+', required=True)
+    parser.add_argument('--output')
     parser.add_argument('--wiremock-version', default='3.13.2'); parser.add_argument('--prism-version', default='5.16.0')
     parser.add_argument('--mockoon-version', default='9.10.0')
     parser.add_argument('--tools', nargs='+', choices=['MockForge', 'WireMock', 'Prism', 'Mockoon'])
     parser.add_argument('--fixtures', nargs='+')
     args = parser.parse_args()
+    if args.runs < 1 or args.warmup < 0 or args.load_runs < 1:
+        parser.error('--runs and --load-runs must be positive; --warmup must be non-negative')
     root_url = f'http://127.0.0.1:{args.port}'
+    load_average_start = load_average()
     with tempfile.TemporaryDirectory(prefix='mockforge-compare-') as temp:
         adapters = pathlib.Path(temp) / 'adapters'
         subprocess.run([sys.executable, str(BASE / 'adapters.py'), str(BASE / 'specs'), str(adapters)], check=True)
@@ -334,30 +356,33 @@ def main():
                 probe_url = root_url + probe['path']
                 cmd = [str(fixture) if value is None else value for value in template]
                 container = docker_name if tool_name == 'WireMock' and docker else None
-                def discard_warmups():
-                    for _ in range(args.warmup):
-                        if container:
-                            assert_port_free(args.port)
-                        proc = start_server(cmd, args.port)
-                        ready(probe_url)
-                        for operation in operations:
-                            load_result(args.load_client, {**operation, 'url': root_url + operation['path']}, args.concurrency, args.warmup_duration)
-                        stop_server(proc, args.port, container)
-
                 starts = []
                 for _ in range(args.runs):
-                    discard_warmups()
                     if container:
                         assert_port_free(args.port)
                     started = time.perf_counter(); proc = start_server(cmd, args.port)
                     ready(probe_url); starts.append(time.perf_counter() - started)
                     stop_server(proc, args.port, container)
-                discard_warmups()
                 if container:
                     assert_port_free(args.port)
                 proc = start_server(cmd, args.port)
                 ready(probe_url)
-                version = runtime_version(tool_name, cmd, container=container is not None, base_url=root_url)
+                version = runtime_version(tool_name, cmd, container=container is not None, base_url=root_url,
+                                          wiremock_version=args.wiremock_version)
+                container_limits = None
+                container_heap_bytes = None
+                if container:
+                    info = subprocess.run(['docker', 'info', '--format', '{{json .}}'], text=True, capture_output=True, check=True)
+                    docker_info = json.loads(info.stdout)
+                    docker_host = docker_info.get('host', {})
+                    container_limits = {'docker_info_cpus': docker_info.get('NCPU', docker_host.get('cpus')),
+                                         'docker_info_memory_bytes': docker_info.get('MemTotal', docker_host.get('memTotal')),
+                                         'note': 'Docker daemon-visible CPU and memory; not container cgroup limits'}
+                    heap = subprocess.run(['docker', 'exec', container, 'sh', '-lc',
+                                           "java -XX:+PrintFlagsFinal -version 2>&1 | grep -E 'MaxHeapSize'"],
+                                          text=True, capture_output=True, check=True).stdout
+                    heap_match = re.search(r'MaxHeapSize\s*=\s*(\d+)', heap)
+                    container_heap_bytes = int(heap_match.group(1)) if heap_match else None
                 stop = threading.Event(); peaks = []
                 sampler = threading.Thread(target=rss_sampler, args=(proc.pid, stop, peaks, container))
                 sampler.start()
@@ -365,16 +390,37 @@ def main():
                 time.sleep(.12)
                 per_operation_load = []
                 load_failed = False
+                for _ in range(args.warmup):
+                    for operation in operations:
+                        warmed = load_result(args.load_client, {**operation, 'url': root_url + operation['path']},
+                                             args.concurrency, args.warmup_duration)
+                        if warmed.get('exit_code') != 0:
+                            load_failed = True
+                            break
+                    if load_failed:
+                        break
                 for operation in operations:
+                    if load_failed:
+                        break
                     # Capture the live server before and throughout the load phase.
                     if not per_operation_load:
                         time.sleep(.12)
-                    measured = load_result(args.load_client, {**operation, 'url': root_url + operation['path']}, args.concurrency, args.duration)
-                    per_operation_load.append({key: operation[key] for key in ('operation', 'method', 'path')}
-                                              | {'load': measured})
-                    if measured.get('exit_code') != 0:
+                    passes = [load_result(args.load_client, {**operation, 'url': root_url + operation['path']},
+                                          args.concurrency, args.duration) for _ in range(args.load_runs)]
+                    successful = [result for result in passes if result.get('exit_code') == 0]
+                    if len(successful) != len(passes):
                         load_failed = True
-                        break
+                    summary = dict(successful[0]) if successful else dict(passes[0])
+                    if successful:
+                        for key in ('requests', 'throughput_rps', 'errors', 'non_2xx', 'p50_ms', 'p95_ms', 'p99_ms'):
+                            values = [item.get(key) for item in successful if item.get(key) is not None]
+                            summary[key] = median(values)
+                        summary['status_counts'] = {code: int(median([item.get('status_counts', {}).get(code, 0)
+                                                                  for item in successful]))
+                                                    for code in set().union(*(item.get('status_counts', {}).keys() for item in successful))}
+                        summary['failed'] = any(item.get('failed') for item in successful)
+                    per_operation_load.append({key: operation[key] for key in ('operation', 'method', 'path')}
+                                              | {'load': summary, 'passes': passes})
                 stop.set(); sampler.join()
                 if load_failed:
                     fidelity_result = {'status': 'not-run', 'reason': 'load client failed; fixture run is invalid'}
@@ -394,21 +440,34 @@ def main():
                                          and any(200 <= int(code) < 300 and count > 0
                                                  for code, count in item['load'].get('status_counts', {}).items())]
                 fixture_results.append({'fixture': fixture.stem, 'version': version,
-                    'metrics': {'cold_start_seconds_median': sorted(starts)[len(starts)//2],
+                    'metrics': {'cold_start_seconds_median': median(starts),
                                 'cold_start_run_count': len(starts),
-                                'warmup_runs_discarded': args.warmup * (args.runs + 1),
+                                'warmup_runs_discarded': args.warmup,
+                                'instance_usage': {'cold_start': {'instance_ids': [f'cold-start-{index + 1}' for index in range(len(starts))],
+                                                                  'usage': 'one fresh instance per cold-start run; each stopped after readiness'},
+                                                   'load_and_fidelity': {'instance_id': 'load-fidelity',
+                                                                         'usage': 'one separate instance; warmed then measured, reused for fidelity'}},
+                                'load_runs': args.load_runs,
                                 'load': {'client': client_identity(args.load_client), 'per_operation': per_operation_load,
                                          'failed': fixture_failed,
                                          'operations_returning_2xx': successful_operations},
                                 'fidelity': fidelity_result,
-                                'peak_rss_bytes': max(peaks, default=None), 'peak_rss_mode': mode}})
+                                'peak_rss_bytes': max((sample['peak_bytes'] for sample in peaks), default=None),
+                                'peak_rss_mode': mode,
+                                'memory_sampling': {'mode': mode, 'samples': sum(sample['samples'] for sample in peaks),
+                                                    'interval_seconds': 1 if container else .1,
+                                                    'scope': 'load instance from before warm-up through measured load; stopped before fidelity',
+                                                    'note': 'docker stats --no-stream takes about 1 second per call' if container else 'process-tree RSS sampled every 100 ms; container usage and process-tree RSS are different measures'},
+                                'wiremock_container_limits': container_limits,
+                                'wiremock_jvm_max_heap_bytes': container_heap_bytes}})
             all_tools.append({'tool': tool_name, 'fixtures': fixture_results})
-        result = {'schema_version': 3, 'date': datetime.date.today().isoformat(), 'host': socket.gethostname(),
+        result = {'schema_version': 4, 'date': datetime.date.today().isoformat(), 'host': socket.gethostname(),
                   'load_client': client_identity(args.load_client),
-                  'machine': machine(), 'parameters': {'runs': args.runs, 'warmup_runs': args.warmup,
+                  'machine': machine(), 'load_average_start': load_average_start, 'load_average_end': load_average(),
+                  'parameters': {'runs': args.runs, 'warmup_runs': args.warmup,
                   'warmup_duration': args.warmup_duration, 'concurrency': args.concurrency,
-                  'duration': args.duration}, 'tools': all_tools}
-        out = BASE / 'results' / f"{result['date']}-{result['host']}.json"
+                  'duration': args.duration, 'load_runs': args.load_runs}, 'tools': all_tools}
+        out = pathlib.Path(args.output) if args.output else BASE / 'results' / f"{result['date']}-{result['host']}.json"
         out.parent.mkdir(exist_ok=True); out.write_text(json.dumps(result, indent=2) + '\n'); print(out)
 
 
