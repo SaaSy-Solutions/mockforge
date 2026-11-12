@@ -176,6 +176,7 @@ crates/mockforge-collab/*.db-wal
 /.rls-gate-state
 # Generated benchmark results
 bench-results/
+benchmarks/compare/.venv/
 # Analytics SQLite databases (generated at runtime)
 analytics.db
 analytics.db-shm
