@@ -213,4 +213,3 @@ benchmarks/compare/.tools/
 benchmarks/compare/generated/
 benchmarks/compare/results/*.json
 !benchmarks/compare/results/README.md
-!benchmarks/compare/results/2026-11-12-gibson.json
