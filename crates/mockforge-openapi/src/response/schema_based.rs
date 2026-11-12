@@ -396,23 +396,7 @@ impl ResponseGenerator {
             value = value.min(max);
         }
         if let Some(step) = integer.multiple_of.filter(|step| *step > 0) {
-            let rem = value.rem_euclid(step);
-            let rounded = if rem == 0 {
-                Some(value)
-            } else {
-                value.checked_add(step - rem)
-            };
-            value = rounded.unwrap_or(value);
-            if upper.is_some_and(|max| value > max) {
-                let max = upper.unwrap();
-                let candidate = max - max.rem_euclid(step);
-                // Unsatisfiable bounds: return the closest in-range value.
-                value = if candidate >= lower.unwrap_or(i64::MIN) {
-                    candidate
-                } else {
-                    max.min(value).max(lower.unwrap_or(i64::MIN))
-                };
-            }
+            value = Self::integer_multiple_in_bounds(value, step, lower, upper);
         }
         json!(value)
     }
@@ -442,22 +426,96 @@ impl ResponseGenerator {
             (None, None) => std::f64::consts::PI,
         };
         if let Some(step) = number.multiple_of.filter(|step| *step > 0.0 && step.is_finite()) {
-            let decimals = format!("{step}").split('.').nth(1).map_or(0, str::len).min(12);
-            let scale = 10_f64.powi(decimals as i32);
-            let scaled_step = (step * scale).round();
-            if scaled_step > 0.0 && scaled_step <= i64::MAX as f64 {
-                value = ((value * scale / scaled_step).ceil() * scaled_step) / scale;
-            }
-            if let Some(max) = upper {
-                if value > max {
-                    value = (max / step).floor() * step;
-                }
-            }
+            value = Self::number_multiple_in_bounds(value, step, lower, upper);
         }
         Value::Number(
             serde_json::Number::from_f64(value)
                 .unwrap_or_else(|| json!(0).as_number().unwrap().clone()),
         )
+    }
+
+    fn integer_multiple_in_bounds(
+        value: i64,
+        step: i64,
+        lower: Option<i64>,
+        upper: Option<i64>,
+    ) -> i64 {
+        let min = lower.unwrap_or(i64::MIN);
+        let max = upper.unwrap_or(i64::MAX);
+        let clamped = value.clamp(min, max);
+        let rem = clamped.rem_euclid(step);
+        let down = clamped.checked_sub(rem).filter(|candidate| *candidate >= min);
+        let up = if rem == 0 {
+            Some(clamped)
+        } else {
+            clamped.checked_add(step - rem).filter(|candidate| *candidate <= max)
+        };
+        match (down, up) {
+            (Some(a), Some(b)) => {
+                if clamped - a <= b - clamped {
+                    a
+                } else {
+                    b
+                }
+            }
+            (Some(candidate), None) | (None, Some(candidate)) => candidate,
+            (None, None) => {
+                // No multiple satisfies these bounds; return the closest in-range value.
+                clamped
+            }
+        }
+    }
+
+    fn number_multiple_in_bounds(
+        value: f64,
+        step: f64,
+        lower: Option<f64>,
+        upper: Option<f64>,
+    ) -> f64 {
+        let decimals = format!("{step}").split('.').nth(1).map_or(0, str::len).min(12);
+        let scale = 10_f64.powi(decimals as i32);
+        if step.fract() == 0.0
+            && lower.is_none_or(|v| v.fract() == 0.0)
+            && upper.is_none_or(|v| v.fract() == 0.0)
+        {
+            let scaled_step = (step * scale).round();
+            let scaled_value = (value * scale).round();
+            let min = lower.map(|v| (v * scale).round());
+            let max = upper.map(|v| (v * scale).round());
+            if scaled_step > 0.0
+                && scaled_step <= i64::MAX as f64
+                && scaled_value.abs() <= i64::MAX as f64
+            {
+                let result = Self::integer_multiple_in_bounds(
+                    scaled_value as i64,
+                    scaled_step as i64,
+                    min.map(|v| v as i64),
+                    max.map(|v| v as i64),
+                );
+                return result as f64 / scale;
+            }
+        }
+        let min = lower.unwrap_or(f64::NEG_INFINITY);
+        let max = upper.unwrap_or(f64::INFINITY);
+        let clamped = value.clamp(min, max);
+        let quotient = clamped / step;
+        let low = quotient.floor() * step;
+        let high = quotient.ceil() * step;
+        match (low >= min && low <= max, high >= min && high <= max) {
+            (true, true) => {
+                if clamped - low <= high - clamped {
+                    low
+                } else {
+                    high
+                }
+            }
+            (true, false) => low,
+            (false, true) => high,
+            (false, false) => {
+                // No multiple satisfies these bounds; return the closest in-range value.
+                (clamped * scale).round() / scale
+            }
+        }
     }
 
     fn next_up(value: f64) -> f64 {
@@ -1707,6 +1765,90 @@ components:
             let v = ResponseGenerator::generate_number_value(&n).as_f64().unwrap();
             assert!(v.is_finite());
         }
+    }
+
+    #[test]
+    fn integer_multiple_of_stays_inside_bounds_when_unsatisfiable() {
+        let schema = openapiv3::IntegerType {
+            minimum: Some(1),
+            maximum: Some(4),
+            multiple_of: Some(5),
+            ..Default::default()
+        };
+        let value = ResponseGenerator::generate_integer_value(&schema).as_i64().unwrap();
+        assert!((1..=4).contains(&value));
+    }
+
+    #[test]
+    fn integer_multiple_of_handles_negative_ranges_and_i64_max() {
+        let negative = openapiv3::IntegerType {
+            minimum: Some(-10),
+            maximum: Some(-3),
+            multiple_of: Some(4),
+            ..Default::default()
+        };
+        assert!(matches!(
+            ResponseGenerator::generate_integer_value(&negative).as_i64(),
+            Some(-8 | -4)
+        ));
+        let max = openapiv3::IntegerType {
+            minimum: Some(i64::MAX),
+            maximum: Some(i64::MAX),
+            multiple_of: Some(7),
+            ..Default::default()
+        };
+        assert_eq!(ResponseGenerator::generate_integer_value(&max).as_i64(), Some(i64::MAX));
+    }
+
+    #[test]
+    fn number_multiple_of_rounds_to_decimal_step_with_lower_bound() {
+        let schema = openapiv3::NumberType {
+            minimum: Some(0.3),
+            multiple_of: Some(0.5),
+            ..Default::default()
+        };
+        let value = ResponseGenerator::generate_number_value(&schema).as_f64().unwrap();
+        assert!((value - 0.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn schema_constrained_ids_skip_suffix_but_names_still_vary() {
+        let spec = spec_from_yaml(
+            r#"
+openapi: 3.0.3
+info: {title: ids, version: '1'}
+paths: {}
+components:
+  schemas:
+    EnumId: {type: object, properties: {id: {type: string, enum: [alpha]}, name: {type: string}}}
+    Ipv4Id: {type: object, properties: {id: {type: string, format: ipv4}, name: {type: string}}}
+    DateId: {type: object, properties: {id: {type: string, format: date}, name: {type: string}}}
+    ShortId: {type: object, properties: {id: {type: string, maxLength: 8}, name: {type: string}}}
+    PlainId: {type: object, properties: {id: {type: string}, name: {type: string}}}
+"#,
+        );
+        for (name, id, original, expected_name) in [
+            ("EnumId", "alpha", "alpha", "Prairie Apiary"),
+            ("Ipv4Id", "192.0.2.1", "192.0.2.1", "Prairie Apiary"),
+            ("DateId", "2024-01-01", "2024-01-01", "Prairie Apiary"),
+            ("ShortId", "abcde", "abcde", "Prairie Apiary"),
+        ] {
+            let mut item = json!({"id": id, "name": "Meadow Apiary"});
+            ResponseGenerator::add_item_variation_with_schema(
+                &mut item,
+                2,
+                Some(component_schema(&spec, name)),
+            );
+            assert_eq!(item["id"], json!(original), "{name}");
+            assert_eq!(item["name"], json!(expected_name), "{name}");
+        }
+        let mut plain = json!({"id": "abc", "name": "Meadow Apiary"});
+        ResponseGenerator::add_item_variation_with_schema(
+            &mut plain,
+            2,
+            Some(component_schema(&spec, "PlainId")),
+        );
+        assert_eq!(plain["id"], json!("abc_002"));
     }
 
     #[test]
