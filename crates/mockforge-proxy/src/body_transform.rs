@@ -302,11 +302,11 @@ mod body_transform_tests {
         }
     }
 
-    fn body_bytes(value: serde_json::Value) -> Option<Vec<u8>> {
+    fn body_bytes(value: Value) -> Option<Vec<u8>> {
         Some(serde_json::to_vec(&value).expect("serialize fixture body"))
     }
 
-    fn parsed(body: &Option<Vec<u8>>) -> serde_json::Value {
+    fn parsed(body: &Option<Vec<u8>>) -> Value {
         serde_json::from_slice(body.as_ref().expect("body present")).expect("body is JSON")
     }
 
