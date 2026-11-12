@@ -12,12 +12,20 @@
 
 ## What is MockForge?
 
-MockForge is a comprehensive mocking framework that supports multiple protocols:
+MockForge is an open source mock API generator in Rust. It supports 10 protocols:
 
 - **HTTP/REST APIs** - Mock REST endpoints from OpenAPI/Swagger specs
 - **WebSocket** - Simulate real-time connections with replay and interactive modes
 - **gRPC** - Mock gRPC services from `.proto` files
 - **GraphQL** - Generate mock resolvers from GraphQL schemas
+- **Kafka** - Mock broker for event-streaming scenarios
+- **MQTT** - Broker mocking for pub/sub (3.1.1 & 5.0)
+- **AMQP** - Message queuing (RabbitMQ-compatible, 0.9.1)
+- **SMTP** - Email server mocking with mailbox inspection
+- **FTP** - File transfer mocking with a virtual file system
+- **TCP** - Raw TCP mocking
+
+SOAP/XML APIs are also supported over the HTTP adapter, using XPath-based request matching and XML response templates.
 
 ### Why MockForge?
 
