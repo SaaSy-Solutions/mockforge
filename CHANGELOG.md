@@ -1,3 +1,15 @@
+## [0.3.243] - 2026-11-12
+
+### Fixed
+
+- **[DevX]** The release check for bundled tools reads `mockforge cve list` as one entry per pack, keyed by CVE id. v0.3.242 was tagged but never published because this check still expected the single-pack shape.
+
+### Added
+
+- **[DevX]** A reproducible comparison benchmark of MockForge, WireMock, Prism and Mockoon (`benchmarks/compare/`), with its methodology in the book. Results will be published after a rerun. (#1512)
+
+v0.3.243 also carries everything listed for 0.3.242 below, which was never published to crates.io.
+
 ## [0.3.242] - 2026-11-11
 
 ### Security
