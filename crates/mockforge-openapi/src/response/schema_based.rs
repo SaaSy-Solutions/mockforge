@@ -355,12 +355,6 @@ impl ResponseGenerator {
         if natural_value.chars().count() <= max && natural_value.chars().count() >= target_min {
             return Value::String(natural_value);
         }
-        if format.is_some()
-            && natural_value.chars().count() <= max
-            && natural_value.chars().count() < target_min
-        {
-            // Keep a valid natural format value when it fits; otherwise length validity wins.
-        }
         // A formatted value that cannot satisfy the bounds falls back to plain text.
         let desired = target_min.max("example string".len()).min(max);
         let mut plain = "example string".to_string();
@@ -472,26 +466,24 @@ impl ResponseGenerator {
         lower: Option<f64>,
         upper: Option<f64>,
     ) -> f64 {
-        let decimals = format!("{step}").split('.').nth(1).map_or(0, str::len).min(12);
+        let step_repr = step.to_string();
+        let decimals = step_repr.split_once('.').map_or(0, |(_, fraction)| fraction.len()).min(9);
         let scale = 10_f64.powi(decimals as i32);
-        if step.fract() == 0.0
-            && lower.is_none_or(|v| v.fract() == 0.0)
-            && upper.is_none_or(|v| v.fract() == 0.0)
-        {
-            let scaled_step = (step * scale).round();
-            let scaled_value = (value * scale).round();
-            let min = lower.map(|v| (v * scale).round());
-            let max = upper.map(|v| (v * scale).round());
-            if scaled_step > 0.0
-                && scaled_step <= i64::MAX as f64
-                && scaled_value.abs() <= i64::MAX as f64
-            {
-                let result = Self::integer_multiple_in_bounds(
-                    scaled_value as i64,
-                    scaled_step as i64,
-                    min.map(|v| v as i64),
-                    max.map(|v| v as i64),
-                );
+        let scaled = |number: f64| -> Option<i64> {
+            let scaled = number * scale;
+            (scaled.is_finite()
+                && scaled >= i64::MIN as f64
+                && scaled < 9_223_372_036_854_775_808.0)
+                .then(|| scaled.round() as i64)
+        };
+        if let (Some(scaled_step), Some(scaled_value), Some(min), Some(max)) = (
+            scaled(step),
+            scaled(value),
+            lower.map_or(Some(None), |v| scaled(v).map(Some)),
+            upper.map_or(Some(None), |v| scaled(v).map(Some)),
+        ) {
+            if scaled_step > 0 {
+                let result = Self::integer_multiple_in_bounds(scaled_value, scaled_step, min, max);
                 return result as f64 / scale;
             }
         }
@@ -639,6 +631,7 @@ impl ResponseGenerator {
                                     &mut item,
                                     i + 1,
                                     Some(item_schema.as_ref()),
+                                    Some(spec),
                                 );
                                 item
                             })
@@ -658,6 +651,7 @@ impl ResponseGenerator {
                                         &mut item,
                                         i + 1,
                                         Some(&resolved_schema.schema),
+                                        Some(spec),
                                     );
                                     item
                                 })
@@ -678,10 +672,15 @@ impl ResponseGenerator {
     /// Add variation to an item to make it unique (for array generation)
     /// Varies IDs, names, addresses, and coordinates based on item index
     pub(crate) fn add_item_variation(item: &mut Value, item_index: u64) {
-        Self::add_item_variation_with_schema(item, item_index, None);
+        Self::add_item_variation_with_schema(item, item_index, None, None);
     }
 
-    fn add_item_variation_with_schema(item: &mut Value, item_index: u64, schema: Option<&Schema>) {
+    fn add_item_variation_with_schema(
+        item: &mut Value,
+        item_index: u64,
+        schema: Option<&Schema>,
+        spec: Option<&OpenApiSpec>,
+    ) {
         if let Some(obj) = item.as_object_mut() {
             // Update ID fields to be unique
             if let Some(id_val) = obj.get_mut("id") {
@@ -695,8 +694,10 @@ impl ResponseGenerator {
                             _ => None,
                         })
                         .and_then(|property| match property {
-                            ReferenceOr::Item(property) => Some(property.as_ref()),
-                            ReferenceOr::Reference { .. } => None,
+                            ReferenceOr::Item(property) => Some(property.as_ref().clone()),
+                            ReferenceOr::Reference { reference } => spec
+                                .and_then(|spec| spec.get_schema(reference))
+                                .map(|property| property.schema),
                         })
                         .is_some_and(|property| match &property.schema_kind {
                             openapiv3::SchemaKind::Type(openapiv3::Type::String(string)) => {
@@ -1812,6 +1813,32 @@ components:
     }
 
     #[test]
+    fn decimal_multiple_of_uses_exact_scaled_arithmetic_when_possible() {
+        for (minimum, step, expected) in [(0.7, 0.1, 0.7), (0.3, 0.1, 0.3), (0.25, 0.05, 0.25)] {
+            let schema = openapiv3::NumberType {
+                minimum: Some(minimum),
+                maximum: Some(minimum),
+                multiple_of: Some(step),
+                ..Default::default()
+            };
+            assert_eq!(
+                ResponseGenerator::generate_number_value(&schema).as_f64().unwrap(),
+                expected
+            );
+        }
+
+        let fallback = openapiv3::NumberType {
+            minimum: Some(0.000_000_000_001),
+            maximum: Some(0.000_000_000_002),
+            multiple_of: Some(1e-12),
+            ..Default::default()
+        };
+        let value = ResponseGenerator::generate_number_value(&fallback).as_f64().unwrap();
+        assert!(value.is_finite());
+        assert!((0.000_000_000_001..=0.000_000_000_002).contains(&value));
+    }
+
+    #[test]
     fn schema_constrained_ids_skip_suffix_but_names_still_vary() {
         let spec = spec_from_yaml(
             r#"
@@ -1821,6 +1848,8 @@ paths: {}
 components:
   schemas:
     EnumId: {type: object, properties: {id: {type: string, enum: [alpha]}, name: {type: string}}}
+    StatusId: {type: string, enum: [open, closed]}
+    RefId: {type: object, properties: {id: {$ref: '#/components/schemas/StatusId'}, name: {type: string}}}
     Ipv4Id: {type: object, properties: {id: {type: string, format: ipv4}, name: {type: string}}}
     DateId: {type: object, properties: {id: {type: string, format: date}, name: {type: string}}}
     ShortId: {type: object, properties: {id: {type: string, maxLength: 8}, name: {type: string}}}
@@ -1838,6 +1867,7 @@ components:
                 &mut item,
                 2,
                 Some(component_schema(&spec, name)),
+                Some(&spec),
             );
             assert_eq!(item["id"], json!(original), "{name}");
             assert_eq!(item["name"], json!(expected_name), "{name}");
@@ -1847,8 +1877,18 @@ components:
             &mut plain,
             2,
             Some(component_schema(&spec, "PlainId")),
+            Some(&spec),
         );
         assert_eq!(plain["id"], json!("abc_002"));
+
+        let mut referenced = json!({"id": "open", "name": "Meadow Apiary"});
+        ResponseGenerator::add_item_variation_with_schema(
+            &mut referenced,
+            2,
+            Some(component_schema(&spec, "RefId")),
+            Some(&spec),
+        );
+        assert_eq!(referenced["id"], json!("open"));
     }
 
     #[test]
