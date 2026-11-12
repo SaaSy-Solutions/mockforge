@@ -181,13 +181,14 @@ def runtime_version(name, cmd, container=False, base_url='http://127.0.0.1:4010'
             return response.read().decode().strip()
     if name == 'MockForge':
         return subprocess.run([cmd[0], '--version'], text=True, capture_output=True, check=True).stdout.strip()
-    if name == 'Prism':
-        output = subprocess.run(['npx', '--yes', cmd[1], '--version'], text=True,
-                                capture_output=True, check=True).stdout.strip()
-    else:
-        output = subprocess.run(['npx', '--yes', cmd[1], '--version'], text=True,
-                                capture_output=True, check=True).stdout.strip()
-    expected = cmd[1].rsplit('@', 1)[-1]
+    package_prefix = '@stoplight/prism-cli@' if name == 'Prism' else '@mockoon/cli@'
+    package_spec = next((part for part in cmd if part.startswith(package_prefix)), None)
+    if package_spec is None:
+        raise RuntimeError(f'{name} command is missing package spec {package_prefix!r}')
+    executable = 'prism' if name == 'Prism' else 'mockoon-cli'
+    output = subprocess.run(['npx', '--yes', f'--package={package_spec}', executable, '--version'],
+                            text=True, capture_output=True, check=True).stdout.strip()
+    expected = package_spec.rsplit('@', 1)[-1]
     match = re.search(r'\d+\.\d+\.\d+(?:[-+][\w.-]+)?', output)
     actual = match.group(0) if match else output
     if actual != expected:
