@@ -209,3 +209,5 @@ compile-check.db
 /.claude/worktrees/
 
 /crates/mockforge-ui/ui/.codex-dependency-owner.json
+benchmarks/compare/.tools/
+benchmarks/compare/generated/
