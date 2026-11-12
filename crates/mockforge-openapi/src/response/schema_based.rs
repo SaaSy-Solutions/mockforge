@@ -5,6 +5,7 @@
 //! and item variation for realistic mock data.
 
 use super::*;
+use serde_json::json;
 
 impl ResponseGenerator {
     pub(crate) fn generate_example_from_schema_ref(
@@ -44,16 +45,23 @@ impl ResponseGenerator {
         // At this point, if we have a schema-level example, we've already returned it
         // So we only generate defaults when no example exists
         match &schema.schema_kind {
-            openapiv3::SchemaKind::Type(openapiv3::Type::String(_)) => {
-                // Use faker for string fields based on field name hints
-                Value::String("example string".to_string())
+            openapiv3::SchemaKind::Type(openapiv3::Type::String(string)) => {
+                Self::generate_string_value(string)
             }
-            openapiv3::SchemaKind::Type(openapiv3::Type::Integer(_)) => Value::Number(42.into()),
-            openapiv3::SchemaKind::Type(openapiv3::Type::Number(_)) => Value::Number(
-                serde_json::Number::from_f64(std::f64::consts::PI)
-                    .expect("PI is a valid f64 value"),
-            ),
-            openapiv3::SchemaKind::Type(openapiv3::Type::Boolean(_)) => Value::Bool(true),
+            openapiv3::SchemaKind::Type(openapiv3::Type::Integer(integer)) => {
+                Self::generate_integer_value(integer)
+            }
+            openapiv3::SchemaKind::Type(openapiv3::Type::Number(number)) => {
+                Self::generate_number_value(number)
+            }
+            openapiv3::SchemaKind::Type(openapiv3::Type::Boolean(boolean)) => boolean
+                .enumeration
+                .iter()
+                .flatten()
+                .next()
+                .copied()
+                .map(Value::Bool)
+                .unwrap_or(Value::Bool(true)),
             openapiv3::SchemaKind::Type(openapiv3::Type::Object(obj)) => {
                 // First pass: Scan for pagination metadata (total, page, limit)
                 // This helps us generate the correct number of array items
@@ -276,8 +284,152 @@ impl ResponseGenerator {
                     None => Value::Array(vec![Value::String("item".to_string())]),
                 }
             }
+            openapiv3::SchemaKind::AllOf { all_of } => all_of
+                .iter()
+                .find_map(|member| Self::generate_member(spec, member, persona))
+                .unwrap_or_else(|| Value::Object(serde_json::Map::new())),
+            openapiv3::SchemaKind::OneOf { one_of } => one_of
+                .first()
+                .and_then(|member| Self::generate_member(spec, member, persona))
+                .unwrap_or_else(|| Value::Object(serde_json::Map::new())),
+            openapiv3::SchemaKind::AnyOf { any_of } => any_of
+                .first()
+                .and_then(|member| Self::generate_member(spec, member, persona))
+                .unwrap_or_else(|| Value::Object(serde_json::Map::new())),
             _ => Value::Object(serde_json::Map::new()),
         }
+    }
+
+    fn generate_member(
+        spec: &OpenApiSpec,
+        member: &ReferenceOr<Schema>,
+        persona: Option<&Persona>,
+    ) -> Option<Value> {
+        match member {
+            ReferenceOr::Item(schema) => {
+                Some(Self::generate_example_from_schema(spec, schema, persona))
+            }
+            ReferenceOr::Reference { reference } => spec
+                .get_schema(reference)
+                .map(|schema| Self::generate_example_from_schema(spec, &schema.schema, persona)),
+        }
+    }
+
+    fn generate_string_value(string: &openapiv3::StringType) -> Value {
+        if let Some(value) = string.enumeration.iter().flatten().next() {
+            return Value::String(value.clone());
+        }
+        let format = match &string.format {
+            openapiv3::VariantOrUnknownOrEmpty::Item(openapiv3::StringFormat::Date) => Some("date"),
+            openapiv3::VariantOrUnknownOrEmpty::Item(openapiv3::StringFormat::DateTime) => {
+                Some("date-time")
+            }
+            openapiv3::VariantOrUnknownOrEmpty::Item(openapiv3::StringFormat::Password) => {
+                Some("password")
+            }
+            openapiv3::VariantOrUnknownOrEmpty::Item(openapiv3::StringFormat::Byte) => Some("byte"),
+            openapiv3::VariantOrUnknownOrEmpty::Item(openapiv3::StringFormat::Binary) => {
+                Some("binary")
+            }
+            openapiv3::VariantOrUnknownOrEmpty::Unknown(format) => Some(format.as_str()),
+            openapiv3::VariantOrUnknownOrEmpty::Empty => None,
+        };
+        let mut value = match format.map(str::to_ascii_lowercase).as_deref() {
+            Some("date-time" | "datetime") => "2024-01-01T00:00:00Z".to_string(),
+            Some("date") => "2024-01-01".to_string(),
+            Some("uuid") => "00000000-0000-4000-8000-000000000000".to_string(),
+            Some("email") => "user@example.com".to_string(),
+            Some("uri" | "url") => "https://example.com/".to_string(),
+            Some("ipv4") => "192.0.2.1".to_string(),
+            Some("ipv6") => "2001:db8::1".to_string(),
+            Some("hostname") => "example.com".to_string(),
+            Some("byte") => "ZXhhbXBsZQ==".to_string(),
+            Some("password") => "example string".to_string(),
+            _ => "example string".to_string(),
+        };
+        if let Some(min) = string.min_length {
+            while value.chars().count() < min {
+                value.push('x');
+            }
+        }
+        if let Some(max) = string.max_length {
+            value = value.chars().take(max).collect();
+        }
+        Value::String(value)
+    }
+
+    fn generate_integer_value(integer: &openapiv3::IntegerType) -> Value {
+        if let Some(value) = integer.enumeration.iter().flatten().next() {
+            return json!(value);
+        }
+        let lower = integer.minimum.map(|v| {
+            if integer.exclusive_minimum {
+                v.saturating_add(1)
+            } else {
+                v
+            }
+        });
+        let upper = integer.maximum.map(|v| {
+            if integer.exclusive_maximum {
+                v.saturating_sub(1)
+            } else {
+                v
+            }
+        });
+        let mut value = lower.unwrap_or(42_i64);
+        if let Some(max) = upper {
+            value = value.min(max);
+        }
+        if let Some(step) = integer.multiple_of.filter(|step| *step > 0) {
+            let rem = value.rem_euclid(step);
+            if rem != 0 {
+                value = value.saturating_add(step - rem);
+            }
+            if let Some(max) = upper {
+                if value > max {
+                    value = max - max.rem_euclid(step);
+                }
+            }
+        }
+        json!(value)
+    }
+
+    fn generate_number_value(number: &openapiv3::NumberType) -> Value {
+        if let Some(value) = number.enumeration.iter().flatten().next() {
+            return json!(value);
+        }
+        let lower = number.minimum.map(|v| {
+            if number.exclusive_minimum {
+                f64::from_bits(v.to_bits() + 1)
+            } else {
+                v
+            }
+        });
+        let upper = number.maximum.map(|v| {
+            if number.exclusive_maximum {
+                f64::from_bits(v.to_bits() - 1)
+            } else {
+                v
+            }
+        });
+        let mut value = match (lower, upper) {
+            (Some(min), Some(max)) => min + (max - min) / 2.0,
+            (Some(min), None) => min,
+            (None, Some(max)) => max,
+            (None, None) => std::f64::consts::PI,
+        };
+        if let Some(step) = number.multiple_of.filter(|step| *step > 0.0) {
+            value = (value / step).ceil() * step;
+            if let Some(max) = upper {
+                if value > max {
+                    value = (max / step).floor() * step;
+                }
+            }
+        }
+        Value::Number(
+            serde_json::Number::from_f64(value)
+                .unwrap_or_else(|| json!(0).as_number().unwrap().clone()),
+        )
     }
 
     /// Extract numeric value from a schema (from example or default)
@@ -408,6 +560,13 @@ impl ResponseGenerator {
             // Update ID fields to be unique
             if let Some(id_val) = obj.get_mut("id") {
                 if let Some(id_str) = id_val.as_str() {
+                    // Generated format/enum identifiers must remain schema-valid.
+                    if uuid::Uuid::parse_str(id_str).is_ok()
+                        || id_str.contains('@')
+                        || id_str.starts_with("http")
+                    {
+                        return;
+                    }
                     // Extract base ID (remove any existing suffix)
                     let base_id = id_str.split('_').next().unwrap_or(id_str);
                     *id_val = Value::String(format!("{}_{:03}", base_id, item_index));
@@ -941,6 +1100,47 @@ components:
     StrTyped: {type: string}
 "#,
         )
+    }
+
+    #[test]
+    fn constrained_schema_values_are_honored() {
+        let spec = spec_from_yaml(
+            r#"
+openapi: 3.0.3
+info: {title: constraints, version: '1'}
+paths: {}
+components:
+  schemas:
+    State: {type: string, enum: [active, inactive]}
+    DateTime: {type: string, format: date-time}
+    Uuid: {type: string, format: uuid}
+    Email: {type: string, format: email}
+    Bounded: {type: integer, minimum: 10, maximum: 12}
+    Multiple: {type: number, multipleOf: 0.5, minimum: 1, maximum: 2}
+    States: {type: array, items: {type: string, enum: [active, inactive]}}
+    Nested:
+      type: object
+      properties:
+        state: {type: string, enum: [active, inactive]}
+"#,
+        );
+        let generate = |name| {
+            ResponseGenerator::generate_example_from_schema(
+                &spec,
+                component_schema(&spec, name),
+                None,
+            )
+        };
+        assert_eq!(generate("State"), json!("active"));
+        assert!(
+            chrono::DateTime::parse_from_rfc3339(generate("DateTime").as_str().unwrap()).is_ok()
+        );
+        assert!(uuid::Uuid::parse_str(generate("Uuid").as_str().unwrap()).is_ok());
+        assert!(generate("Email").as_str().unwrap().contains('@'));
+        assert_eq!(generate("Bounded"), json!(10));
+        assert_eq!(generate("Multiple"), json!(1.5));
+        assert_eq!(generate("States"), json!(["active"]));
+        assert_eq!(generate("Nested"), json!({"state": "active"}));
     }
 
     // ─── Type-level generation ──────────────────────────────────────────────
