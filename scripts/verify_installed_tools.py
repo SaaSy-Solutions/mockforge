@@ -26,7 +26,8 @@ def verify(binary):
 
         run(binary, "cve", "--help")
         catalog = json.loads(run(binary, "cve", "list"))
-        assert catalog["cve"] == "CVE-2025-29927"
+        # `cve list` returns one entry per pack, keyed by CVE id.
+        assert catalog["CVE-2025-29927"]["cve"] == "CVE-2025-29927"
         run(binary, "cve", "run", "CVE-0000-00000", code=1)
         run(binary, "tools", "export", "--output-dir", "tools")
         version = run(binary, "--version").strip().split()[-1]
