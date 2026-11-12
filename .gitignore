@@ -211,3 +211,5 @@ compile-check.db
 /crates/mockforge-ui/ui/.codex-dependency-owner.json
 benchmarks/compare/.tools/
 benchmarks/compare/generated/
+benchmarks/compare/results/*.json
+!benchmarks/compare/results/README.md

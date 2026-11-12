@@ -36,17 +36,20 @@ def machine():
 
 
 def ready(url, timeout=60):
+    """Wait for a fixture operation to return a successful response."""
+    started = time.perf_counter()
     until = time.monotonic() + timeout
     while time.monotonic() < until:
         try:
             with urllib.request.urlopen(url, timeout=.3) as response:
-                if response.status == 200:
-                    return
-        except urllib.error.HTTPError:
-            return
+                if 200 <= response.status < 300:
+                    return time.perf_counter() - started
+        except urllib.error.HTTPError as error:
+            if 200 <= error.code < 300:
+                return time.perf_counter() - started
         except Exception:
             time.sleep(.05)
-    raise RuntimeError('server did not return HTTP 200: ' + url)
+    raise RuntimeError('server did not return HTTP 2xx: ' + url)
 
 
 def children(pid):
@@ -98,12 +101,15 @@ def rss_sampler(pid, stop, output, container=None):
                 peak = max(peak, process_rss(pid))
         except (OSError, subprocess.SubprocessError, ValueError, KeyError, IndexError):
             pass
-        stop.wait(.1)
+        if not peak:
+            stop.wait(.02)
+        else:
+            stop.wait(.1)
     output.append(peak)
 
 
 def client_command(client, url, concurrency, duration, method='GET'):
-    if client[0] == 'oha':
+    if pathlib.Path(client[0]).name == 'oha':
         return [*client, '-c', str(concurrency), '-z', duration, '-m', method, '--no-tui', '--output-format', 'json', url]
     if client[0] == 'wrk':
         return [*client, '-t', str(concurrency), '-c', str(concurrency), '-d', duration, url]
@@ -144,9 +150,10 @@ def fixture_operations(fixture):
 
 
 def client_identity(client):
-    if client[0] == 'oha':
-        version = subprocess.run([*client, '--version'], text=True, capture_output=True, check=True).stdout.strip()
-        return {'name': 'oha', 'version': version.split()[-1]}
+    if pathlib.Path(client[0]).name == 'oha':
+        version = subprocess.run([*client, '--version'], text=True, capture_output=True, check=True)
+        output = (version.stdout or version.stderr).strip()
+        return {'name': 'oha', 'version': output}
     return {'name': 'load.py', 'version': 'fallback (client-bound)'}
 
 
@@ -204,6 +211,8 @@ def main():
     parser.add_argument('--port', type=int, default=4010); parser.add_argument('--load-client', nargs='+', required=True)
     parser.add_argument('--wiremock-version', default='3.13.2'); parser.add_argument('--prism-version', default='5.16.0')
     parser.add_argument('--mockoon-version', default='9.10.0')
+    parser.add_argument('--tools', nargs='+', choices=['MockForge', 'WireMock', 'Prism', 'Mockoon'])
+    parser.add_argument('--fixtures', nargs='+')
     args = parser.parse_args()
     root_url = f'http://127.0.0.1:{args.port}'
     with tempfile.TemporaryDirectory(prefix='mockforge-compare-') as temp:
@@ -223,10 +232,15 @@ def main():
         ]
         all_tools = []
         for tool_name, template, mode in tool_defs:
+            if args.tools and tool_name not in args.tools:
+                continue
             fixture_results = []
             for fixture in sorted((BASE / 'specs').glob('*.json')):
+                if args.fixtures and fixture.stem not in args.fixtures:
+                    continue
                 operations = fixture_operations(fixture)
-                probe_url = root_url + operations[0]['path']
+                probe = next((op for op in operations if op['method'] == 'GET'), operations[0])
+                probe_url = root_url + probe['path']
                 cmd = [str(fixture) if value is None else value for value in template]
                 container = docker_name if tool_name == 'WireMock' and docker else None
                 def discard_warmups():
@@ -253,9 +267,14 @@ def main():
                 stop = threading.Event(); peaks = []
                 sampler = threading.Thread(target=rss_sampler, args=(proc.pid, stop, peaks, container))
                 sampler.start()
+                # Ensure a sample is taken after the server starts and before traffic begins.
+                time.sleep(.12)
                 per_operation_load = []
                 load_failed = False
                 for operation in operations:
+                    # Capture the live server before and throughout the load phase.
+                    if not per_operation_load:
+                        time.sleep(.12)
                     measured = load_result(args.load_client, root_url + operation['path'], args.concurrency, args.duration, operation['method'])
                     per_operation_load.append({**operation, 'load': measured})
                     if measured.get('exit_code') != 0:

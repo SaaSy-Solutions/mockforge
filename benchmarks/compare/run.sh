@@ -15,6 +15,8 @@ CONCURRENCY="${CONCURRENCY:-16}"
 DURATION="${DURATION:-15s}"
 WARMUP="${WARMUP:-1}"
 WARMUP_DURATION="${WARMUP_DURATION:-2s}"
+TOOLS_FILTER="${TOOLS:-MockForge WireMock Prism Mockoon}"
+FIXTURES_FILTER="${FIXTURES:-petstore large_api_100_endpoints}"
 SPEC="$HERE/specs/petstore.json"
 OHA_BIN="$HERE/.tools/bin/oha"
 if [[ "$LOAD_CLIENT" == "python" ]]; then
@@ -39,6 +41,8 @@ if [[ "${1:-}" == "--dry-run" ]]; then
   printf 'fixtures: petstore, large_api_100_endpoints; load client: %s\n' "$LOAD_CLIENT"
   printf 'python3 %q --binary %q --runs %q --warmup %q --warmup-duration %q --concurrency %q --duration %q --port %q --load-client %q' "$HERE/measure.py" "$MOCKFORGE_BIN" "$RUNS" "$WARMUP" "$WARMUP_DURATION" "$CONCURRENCY" "$DURATION" "$PORT" "${LOAD_CLIENT_CMD[0]}"
   if [[ "${#LOAD_CLIENT_CMD[@]}" -gt 1 ]]; then printf ' %q' "${LOAD_CLIENT_CMD[@]:1}"; fi
+  printf ' --tools'; for tool in $TOOLS_FILTER; do printf ' %q' "$tool"; done
+  printf ' --fixtures'; for fixture in $FIXTURES_FILTER; do printf ' %q' "$fixture"; done
   printf '\n'
   exit 0
 fi
@@ -54,4 +58,4 @@ python3 -m venv "$HERE/.venv"
 "$HERE/.venv/bin/python" -m pip install --disable-pip-version-check -r "$HERE/requirements.txt"
 "$HERE/.venv/bin/python" -c 'import jsonschema' || { echo 'required dependency jsonschema is unavailable in benchmark venv' >&2; exit 2; }
 "$HERE/.venv/bin/python" "$HERE/adapters.py" "$HERE/specs" "$HERE/generated"
-"$HERE/.venv/bin/python" "$HERE/measure.py" --binary "$MOCKFORGE_BIN" --runs "$RUNS" --warmup "$WARMUP" --warmup-duration "$WARMUP_DURATION" --concurrency "$CONCURRENCY" --duration "$DURATION" --port "$PORT" --wiremock-version "$WIREMOCK_VERSION" --prism-version "$PRISM_VERSION" --mockoon-version "$MOCKOON_VERSION" --load-client "${LOAD_CLIENT_CMD[@]}"
+"$HERE/.venv/bin/python" "$HERE/measure.py" --binary "$MOCKFORGE_BIN" --runs "$RUNS" --warmup "$WARMUP" --warmup-duration "$WARMUP_DURATION" --concurrency "$CONCURRENCY" --duration "$DURATION" --port "$PORT" --wiremock-version "$WIREMOCK_VERSION" --prism-version "$PRISM_VERSION" --mockoon-version "$MOCKOON_VERSION" --load-client "${LOAD_CLIENT_CMD[@]}" --tools $TOOLS_FILTER --fixtures $FIXTURES_FILTER
