@@ -32,6 +32,10 @@ def completed(stdout="", returncode=0):
     return subprocess.CompletedProcess([], returncode, stdout, "")
 
 
+def completed_output(stdout="", stderr="", returncode=0):
+    return subprocess.CompletedProcess([], returncode, stdout, stderr)
+
+
 class LifecycleTests(unittest.TestCase):
     def test_cleanup_refuses_unowned_container(self):
         for labels in ({}, {catalog.LABEL: "another-run"}):
@@ -893,6 +897,56 @@ class TlsVerifyTests(unittest.TestCase):
                     insecure=True,
                 )
                 self.assertIn("-insecure", command.call_args.args[0])
+
+    def test_probe_failure_writes_outputs_and_reports_stdout(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            pack = catalog.PACKS[catalog.CVE]
+            with patch.object(nuclei, "owned_remove"), patch.object(
+                nuclei,
+                "command",
+                return_value=completed_output(stdout="container failed", returncode=2),
+            ) as command:
+                with self.assertRaises(RuntimeError) as raised:
+                    nuclei.probe(
+                        "docker", "http://127.0.0.1:1", output, "baseline", "run1", pack
+                    )
+
+            message = str(raised.exception)
+            self.assertIn("baseline", message)
+            self.assertIn("code 2", message)
+            self.assertIn("container failed", message)
+            self.assertIn(str(output / "baseline.log"), message)
+            self.assertIn(str(output / "baseline.jsonl"), message)
+            self.assertTrue((output / "baseline.log").exists())
+            self.assertEqual((output / "baseline.log").read_text(), "")
+            self.assertEqual((output / "baseline.jsonl").read_text(), "container failed")
+            command.assert_called_once()
+            self.assertFalse(command.call_args.kwargs.get("check", True))
+
+    def test_probe_success_still_writes_findings_and_returns_observation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            pack = catalog.PACKS[catalog.CVE]
+            finding = json.dumps(
+                {
+                    "template-id": "mockforge-nextjs-29927-observation",
+                    "response": "HTTP/1.1 200 OK\r\n",
+                }
+            ) + "\n"
+            with patch.object(nuclei, "owned_remove"), patch.object(
+                nuclei,
+                "command",
+                return_value=completed_output(stdout=finding, stderr="debug output"),
+            ):
+                result = nuclei.probe(
+                    "docker", "http://127.0.0.1:1", output, "target", "run1", pack
+                )
+
+            self.assertEqual(result["status"], 200)
+            self.assertTrue((output / "target.jsonl").exists())
+            self.assertEqual((output / "target.jsonl").read_text(), finding)
+            self.assertEqual((output / "target.log").read_text(), "debug output")
 
 
 if __name__ == "__main__":
