@@ -120,24 +120,102 @@ def duration_seconds(value):
     return float(value[:-1]) if value.endswith('s') else float(value)
 
 
-def stop_server(proc, container=None):
+def stop_server(proc, port, container=None):
     if container:
-        subprocess.run(['docker', 'stop', '--time', '1', container], check=False,
+        subprocess.run(['docker', 'rm', '-f', container], check=False,
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    elif proc.poll() is None:
+        return
+    if proc.poll() is None:
         try:
             os.killpg(proc.pid, signal.SIGTERM)
         except ProcessLookupError:
             pass
     try:
-        proc.wait(timeout=15)
+        proc.wait(timeout=30)
     except subprocess.TimeoutExpired:
-        if proc.poll() is None:
-            try:
-                os.killpg(proc.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
+        pass
+
+    if wait_for_port_free(port, timeout=30):
+        return
+
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    try:
         proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        pass
+    if wait_for_port_free(port, timeout=30):
+        return
+
+    holders = port_listener_pids(port)
+    holder_text = ', '.join(str(pid) for pid in holders) if holders else 'unknown'
+    raise RuntimeError(f'port {port} remained occupied after stopping process group {proc.pid}; '
+                       f'listener PID(s): {holder_text}')
+
+
+def port_is_free(port):
+    with socket.socket() as probe:
+        probe.settimeout(.25)
+        return probe.connect_ex(('127.0.0.1', port)) != 0
+
+
+def wait_for_port_free(port, timeout):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if port_is_free(port):
+            return True
+        time.sleep(.1)
+    return port_is_free(port)
+
+
+def port_listener_pids(port):
+    """Find Linux process IDs with a listening socket on the given port."""
+    inodes = set()
+    port_hex = f'{port:04X}'
+    for table in ('/proc/net/tcp', '/proc/net/tcp6'):
+        try:
+            lines = pathlib.Path(table).read_text().splitlines()[1:]
+        except OSError:
+            continue
+        for line in lines:
+            fields = line.split()
+            if len(fields) > 9 and fields[1].rsplit(':', 1)[-1].upper() == port_hex and fields[3] == '0A':
+                inodes.add(fields[9])
+    holders = set()
+    for process in pathlib.Path('/proc').iterdir():
+        if not process.name.isdigit():
+            continue
+        try:
+            descriptors = (process / 'fd').iterdir()
+            for descriptor in descriptors:
+                try:
+                    target = os.readlink(descriptor)
+                except OSError:
+                    continue
+                if target.startswith('socket:[') and target[8:-1] in inodes:
+                    holders.add(int(process.name))
+                    break
+        except OSError:
+            continue
+    return sorted(holders)
+
+
+def assert_port_free(port):
+    with socket.socket() as listener:
+        listener.settimeout(.25)
+        if listener.connect_ex(('127.0.0.1', port)) == 0:
+            raise RuntimeError(f'port {port} is already listening; refusing to start benchmark server')
+
+
+def start_server(cmd, port):
+    assert_port_free(port)
+    env = os.environ.copy()
+    if pathlib.Path(cmd[0]).name == 'mockforge':
+        env['MOCKFORGE_RATE_LIMIT_ENABLED'] = 'false'
+    return subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                            start_new_session=True, env=env)
 
 
 def fixture_operations(fixture):
@@ -175,8 +253,8 @@ def load_result(client, url, concurrency, duration, method='GET'):
     return {'client_name': client_identity(client), 'client': command, 'exit_code': 0, 'requests': sum(status_counts.values()) + error_count,
             'throughput_rps': metrics['requests_per_sec'], 'errors': error_count,
             'non_2xx': sum(count for code, count in status_counts.items() if not 200 <= code < 300),
-            'status_counts': status_counts, 'p50_ms': latency['p50'], 'p95_ms': latency['p95'],
-            'p99_ms': latency['p99'], 'failed': metrics['success_rate'] < 1,
+            'status_counts': status_counts, 'p50_ms': latency['p50'] * 1000, 'p95_ms': latency['p95'] * 1000,
+            'p99_ms': latency['p99'] * 1000, 'failed': metrics['success_rate'] < 1,
             'error': None, 'raw_output': completed.stdout.strip()}
 
 
@@ -225,7 +303,7 @@ def main():
                          f'wiremock/wiremock:{args.wiremock_version}'] if docker else
                         ['java', '-jar', os.environ['WIREMOCK_JAR'], '--port', str(args.port), '--root-dir', str(adapters)])
         tool_defs = [
-            ('MockForge', [args.binary, 'serve', '--spec', None, '--http-port', str(args.port)], 'process'),
+            ('MockForge', [args.binary, 'serve', '--spec', None, '--http-port', str(args.port), '--no-rate-limit'], 'process'),
             ('WireMock', wire_command, 'container' if docker else 'process'),
             ('Prism', ['npx', '--yes', f'@stoplight/prism-cli@{args.prism_version}', 'mock', '-h', '0.0.0.0', '-p', str(args.port), None], 'process'),
             ('Mockoon', ['npx', '--yes', f'@mockoon/cli@{args.mockoon_version}', 'start', '--data', None, '--port', str(args.port)], 'process'),
@@ -245,23 +323,26 @@ def main():
                 container = docker_name if tool_name == 'WireMock' and docker else None
                 def discard_warmups():
                     for _ in range(args.warmup):
-                        proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                                start_new_session=True)
+                        if container:
+                            assert_port_free(args.port)
+                        proc = start_server(cmd, args.port)
                         ready(probe_url)
                         for operation in operations:
                             load_result(args.load_client, root_url + operation['path'], args.concurrency, args.warmup_duration, operation['method'])
-                        stop_server(proc, container)
+                        stop_server(proc, args.port, container)
 
                 starts = []
                 for _ in range(args.runs):
                     discard_warmups()
-                    started = time.perf_counter(); proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL, start_new_session=True)
+                    if container:
+                        assert_port_free(args.port)
+                    started = time.perf_counter(); proc = start_server(cmd, args.port)
                     ready(probe_url); starts.append(time.perf_counter() - started)
-                    stop_server(proc, container)
+                    stop_server(proc, args.port, container)
                 discard_warmups()
-                proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                        start_new_session=True)
+                if container:
+                    assert_port_free(args.port)
+                proc = start_server(cmd, args.port)
                 ready(probe_url)
                 version = runtime_version(tool_name, cmd, container=container is not None, base_url=root_url)
                 stop = threading.Event(); peaks = []
@@ -292,7 +373,7 @@ def main():
                         fidelity_result = {'status': 'failed', 'reason': fidelity.stderr.strip()}
                     else:
                         fidelity_result = json.loads(fidelity.stdout)
-                stop_server(proc, container)
+                stop_server(proc, args.port, container)
                 fixture_failed = load_failed or fidelity_result.get('status') == 'failed'
                 successful_operations = [item['operation'] for item in per_operation_load
                                          if not item['load'].get('failed') and item['load'].get('errors') == 0

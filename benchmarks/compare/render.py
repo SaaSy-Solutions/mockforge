@@ -28,16 +28,22 @@ for name in fixtures:
             for code, count in (item['load'].get('status_counts') or {}).items():
                 status_counts[code] = status_counts.get(code, 0) + count
         status_text = ', '.join(f'{code}: {status_counts[code]}' for code in sorted(status_counts)) or 'no statuses'
-        summary = f"{'; '.join(percentiles)}; {rps:.2f} req/s total; {status_text}"
+        total_responses = sum(status_counts.values())
+        non_2xx = sum(count for code, count in status_counts.items() if not 200 <= int(code) < 300)
+        non_2xx_pct = 100 * non_2xx / total_responses if total_responses else 0
+        p50_summary = f"operation p50 median {median_p50:.3f} ms" if median_p50 is not None else "operation p50 median n/a"
+        summary = f"{'; '.join(percentiles)}; {p50_summary}; {rps:.2f} req/s total; {status_text}; non-2xx {non_2xx_pct:.2f}%"
         fidelity = metrics['fidelity']
         fidelity_value = ('n/a' if fidelity.get('status') == 'n/a' else
                           fidelity.get('status') if fidelity.get('status') else
                           f"{fidelity.get('passed', 0)}/{fidelity.get('total', 0)} ({fidelity.get('fraction', 0):.1%})")
         rss = metrics.get('peak_rss_bytes')
         rss_value = f"{rss / (1024 * 1024):.1f} MiB ({metrics.get('peak_rss_mode', 'unknown')})" if rss is not None else 'n/a'
+        degraded = total_responses > 0 and non_2xx_pct > 1
         failed = load.get('failed') or any(item['load'].get('exit_code') not in (None, 0) for item in operations)
         if fidelity.get('status') == 'failed':
             failed = True
         cold = metrics.get('cold_start_seconds_median')
-        print(f"| {tool['tool']} | {fixture['version']} | {cold:.3f} s | {rss_value} | {summary} | {fidelity_value} | {'FAILED' if failed else 'OK'} |")
+        status = 'FAILED' if failed else 'DEGRADED' if degraded else 'OK'
+        print(f"| {tool['tool']} | {fixture['version']} | {cold:.3f} s | {rss_value} | {summary} | {fidelity_value} | {status} |")
     print()

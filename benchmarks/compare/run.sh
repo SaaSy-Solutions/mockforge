@@ -30,7 +30,7 @@ fi
 
 if [[ "${1:-}" == "--dry-run" ]]; then
   printf 'MOCKFORGE_BIN=%q\n' "$MOCKFORGE_BIN"
-  printf 'MOCKFORGE_BIN serve --spec %q --http-port %q\n' "$SPEC" "$PORT"
+  printf '%q serve --spec %q --http-port %q --no-rate-limit\n' "$MOCKFORGE_BIN" "$SPEC" "$PORT"
   printf 'docker run --rm -p %q:8080 wiremock/wiremock:%s --global-response-templating\n' "$PORT" "$WIREMOCK_VERSION"
   printf 'npx --yes @stoplight/prism-cli@%s mock -h 0.0.0.0 -p %q %q\n' "$PRISM_VERSION" "$PORT" "$SPEC"
   printf 'npx --yes @mockoon/cli@%s start --data %q --port %q\n' "$MOCKOON_VERSION" "$HERE/specs/petstore.json" "$PORT"
