@@ -1,3 +1,24 @@
+## [0.3.242] - 2026-11-11
+
+### Security
+
+- **[DevX]** Update `openssl` to 0.10.82 (`openssl-sys` 0.9.118) for eight RustSec advisories, including buffer overflows in AES key wrap and digest finalization. RUSTSEC-2026-0459 (`libsqlite3-sys`) is deferred to the sqlx 0.9 upgrade (#1552); mockforge only opens its own SQLite stores.
+
+### Added
+
+- **[Reality]** CVE lab pack for CVE-2024-4577 (PHP-CGI argument injection through the Windows best-fit code page), alongside the Next.js pack. (#1522)
+
+### Fixed
+
+- **[DevX]** UI builds that change nothing no longer regenerate watched assets. (#1488)
+- **[DevX]** The UI restart helper builds cleanly with `clippy -D warnings` on non-Linux targets. (#1517)
+
+### Changed
+
+- **[DevX]** Copyright holder, crate authors and publisher are now MockForge LLC (licenses unchanged). (#1528)
+- **[Reality]** The CVE labs guide covers offline behavior, the plain-HTTP recorder, plain-language checks and the test cases each pack runs. (#1530)
+- **[DevX]** Removed dead code and orphaned end-to-end test files, and brought the docs' crate list in line with the workspace's 63 crates. (#1505, #1513, #1518)
+
 ## [0.3.241] - 2026-11-07
 
 ### Added
