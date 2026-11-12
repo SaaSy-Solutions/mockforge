@@ -1,6 +1,6 @@
 # Mock server comparison harness
 
-This harness defines a reproducible comparison; the repository contains no benchmark results yet. Run `benchmarks/compare/run.sh` after building MockForge's release binary, or set `MOCKFORGE_BIN`. Defaults are WireMock **3.13.2**, Prism **5.16.0**, and Mockoon CLI **9.10.0**. WireMock uses Docker by default; set `WIREMOCK_JAR=/path/to/wiremock-standalone.jar` to run its standalone jar.
+This harness defines a reproducible comparison. See the [published comparison benchmark](../../book/src/reference/comparison-benchmark.md) and its [raw results](results/2026-11-12-gibson.json). Run `benchmarks/compare/run.sh` after building MockForge's release binary, or set `MOCKFORGE_BIN`. Defaults are WireMock **3.13.2**, Prism **5.16.0**, and Mockoon CLI **9.10.0**. WireMock uses Docker by default; set `WIREMOCK_JAR=/path/to/wiremock-standalone.jar` to run its standalone jar.
 
 ## Reproduce
 
@@ -27,4 +27,4 @@ Cold start is elapsed time from process launch until the first successful HTTP 2
 ## Known limitations
 
 - Results are host-specific. Compare runs on the same machine with the same parameters and WireMock mode; do not combine Docker and standalone WireMock series.
-- No results or performance claims are published by this harness yet.
+- Results are host-specific. See the published run for its machine context and limitations.
