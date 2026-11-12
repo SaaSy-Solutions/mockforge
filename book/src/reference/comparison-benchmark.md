@@ -12,13 +12,13 @@ Cold start uses a fresh instance for each run. It measures from process spawn un
 
 Warm load uses one instance per tool and fixture. The harness sends and discards `WARMUP_DURATION` of traffic on every operation, then runs `LOAD_RUNS` measured passes. It records p50, p95, and p99 latency and requests per second for each operation. The summary reports the median of each metric across operations.
 
-Peak memory is sampled about once a second. For MockForge, Prism, and Mockoon, the harness samples process-tree RSS. For WireMock in Docker mode, it samples container usage with `docker stats`. These are different measures and should not be compared as if they were the same measurement.
+Peak memory sampling measures process-tree RSS about every 100 ms and Docker container usage about once a second. These are different measures and should not be compared as if they were the same measurement.
 
 OpenAPI fidelity checks whether response bodies validate against the fixture schema and records a reason for each operation. WireMock is marked n/a because it has no native OpenAPI import.
 
 ## Fairness rules
 
-Every tool receives byte-identical requests for each operation. Tools use their default server settings except MockForge's per-IP rate limiter, which is disabled with `--no-rate-limit` so the benchmark measures server handling rather than rate-limit rejections. WireMock uses hand-generated stubs with static bodies, so it is measured for performance only. JVM and Node tools receive warm-up traffic on the same instance used for measurement. Any run with more than 1% non-2xx responses is marked **DEGRADED**. Each run records machine load, CPU count, Docker limits, and JVM heap details.
+Every tool receives byte-identical requests for each operation. Tools use default settings apart from the port and host binding, and MockForge's per-IP rate limiter, which is turned off (`--no-rate-limit` / `MOCKFORGE_RATE_LIMIT_ENABLED=false`). WireMock uses hand-generated stubs with static bodies, so it is measured for performance only. Every tool's measured instance receives the same warm-up traffic before measurement. Any run with more than 1% non-2xx responses is marked **DEGRADED**. Each run records machine load, CPU count, Docker limits, and JVM heap details.
 
 ## Results
 
