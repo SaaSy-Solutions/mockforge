@@ -1,3 +1,11 @@
+## [0.3.244] - 2026-11-12
+
+### Fixed
+
+- **[Contracts]** Generated mock responses honour the schema's constraints: string `enum`, `format` and length limits; integer and number `enum`, bounds (including exclusive bounds) and `multipleOf`; and boolean `enum`. This applies inside objects, arrays, `$ref` and `allOf`/`oneOf`/`anyOf`. Constrained ids no longer get the `_001` suffix. Unconstrained values are unchanged. (#1558)
+- **[Reality]** When a CVE lab's Nuclei step fails, the report and the printed reason now show the failing phase, the container's exit code and the end of its output, instead of an empty `docker command failed:`. (#1529)
+- **[DevX]** CI fixes: the CLI tools bundle is regenerated, the example configuration image workflow uses the standard runner selection, and two unneeded qualifications in `mockforge-proxy` tests are removed.
+
 ## [0.3.243] - 2026-11-12
 
 ### Fixed
