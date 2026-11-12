@@ -11,7 +11,7 @@ import urllib.request
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('url'); parser.add_argument('--concurrency', type=int, default=16)
-    parser.add_argument('--duration', type=float, default=15)
+    parser.add_argument('--duration', type=float, default=15); parser.add_argument('--method', default='GET')
     args = parser.parse_args()
     latencies = []; errors = 0; non_2xx = 0
     deadline = time.monotonic() + args.duration
@@ -19,7 +19,8 @@ def main():
     def request():
         started = time.perf_counter()
         try:
-            with urllib.request.urlopen(args.url, timeout=5) as response:
+            request = urllib.request.Request(args.url, method=args.method)
+            with urllib.request.urlopen(request, timeout=5) as response:
                 response.read()
                 return time.perf_counter() - started, 200 <= response.status < 300, False
         except urllib.error.HTTPError as response:
