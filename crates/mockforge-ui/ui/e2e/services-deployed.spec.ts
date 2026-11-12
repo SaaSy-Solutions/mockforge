@@ -64,8 +64,8 @@ test.describe('Services — Deployed Site', () => {
 
     test('should display breadcrumb navigation', async ({ page }) => {
       const banner = page.getByRole('banner');
-      await expect(banner.getByText('Home')).toBeVisible();
-      await expect(banner.getByText('Services')).toBeVisible();
+      await expect(banner.getByText('Home').first()).toBeVisible();
+      await expect(banner.getByText('Services').first()).toBeVisible();
     });
   });
 
@@ -80,7 +80,7 @@ test.describe('Services — Deployed Site', () => {
         .isVisible({ timeout: 5000 }).catch(() => false);
       const hasServices = await main.locator('[class*="service"], [data-testid*="service"]')
         .first().isVisible({ timeout: 3000 }).catch(() => false);
-      const hasMatchingRoutes = await main.getByText(/Matching Routes|No search active/)
+      const hasMatchingRoutes = await main.getByText(/Matching Routes|No search active/).first()
         .isVisible({ timeout: 3000 }).catch(() => false);
 
       // Page should show something — either empty state or service content
@@ -108,7 +108,7 @@ test.describe('Services — Deployed Site', () => {
       if (hasServices) {
         // When services exist, the page shows "Matching Routes" card and ServicesPanel
         await expect(
-          main.getByText(/Matching Routes|No search active|routes match/)
+          main.getByText(/Matching Routes|No search active|routes match/).first()
         ).toBeVisible();
       }
     });

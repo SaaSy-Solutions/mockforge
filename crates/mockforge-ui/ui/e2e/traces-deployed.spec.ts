@@ -1,3 +1,8 @@
+// Not run by playwright-deployed.config.ts (issue #1051): /traces is hidden on
+// the cloud app because cross-deployment OTLP search supersedes it —
+// cloudHiddenNavItemIds in src/components/layout/navigation.ts points traces at
+// /cloud-traces, and this spec asserts the local-server trace UI. Kept in-tree;
+// see the testIgnore note in playwright-deployed.config.ts.
 import { test, expect } from '@playwright/test';
 
 /**

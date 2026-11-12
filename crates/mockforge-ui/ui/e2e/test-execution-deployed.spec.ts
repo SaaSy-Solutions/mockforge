@@ -1,3 +1,8 @@
+// Not run by playwright-deployed.config.ts (issue #1051): /test-execution is
+// hidden on the cloud app — TestExecutionDashboard renders mock data only and
+// cloudHiddenNavItemIds in src/components/layout/navigation.ts supersedes it with
+// /cloud-test-runs. Kept in-tree; see the testIgnore note in
+// playwright-deployed.config.ts.
 import { test, expect } from '@playwright/test';
 
 /**
