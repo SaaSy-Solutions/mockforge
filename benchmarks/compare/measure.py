@@ -62,6 +62,7 @@ def ready(url, timeout=60):
             with urllib.request.urlopen(url, timeout=.3) as response:
                 if 200 <= response.status < 300:
                     return time.perf_counter() - started
+            time.sleep(.05)
         except urllib.error.HTTPError as error:
             if 200 <= error.code < 300:
                 return time.perf_counter() - started
