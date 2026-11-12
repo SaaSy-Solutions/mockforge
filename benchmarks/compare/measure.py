@@ -16,6 +16,8 @@ import time
 import urllib.request
 
 BASE = pathlib.Path(__file__).resolve().parent
+sys.path.insert(0, str(BASE))
+from requests import build_operation
 
 
 def machine():
@@ -91,7 +93,7 @@ def rss_sampler(pid, stop, output, container=None):
                 raw = subprocess.run(['docker', 'stats', '--no-stream', '--format', '{{.MemUsage}}', container],
                                      text=True, capture_output=True, check=True).stdout.strip()
                 used = raw.split('/')[0].strip()
-                match = re.fullmatch(r'([0-9.]+)(B|kB|MB|GB|TB|KiB|MiB|GiB|TiB)', used)
+                match = re.fullmatch(r'([0-9.]+)\s*(B|kB|MB|GB|TB|KiB|MiB|GiB|TiB)', used)
                 if match:
                     unit = match.group(2)
                     scale = {'B': 1, 'kB': 1000, 'MB': 1000**2, 'GB': 1000**3, 'TB': 1000**4,
@@ -108,12 +110,23 @@ def rss_sampler(pid, stop, output, container=None):
     output.append(peak)
 
 
-def client_command(client, url, concurrency, duration, method='GET'):
+def client_command(client, operation, concurrency, duration):
+    url = operation['url']; method = operation['method']
     if pathlib.Path(client[0]).name == 'oha':
-        return [*client, '-c', str(concurrency), '-z', duration, '-m', method, '--no-tui', '--output-format', 'json', url]
+        command = [*client, '-c', str(concurrency), '-z', duration, '-m', method, '--no-tui', '--output-format', 'json']
+        if operation['content_type']:
+            command.extend(['-H', f"content-type: {operation['content_type']}"])
+        if operation['body'] is not None:
+            command.extend(['-d', operation['body'].decode()])
+        return [*command, url]
     if client[0] == 'wrk':
         return [*client, '-t', str(concurrency), '-c', str(concurrency), '-d', duration, url]
-    return [*client, url, '--method', method, '--concurrency', str(concurrency), '--duration', str(duration_seconds(duration))]
+    command = [*client, url, '--method', method, '--concurrency', str(concurrency), '--duration', str(duration_seconds(duration))]
+    if operation['content_type']:
+        command.extend(['--header', f"content-type: {operation['content_type']}"])
+    if operation['body'] is not None:
+        command.extend(['--data', operation['body'].decode()])
+    return command
 
 
 def duration_seconds(value):
@@ -220,8 +233,8 @@ def start_server(cmd, port):
 
 def fixture_operations(fixture):
     document = json.loads(fixture.read_text())
-    return [{'operation': op.get('operationId', f'{method.upper()} {path}'),
-             'method': method.upper(), 'path': re.sub(r'\{[^}]+\}', '1', path)}
+    return [{**build_operation(document, path, method, op),
+             'operation': op.get('operationId', f'{method.upper()} {path}')}
             for path, item in document.get('paths', {}).items()
             for method, op in item.items()
             if method.lower() in {'get', 'head', 'options', 'post', 'put', 'patch', 'delete'}]
@@ -235,8 +248,8 @@ def client_identity(client):
     return {'name': 'load.py', 'version': 'fallback (client-bound)'}
 
 
-def load_result(client, url, concurrency, duration, method='GET'):
-    command = client_command(client, url, concurrency, duration, method)
+def load_result(client, operation, concurrency, duration):
+    command = client_command(client, operation, concurrency, duration)
     completed = subprocess.run(command, text=True, capture_output=True)
     if completed.returncode:
         return {'client_name': client_identity(client), 'client': command, 'exit_code': completed.returncode,
@@ -328,7 +341,7 @@ def main():
                         proc = start_server(cmd, args.port)
                         ready(probe_url)
                         for operation in operations:
-                            load_result(args.load_client, root_url + operation['path'], args.concurrency, args.warmup_duration, operation['method'])
+                            load_result(args.load_client, {**operation, 'url': root_url + operation['path']}, args.concurrency, args.warmup_duration)
                         stop_server(proc, args.port, container)
 
                 starts = []
@@ -356,8 +369,9 @@ def main():
                     # Capture the live server before and throughout the load phase.
                     if not per_operation_load:
                         time.sleep(.12)
-                    measured = load_result(args.load_client, root_url + operation['path'], args.concurrency, args.duration, operation['method'])
-                    per_operation_load.append({**operation, 'load': measured})
+                    measured = load_result(args.load_client, {**operation, 'url': root_url + operation['path']}, args.concurrency, args.duration)
+                    per_operation_load.append({key: operation[key] for key in ('operation', 'method', 'path')}
+                                              | {'load': measured})
                     if measured.get('exit_code') != 0:
                         load_failed = True
                         break
