@@ -1,9 +1,12 @@
-## [0.3.244] - 2026-11-12
+## [0.3.245] - 2026-11-13
+
+0.3.244 was tagged but never published (its release build ran out of disk), so 0.3.245 ships its changes.
 
 ### Fixed
 
 - **[Contracts]** Generated mock responses honour the schema's constraints: string `enum`, `format` and length limits; integer and number `enum`, bounds (including exclusive bounds) and `multipleOf`; and boolean `enum`. This applies inside objects, arrays, `$ref` and `allOf`/`oneOf`/`anyOf`. Constrained ids no longer get the `_001` suffix. Unconstrained values are unchanged. (#1558)
 - **[Reality]** When a CVE lab's Nuclei step fails, the report and the printed reason now show the failing phase, the container's exit code and the end of its output, instead of an empty `docker command failed:`. (#1529)
+- **[DevX]** Releases no longer rebuild the workspace from scratch for the `cargo install` smoke test, and trim the runner's release build directory afterwards, so a release stops filling the shared CI disk. (#1570)
 - **[DevX]** CI fixes: the CLI tools bundle is regenerated, the example configuration image workflow uses the standard runner selection, and two unneeded qualifications in `mockforge-proxy` tests are removed.
 
 ## [0.3.243] - 2026-11-12
