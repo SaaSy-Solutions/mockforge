@@ -61,7 +61,9 @@ jobs:
         # Replaces Swatinem/rust-cache: no target or registry tarballs in
         # GitHub cache storage. See scripts/ci/runner-cargo-target.sh.
         if: runner.environment == 'self-hosted'
-        run: bash scripts/ci/runner-cargo-target.sh jcs-fuzz >> "$GITHUB_ENV"
+        env:
+          MOCKFORGE_RUNNER_TARGET_MAX_GB: ${{ vars.MOCKFORGE_RUNNER_TARGET_MAX_GB || '40' }}
+        run: bash scripts/ci/guard-runner-cargo-targets.sh && bash scripts/ci/runner-cargo-target.sh jcs-fuzz >> "$GITHUB_ENV"
 
       # Compile separately so that infrastructure failures (linker
       # SIGBUS from runner-side disk pressure, OOM during compile,
