@@ -12,7 +12,7 @@ import sys
 import time
 import uuid
 from cve_lab_catalog import CATALOG, CVE, PACKS
-from cve_lab_engine import doctor, prepare, lab, cleanup
+from cve_lab_engine import doctor, prepare, lab, cleanup, verify_images
 from cve_lab_transport import target_url, receiver, control, unverified_context
 from cve_lab_nuclei import probe
 from cve_lab_evidence import BASELINE_GATES, CLASSIFIERS, describe
@@ -85,6 +85,14 @@ def run(args):
         )
     try:
         prepare(args.engine, pack)
+        image_verification = verify_images(args.engine, pack)
+        report["image_verification"] = image_verification
+        present = sum(1 for entry in image_verification if entry["status"] == "present")
+        print(
+            f"Images verified on this machine: {present}/{len(image_verification)} "
+            "pinned images present (details in report.json)",
+            flush=True,
+        )
         with lab(args.engine, run_id, output, pack) as backend:
             with receiver(
                 args.origin_port,
@@ -226,6 +234,17 @@ def main(argv=None):
         "down", help="Recover owned containers after an interrupted run"
     )
     down.add_argument("--output-dir", required=True)
+    images_parser = commands.add_parser(
+        "images",
+        help="Show each pinned pack image and whether it is present on this machine",
+    )
+    images_parser.add_argument(
+        "cve",
+        nargs="?",
+        choices=tuple(PACKS),
+        default=None,
+        help="One pack, or omit for every reviewed pack",
+    )
     args = parser.parse_args(argv)
     try:
         if args.action == "doctor":
@@ -241,6 +260,27 @@ def main(argv=None):
             return run(args)
         elif args.action == "down":
             cleanup(args)
+        elif args.action == "images":
+            doctor(args.engine)
+            targets = [args.cve] if args.cve else list(PACKS)
+            listing = {
+                cve: verify_images(args.engine, PACKS[cve]) for cve in targets
+            }
+            print(json.dumps(listing, indent=2))
+            missing = [
+                entry
+                for entries in listing.values()
+                for entry in entries
+                if entry["status"] != "present"
+            ]
+            if missing:
+                print(
+                    f"{len(missing)} pinned image(s) missing on this machine; "
+                    "run `mockforge cve prepare <CVE>` or load the exact digests "
+                    "(see the managed CVE labs guide)",
+                    file=sys.stderr,
+                )
+                return 1
     except (RuntimeError, ValueError, OSError, subprocess.TimeoutExpired) as exc:
         print(str(exc), file=sys.stderr)
         return 1

@@ -949,5 +949,151 @@ class TlsVerifyTests(unittest.TestCase):
             self.assertEqual((output / "target.log").read_text(), "debug output")
 
 
+class ImageVerificationTests(unittest.TestCase):
+    """Pinned-image presence is reported from catalog data via by-digest
+    engine inspects - never by parsing `docker images` output."""
+
+    def test_image_status_uses_a_by_digest_inspect(self):
+        with patch.object(
+            engine, "command", return_value=completed()
+        ) as command:
+            self.assertEqual(engine.image_status("docker", "some@sha256:abc"), "present")
+        command.assert_called_once_with(
+            ["docker", "image", "inspect", "some@sha256:abc"], check=False
+        )
+        with patch.object(
+            engine, "command", return_value=completed(returncode=1)
+        ):
+            self.assertEqual(engine.image_status("docker", "some@sha256:abc"), "missing")
+
+    def test_verify_images_reports_both_pinned_images_with_roles(self):
+        pack = catalog.PACKS["CVE-2025-29927"]
+        statuses = iter(("present", "missing"))
+        with patch.object(
+            engine, "command", side_effect=lambda *_a, **_k: completed(
+                returncode=0 if next(statuses) == "present" else 1
+            )
+        ):
+            listing = engine.verify_images("docker", pack)
+        self.assertEqual(
+            listing,
+            [
+                {
+                    "role": "application",
+                    "image": pack["catalog"]["application_image"],
+                    "status": "present",
+                },
+                {
+                    "role": "runner",
+                    "image": pack["catalog"]["runner_image"],
+                    "status": "missing",
+                },
+            ],
+        )
+
+    def test_images_command_lists_every_pack_and_exits_clean_when_present(self):
+        stdout = io.StringIO()
+        with patch.object(lab, "doctor"), patch.object(
+            lab, "verify_images", return_value=[{"role": "application", "image": "app@sha256:a", "status": "present"}, {"role": "runner", "image": "runner@sha256:b", "status": "present"}]
+        ), contextlib.redirect_stdout(stdout):
+            self.assertEqual(lab.main(["images"]), 0)
+        listing = json.loads(stdout.getvalue())
+        self.assertEqual(set(listing), set(catalog.PACKS))
+        for cve, entries in listing.items():
+            with self.subTest(cve=cve):
+                self.assertEqual(
+                    [entry["role"] for entry in entries],
+                    ["application", "runner"],
+                )
+                self.assertTrue(
+                    all(entry["status"] == "present" for entry in entries)
+                )
+                for entry in entries:
+                    self.assertIn("@sha256:", entry["image"])
+
+    def test_images_command_exits_nonzero_when_an_image_is_missing(self):
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+
+        def verify(engine_arg, pack):
+            if pack["catalog"]["cve"] == "CVE-2024-4577":
+                return [
+                    {"role": "application", "image": "app@sha256:a", "status": "present"},
+                    {"role": "runner", "image": "runner@sha256:b", "status": "missing"},
+                ]
+            return [
+                {"role": "application", "image": "app@sha256:a", "status": "present"},
+                {"role": "runner", "image": "runner@sha256:b", "status": "present"},
+            ]
+
+        with patch.object(lab, "doctor"), patch.object(
+            lab, "verify_images", side_effect=verify
+        ), contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            self.assertEqual(lab.main(["images"]), 1)
+        listing = json.loads(stdout.getvalue())
+        statuses = [
+            (cve, entry["role"], entry["status"])
+            for cve, entries in listing.items()
+            for entry in entries
+        ]
+        self.assertIn(("CVE-2024-4577", "runner", "missing"), statuses)
+        self.assertIn("missing on this machine", stderr.getvalue())
+
+    def test_images_command_filters_to_one_pack(self):
+        stdout = io.StringIO()
+        entries = [
+            {"role": "application", "image": "app@sha256:a", "status": "present"},
+            {"role": "runner", "image": "runner@sha256:b", "status": "present"},
+        ]
+        with patch.object(lab, "doctor"), patch.object(
+            lab, "verify_images", return_value=entries
+        ), contextlib.redirect_stdout(stdout):
+            self.assertEqual(lab.main(["images", "CVE-2025-29927"]), 0)
+        listing = json.loads(stdout.getvalue())
+        self.assertEqual(set(listing), {"CVE-2025-29927"})
+
+    def test_run_report_records_the_verified_images(self):
+        entries = [
+            {"role": "application", "image": "app@sha256:a", "status": "present"},
+            {"role": "runner", "image": "runner@sha256:b", "status": "present"},
+        ]
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+            lab, "prepare"
+        ) as prepare, patch.object(
+            lab, "verify_images", return_value=entries
+        ) as verify, contextlib.redirect_stdout(stdout):
+            output = Path(directory) / "out"
+            self.assertEqual(
+                lab.main(["run", lab.CVE, "--output-dir", str(output)]), 1
+            )
+            prepare.assert_called_once()
+            verify.assert_called_once()
+            report = json.loads((output / "report.json").read_text())
+        self.assertEqual(report["image_verification"], entries)
+        self.assertIn("Images verified on this machine: 2/2", stdout.getvalue())
+
+    def test_run_output_prints_the_verification_line_even_on_failure(self):
+        # prepare succeeds (mocked), the engine step later fails on this
+        # host - the verification line and report entry are still written
+        entries = [
+            {"role": "application", "image": "app@sha256:a", "status": "present"},
+            {"role": "runner", "image": "runner@sha256:b", "status": "present"},
+        ]
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+            lab, "prepare"
+        ), patch.object(
+            lab, "verify_images", return_value=entries
+        ), contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(
+            io.StringIO()
+        ):
+            output = Path(directory) / "out"
+            self.assertEqual(
+                lab.main(["run", lab.CVE, "--output-dir", str(output)]), 1
+            )
+            report = json.loads((output / "report.json").read_text())
+        self.assertEqual(report["image_verification"], entries)
+
+
 if __name__ == "__main__":
     unittest.main()
