@@ -101,7 +101,8 @@ class MsrvToolchainTest(unittest.TestCase):
 
     def test_install_smoke_has_a_fresh_compilation_directory(self):
         script = (ROOT / "scripts/smoke-test-install.sh").read_text()
-        self.assertIn('--root "$TMP" --target-dir "$TMP/target" --force', script)
+        self.assertIn('INSTALL_TARGET_DIR="${SMOKE_INSTALL_TARGET_DIR:-$TMP/target}"', script)
+        self.assertIn('--root "$TMP" --target-dir "$INSTALL_TARGET_DIR" --force', script)
 
     def test_changelogs_mirror_current_section_and_document_msrv(self):
         sections = []
