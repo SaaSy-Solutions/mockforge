@@ -314,7 +314,15 @@ async fn stripe_webhook_is_version_independent_idempotent_and_safe() {
     let late = Harness::new().await;
     let late_sub = format!("sub_late_{}", uuid::Uuid::new_v4().simple());
     let metadata = json!({ "org_id": late.org_id });
-    let deleted = clover_subscription_event(
+    let created = clover_subscription_event(
+        &evt(),
+        "customer.subscription.created",
+        &late_sub,
+        PRO_PRICE,
+        metadata.clone(),
+        (start, end),
+    );
+    let mut deleted = clover_subscription_event(
         &evt(),
         "customer.subscription.deleted",
         &late_sub,
@@ -322,15 +330,8 @@ async fn stripe_webhook_is_version_independent_idempotent_and_safe() {
         metadata.clone(),
         (start, end),
     );
+    deleted["created"] = json!(created["created"].as_i64().unwrap() + 1);
     assert_eq!(late.post(&deleted).await.0, StatusCode::SERVICE_UNAVAILABLE);
-    let created = clover_subscription_event(
-        &evt(),
-        "customer.subscription.created",
-        &late_sub,
-        PRO_PRICE,
-        metadata,
-        (start, end),
-    );
     assert_eq!(late.post(&created).await.0, StatusCode::OK);
     assert_eq!(late.plan().await, "pro");
     assert_eq!(late.post(&deleted).await.0, StatusCode::OK);

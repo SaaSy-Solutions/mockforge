@@ -99,8 +99,8 @@ impl PaidFlowHelper {
         format!("t={},v1={}", timestamp, hex::encode(sig_bytes))
     }
 
-    /// POST a signed event body to `/api/v1/billing/webhook` and assert 2xx.
-    async fn post_webhook(&self, body: &str) {
+    /// POST a signed event body to `/api/v1/billing/webhook`.
+    async fn post_webhook_raw(&self, body: &str) -> (StatusCode, String) {
         let ts = chrono::Utc::now().timestamp();
         let signature = self.sign(body, ts);
         let res = self
@@ -115,6 +115,12 @@ impl PaidFlowHelper {
 
         let status = res.status();
         let text = res.text().await.unwrap_or_default();
+        (status, text)
+    }
+
+    /// POST a signed event body and assert 2xx.
+    async fn post_webhook(&self, body: &str) {
+        let (status, text) = self.post_webhook_raw(body).await;
         assert!(
             status.is_success(),
             "webhook POST returned {}: {}\nbody was: {}",
@@ -350,16 +356,31 @@ async fn test_paid_flow_e2e() {
     assert!(status.is_success(), "Pro gRPC deploy should succeed, got {}: {}", status, body);
 
     // ─────────────────────────────────────────────────────────────────
-    // Step 5b: trial_will_end is acknowledged and leaves the plan alone
-    // (#714). It emails the owner when EMAIL_PROVIDER is configured; an
-    // unknown subscription is acknowledged too, so Stripe stops retrying.
+    // Step 5b: trial_will_end leaves the plan alone. A missing subscription
+    // for a real org remains retryable while its prerequisite may arrive.
     // ─────────────────────────────────────────────────────────────────
     println!("Step 5b: customer.subscription.trial_will_end");
     let body = h.trial_will_end_event(&h.subscription_id.clone());
     h.post_webhook(&body).await;
     assert_eq!(h.fetch_plan().await, "pro", "trial_will_end must not change the plan");
     let body = h.trial_will_end_event(&format!("sub_e2e_unknown_{}", ts));
-    h.post_webhook(&body).await;
+    let (status, response) = h.post_webhook_raw(&body).await;
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE, "{response}");
+    assert!(response.contains("retry"), "{response}");
+
+    let mut no_org: Value = serde_json::from_str(&body).expect("event JSON");
+    no_org["data"]["object"]["metadata"] = json!({});
+    no_org["id"] = json!(format!("evt_e2e_{}", uuid::Uuid::new_v4()));
+    let (status, response) = h.post_webhook_raw(&no_org.to_string()).await;
+    assert_eq!(status, StatusCode::OK, "{response}");
+    assert!(response.contains("ignored"), "{response}");
+
+    let mut expired: Value = serde_json::from_str(&body).expect("event JSON");
+    expired["data"]["object"]["trial_end"] = json!(chrono::Utc::now().timestamp() - 1);
+    expired["id"] = json!(format!("evt_e2e_{}", uuid::Uuid::new_v4()));
+    let (status, response) = h.post_webhook_raw(&expired.to_string()).await;
+    assert_eq!(status, StatusCode::OK, "{response}");
+    assert!(response.contains("ignored"), "{response}");
 
     // ─────────────────────────────────────────────────────────────────
     // Step 6: Webhook cancels the subscription → back to Free
