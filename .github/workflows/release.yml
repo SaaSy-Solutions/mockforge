@@ -84,7 +84,15 @@ jobs:
     # publish anything. No untrusted input is interpolated here — the
     # script is a static file in the repo.
     - name: Smoke-test cargo install path
+      env:
+        SMOKE_INSTALL_TARGET_DIR: ${{ runner.environment == 'self-hosted' && env.CARGO_TARGET_DIR || '' }}
       run: scripts/smoke-test-install.sh
+
+    - name: Trim runner release target
+      if: always() && runner.environment == 'self-hosted'
+      env:
+        MOCKFORGE_RELEASE_TARGET_MAX_GB: ${{ vars.MOCKFORGE_RELEASE_TARGET_MAX_GB || '40' }}
+      run: bash scripts/ci/trim-runner-cargo-target.sh
 
     - name: Generate changelog
       id: changelog

@@ -14,6 +14,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts/ci/runner-cargo-target.sh"
+TRIM_SCRIPT = ROOT / "scripts/ci/trim-runner-cargo-target.sh"
 WORKFLOWS = ROOT / ".github/workflows"
 ACTIONS = ROOT / ".github/actions"
 
@@ -89,6 +90,64 @@ class RunnerCargoTargetTest(unittest.TestCase):
         self.assertTrue((sibling / "blob").exists())
         for kept in (other_runner, cargo_home, unrelated):
             self.assertTrue((kept / "blob").exists(), kept)
+
+
+class TrimRunnerCargoTargetTest(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+
+    def fill(self, path, size=4096):
+        path.mkdir(parents=True, exist_ok=True)
+        (path / "blob").write_bytes(b"x" * size)
+
+    def run_trim(self, target, **env):
+        full = {"PATH": os.environ["PATH"], "RUNNER_NAME": "runner-a",
+                "MOCKFORGE_RUNNER_TARGET_ROOT": str(self.root)}
+        if target is not None:
+            full["CARGO_TARGET_DIR"] = str(target)
+        full.update(env)
+        return subprocess.run(["bash", str(TRIM_SCRIPT)], env=full, text=True,
+                              capture_output=True)
+
+    def test_refuses_empty_target(self):
+        result = self.run_trim(None)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("CARGO_TARGET_DIR is empty", result.stderr)
+
+    def test_refuses_symlink_target(self):
+        foreign = self.root / "foreign"
+        self.fill(foreign)
+        target = self.root / "cargo-mockforge-target-runner-a/release"
+        target.parent.mkdir(parents=True)
+        target.symlink_to(foreign)
+        result = self.run_trim(target)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertTrue((foreign / "blob").exists())
+
+    def test_refuses_path_outside_expected_target(self):
+        foreign = self.root / "foreign"
+        self.fill(foreign)
+        result = self.run_trim(foreign)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertTrue((foreign / "blob").exists())
+
+    def test_keeps_target_under_cap(self):
+        target = self.root / "cargo-mockforge-target-runner-a/release"
+        self.fill(target)
+        result = self.run_trim(target, MOCKFORGE_RELEASE_TARGET_MAX_GB="40")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("size before trim", result.stdout)
+        self.assertTrue((target / "blob").exists())
+
+    def test_removes_target_over_zero_cap(self):
+        target = self.root / "cargo-mockforge-target-runner-a/release"
+        self.fill(target)
+        result = self.run_trim(target, MOCKFORGE_RELEASE_TARGET_MAX_GB="0")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("size after trim", result.stdout)
+        self.assertFalse(target.exists())
 
     def test_pressure_preserves_runner_name_suffix_collision(self):
         foreign = self.root / "cargo-mockforge-target-ci-test-other-runner-a"
