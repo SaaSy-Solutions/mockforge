@@ -139,7 +139,7 @@ def validate_data_driven_pack(pack):
     A pack needs no classifier code when its outcome is a plain response
     status: it names ``data-driven`` for both ``baseline_gate`` and
     ``classifier`` and declares everything else as data. This validator
-    enforces the shape so a mis-declared pack fails loudly before any run
+    enforces the shape so a wrongly declared pack fails loudly before any run
     instead of producing unverifiable verdicts.
     """
     if pack["baseline_gate"] != "data-driven" or pack["classifier"] != "data-driven":

@@ -84,9 +84,19 @@ def probe(engine, base, output, phase, run_id, pack, insecure=False):
                 *(["-insecure"] if insecure else []),
             ],
             timeout=90,
+            check=False,
         )
         (output / f"{phase}.jsonl").write_text(result.stdout)
         (output / f"{phase}.log").write_text(result.stderr)
+        if result.returncode:
+            combined_output = "\n".join(
+                part for part in (result.stdout, result.stderr) if part
+            )
+            detail = combined_output[-3000:] if combined_output else "no output"
+            raise RuntimeError(
+                f"{phase}: Nuclei exited with code {result.returncode}: {detail}; "
+                f"logs: {output / f'{phase}.log'} and {output / f'{phase}.jsonl'}"
+            )
         findings = [
             json.loads(line)
             for line in result.stdout.splitlines()

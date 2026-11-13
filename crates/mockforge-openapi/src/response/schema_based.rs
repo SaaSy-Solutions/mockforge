@@ -5,6 +5,7 @@
 //! and item variation for realistic mock data.
 
 use super::*;
+use serde_json::json;
 
 impl ResponseGenerator {
     pub(crate) fn generate_example_from_schema_ref(
@@ -44,16 +45,23 @@ impl ResponseGenerator {
         // At this point, if we have a schema-level example, we've already returned it
         // So we only generate defaults when no example exists
         match &schema.schema_kind {
-            openapiv3::SchemaKind::Type(openapiv3::Type::String(_)) => {
-                // Use faker for string fields based on field name hints
-                Value::String("example string".to_string())
+            openapiv3::SchemaKind::Type(openapiv3::Type::String(string)) => {
+                Self::generate_string_value(string)
             }
-            openapiv3::SchemaKind::Type(openapiv3::Type::Integer(_)) => Value::Number(42.into()),
-            openapiv3::SchemaKind::Type(openapiv3::Type::Number(_)) => Value::Number(
-                serde_json::Number::from_f64(std::f64::consts::PI)
-                    .expect("PI is a valid f64 value"),
-            ),
-            openapiv3::SchemaKind::Type(openapiv3::Type::Boolean(_)) => Value::Bool(true),
+            openapiv3::SchemaKind::Type(openapiv3::Type::Integer(integer)) => {
+                Self::generate_integer_value(integer)
+            }
+            openapiv3::SchemaKind::Type(openapiv3::Type::Number(number)) => {
+                Self::generate_number_value(number)
+            }
+            openapiv3::SchemaKind::Type(openapiv3::Type::Boolean(boolean)) => boolean
+                .enumeration
+                .iter()
+                .flatten()
+                .next()
+                .copied()
+                .map(Value::Bool)
+                .unwrap_or(Value::Bool(true)),
             openapiv3::SchemaKind::Type(openapiv3::Type::Object(obj)) => {
                 // First pass: Scan for pagination metadata (total, page, limit)
                 // This helps us generate the correct number of array items
@@ -276,8 +284,258 @@ impl ResponseGenerator {
                     None => Value::Array(vec![Value::String("item".to_string())]),
                 }
             }
+            openapiv3::SchemaKind::AllOf { all_of } => all_of
+                .iter()
+                .find_map(|member| Self::generate_member(spec, member, persona))
+                .unwrap_or_else(|| Value::Object(serde_json::Map::new())),
+            openapiv3::SchemaKind::OneOf { one_of } => one_of
+                .first()
+                .and_then(|member| Self::generate_member(spec, member, persona))
+                .unwrap_or_else(|| Value::Object(serde_json::Map::new())),
+            openapiv3::SchemaKind::AnyOf { any_of } => any_of
+                .first()
+                .and_then(|member| Self::generate_member(spec, member, persona))
+                .unwrap_or_else(|| Value::Object(serde_json::Map::new())),
             _ => Value::Object(serde_json::Map::new()),
         }
+    }
+
+    fn generate_member(
+        spec: &OpenApiSpec,
+        member: &ReferenceOr<Schema>,
+        persona: Option<&Persona>,
+    ) -> Option<Value> {
+        match member {
+            ReferenceOr::Item(schema) => {
+                Some(Self::generate_example_from_schema(spec, schema, persona))
+            }
+            ReferenceOr::Reference { reference } => spec
+                .get_schema(reference)
+                .map(|schema| Self::generate_example_from_schema(spec, &schema.schema, persona)),
+        }
+    }
+
+    fn generate_string_value(string: &openapiv3::StringType) -> Value {
+        if let Some(value) = string.enumeration.iter().flatten().next() {
+            return Value::String(value.clone());
+        }
+        let format = match &string.format {
+            openapiv3::VariantOrUnknownOrEmpty::Item(openapiv3::StringFormat::Date) => Some("date"),
+            openapiv3::VariantOrUnknownOrEmpty::Item(openapiv3::StringFormat::DateTime) => {
+                Some("date-time")
+            }
+            openapiv3::VariantOrUnknownOrEmpty::Item(openapiv3::StringFormat::Password) => {
+                Some("password")
+            }
+            openapiv3::VariantOrUnknownOrEmpty::Item(openapiv3::StringFormat::Byte) => Some("byte"),
+            openapiv3::VariantOrUnknownOrEmpty::Item(openapiv3::StringFormat::Binary) => {
+                Some("binary")
+            }
+            openapiv3::VariantOrUnknownOrEmpty::Unknown(format) => Some(format.as_str()),
+            openapiv3::VariantOrUnknownOrEmpty::Empty => None,
+        };
+        let natural_value = match format.map(str::to_ascii_lowercase).as_deref() {
+            Some("date-time" | "datetime") => "2024-01-01T00:00:00Z".to_string(),
+            Some("date") => "2024-01-01".to_string(),
+            Some("uuid") => "00000000-0000-4000-8000-000000000000".to_string(),
+            Some("email") => "user@example.com".to_string(),
+            Some("uri" | "url") => "https://example.com/".to_string(),
+            Some("ipv4") => "192.0.2.1".to_string(),
+            Some("ipv6") => "2001:db8::1".to_string(),
+            Some("hostname") => "example.com".to_string(),
+            Some("byte") => "ZXhhbXBsZQ==".to_string(),
+            Some("password") => "example string".to_string(),
+            _ => "example string".to_string(),
+        };
+        let max = string.max_length.unwrap_or(10_000).min(10_000);
+        let min = string.min_length.unwrap_or(0);
+        // Bound generated strings to 10,000 characters to avoid untrusted schemas
+        // requesting unbounded allocations. Oversized minLength is capped here.
+        let target_min = min.min(10_000);
+        if natural_value.chars().count() <= max && natural_value.chars().count() >= target_min {
+            return Value::String(natural_value);
+        }
+        // A formatted value that cannot satisfy the bounds falls back to plain text.
+        let desired = target_min.max("example string".len()).min(max);
+        let mut plain = "example string".to_string();
+        if plain.len() > max {
+            plain.truncate(max);
+        }
+        if plain.len() < desired {
+            plain.push_str(&"x".repeat(desired - plain.len()));
+        }
+        Value::String(plain)
+    }
+
+    fn generate_integer_value(integer: &openapiv3::IntegerType) -> Value {
+        if let Some(value) = integer.enumeration.iter().flatten().next() {
+            return json!(value);
+        }
+        let lower = integer.minimum.map(|v| {
+            if integer.exclusive_minimum {
+                v.saturating_add(1)
+            } else {
+                v
+            }
+        });
+        let upper = integer.maximum.map(|v| {
+            if integer.exclusive_maximum {
+                v.saturating_sub(1)
+            } else {
+                v
+            }
+        });
+        let mut value = lower.unwrap_or(42_i64);
+        if let Some(max) = upper {
+            value = value.min(max);
+        }
+        if let Some(step) = integer.multiple_of.filter(|step| *step > 0) {
+            value = Self::integer_multiple_in_bounds(value, step, lower, upper);
+        }
+        json!(value)
+    }
+
+    fn generate_number_value(number: &openapiv3::NumberType) -> Value {
+        if let Some(value) = number.enumeration.iter().flatten().next() {
+            return json!(value);
+        }
+        let lower = number.minimum.map(|v| {
+            if number.exclusive_minimum {
+                Self::next_up(v)
+            } else {
+                v
+            }
+        });
+        let upper = number.maximum.map(|v| {
+            if number.exclusive_maximum {
+                Self::next_down(v)
+            } else {
+                v
+            }
+        });
+        let mut value = match (lower, upper) {
+            (Some(min), Some(max)) => min + (max - min) / 2.0,
+            (Some(min), None) => min,
+            (None, Some(max)) => max,
+            (None, None) => std::f64::consts::PI,
+        };
+        if let Some(step) = number.multiple_of.filter(|step| *step > 0.0 && step.is_finite()) {
+            value = Self::number_multiple_in_bounds(value, step, lower, upper);
+        }
+        Value::Number(
+            serde_json::Number::from_f64(value)
+                .unwrap_or_else(|| json!(0).as_number().unwrap().clone()),
+        )
+    }
+
+    fn integer_multiple_in_bounds(
+        value: i64,
+        step: i64,
+        lower: Option<i64>,
+        upper: Option<i64>,
+    ) -> i64 {
+        let min = lower.unwrap_or(i64::MIN);
+        let max = upper.unwrap_or(i64::MAX);
+        let clamped = value.clamp(min, max);
+        let rem = clamped.rem_euclid(step);
+        let down = clamped.checked_sub(rem).filter(|candidate| *candidate >= min);
+        let up = if rem == 0 {
+            Some(clamped)
+        } else {
+            clamped.checked_add(step - rem).filter(|candidate| *candidate <= max)
+        };
+        match (down, up) {
+            (Some(a), Some(b)) => {
+                if clamped - a <= b - clamped {
+                    a
+                } else {
+                    b
+                }
+            }
+            (Some(candidate), None) | (None, Some(candidate)) => candidate,
+            (None, None) => {
+                // No multiple satisfies these bounds; return the closest in-range value.
+                clamped
+            }
+        }
+    }
+
+    fn number_multiple_in_bounds(
+        value: f64,
+        step: f64,
+        lower: Option<f64>,
+        upper: Option<f64>,
+    ) -> f64 {
+        let step_repr = step.to_string();
+        let decimals = step_repr.split_once('.').map_or(0, |(_, fraction)| fraction.len()).min(9);
+        let scale = 10_f64.powi(decimals as i32);
+        let scaled = |number: f64| -> Option<i64> {
+            let scaled = number * scale;
+            (scaled.is_finite()
+                && scaled >= i64::MIN as f64
+                && scaled < 9_223_372_036_854_775_808.0)
+                .then(|| scaled.round() as i64)
+        };
+        if let (Some(scaled_step), Some(scaled_value), Some(min), Some(max)) = (
+            scaled(step),
+            scaled(value),
+            lower.map_or(Some(None), |v| scaled(v).map(Some)),
+            upper.map_or(Some(None), |v| scaled(v).map(Some)),
+        ) {
+            if scaled_step > 0 {
+                let result = Self::integer_multiple_in_bounds(scaled_value, scaled_step, min, max);
+                return result as f64 / scale;
+            }
+        }
+        let min = lower.unwrap_or(f64::NEG_INFINITY);
+        let max = upper.unwrap_or(f64::INFINITY);
+        let clamped = value.clamp(min, max);
+        let quotient = clamped / step;
+        let low = quotient.floor() * step;
+        let high = quotient.ceil() * step;
+        match (low >= min && low <= max, high >= min && high <= max) {
+            (true, true) => {
+                if clamped - low <= high - clamped {
+                    low
+                } else {
+                    high
+                }
+            }
+            (true, false) => low,
+            (false, true) => high,
+            (false, false) => {
+                // No multiple satisfies these bounds; return the closest in-range value.
+                (clamped * scale).round() / scale
+            }
+        }
+    }
+
+    fn next_up(value: f64) -> f64 {
+        if value.is_nan() || value == f64::INFINITY {
+            return value;
+        }
+        if value == 0.0 {
+            return f64::from_bits(1);
+        }
+        f64::from_bits(if value > 0.0 {
+            value.to_bits() + 1
+        } else {
+            value.to_bits() - 1
+        })
+    }
+
+    fn next_down(value: f64) -> f64 {
+        if value.is_nan() || value == f64::NEG_INFINITY {
+            return value;
+        }
+        if value == 0.0 {
+            return -f64::from_bits(1);
+        }
+        f64::from_bits(if value > 0.0 {
+            value.to_bits() - 1
+        } else {
+            value.to_bits() + 1
+        })
     }
 
     /// Extract numeric value from a schema (from example or default)
@@ -369,7 +627,12 @@ impl ResponseGenerator {
                                     persona,
                                 );
                                 // Add variation to make items unique
-                                Self::add_item_variation(&mut item, i + 1);
+                                Self::add_item_variation_with_schema(
+                                    &mut item,
+                                    i + 1,
+                                    Some(item_schema.as_ref()),
+                                    Some(spec),
+                                );
                                 item
                             })
                             .collect()
@@ -384,7 +647,12 @@ impl ResponseGenerator {
                                         persona,
                                     );
                                     // Add variation to make items unique
-                                    Self::add_item_variation(&mut item, i + 1);
+                                    Self::add_item_variation_with_schema(
+                                        &mut item,
+                                        i + 1,
+                                        Some(&resolved_schema.schema),
+                                        Some(spec),
+                                    );
                                     item
                                 })
                                 .collect()
@@ -404,13 +672,62 @@ impl ResponseGenerator {
     /// Add variation to an item to make it unique (for array generation)
     /// Varies IDs, names, addresses, and coordinates based on item index
     pub(crate) fn add_item_variation(item: &mut Value, item_index: u64) {
+        Self::add_item_variation_with_schema(item, item_index, None, None);
+    }
+
+    fn add_item_variation_with_schema(
+        item: &mut Value,
+        item_index: u64,
+        schema: Option<&Schema>,
+        spec: Option<&OpenApiSpec>,
+    ) {
         if let Some(obj) = item.as_object_mut() {
             // Update ID fields to be unique
             if let Some(id_val) = obj.get_mut("id") {
                 if let Some(id_str) = id_val.as_str() {
-                    // Extract base ID (remove any existing suffix)
-                    let base_id = id_str.split('_').next().unwrap_or(id_str);
-                    *id_val = Value::String(format!("{}_{:03}", base_id, item_index));
+                    // Generated format/enum identifiers must remain schema-valid.
+                    let constrained_id = schema
+                        .and_then(|schema| match &schema.schema_kind {
+                            openapiv3::SchemaKind::Type(openapiv3::Type::Object(object)) => {
+                                object.properties.get("id")
+                            }
+                            _ => None,
+                        })
+                        .and_then(|property| match property {
+                            ReferenceOr::Item(property) => Some(property.as_ref().clone()),
+                            ReferenceOr::Reference { reference } => spec
+                                .and_then(|spec| spec.get_schema(reference))
+                                .map(|property| property.schema),
+                        })
+                        .is_some_and(|property| match &property.schema_kind {
+                            openapiv3::SchemaKind::Type(openapiv3::Type::String(string)) => {
+                                !string.enumeration.is_empty()
+                                    || !matches!(
+                                        string.format,
+                                        openapiv3::VariantOrUnknownOrEmpty::Empty
+                                    )
+                                    || string.pattern.is_some()
+                                    || string.max_length.is_some_and(|max| id_str.len() + 4 > max)
+                            }
+                            _ => false,
+                        });
+                    if constrained_id
+                        || uuid::Uuid::parse_str(id_str).is_ok()
+                        || id_str.contains('@')
+                        || id_str.starts_with("http")
+                    {
+                        // Preserve naturally valid identifier formats while continuing
+                        // to vary names, addresses, and other fields below.
+                    } else {
+                        // Extract base ID (remove any existing numeric suffix).
+                        let base_id = id_str
+                            .rsplit_once('_')
+                            .filter(|(_, suffix)| {
+                                suffix.len() == 3 && suffix.bytes().all(|b| b.is_ascii_digit())
+                            })
+                            .map_or(id_str, |(base, _)| base);
+                        *id_val = Value::String(format!("{}_{:03}", base_id, item_index));
+                    }
                 } else if let Some(id_num) = id_val.as_u64() {
                     *id_val = Value::Number((id_num + item_index).into());
                 }
@@ -943,6 +1260,47 @@ components:
         )
     }
 
+    #[test]
+    fn constrained_schema_values_are_honored() {
+        let spec = spec_from_yaml(
+            r#"
+openapi: 3.0.3
+info: {title: constraints, version: '1'}
+paths: {}
+components:
+  schemas:
+    State: {type: string, enum: [active, inactive]}
+    DateTime: {type: string, format: date-time}
+    Uuid: {type: string, format: uuid}
+    Email: {type: string, format: email}
+    Bounded: {type: integer, minimum: 10, maximum: 12}
+    Multiple: {type: number, multipleOf: 0.5, minimum: 1, maximum: 2}
+    States: {type: array, items: {type: string, enum: [active, inactive]}}
+    Nested:
+      type: object
+      properties:
+        state: {type: string, enum: [active, inactive]}
+"#,
+        );
+        let generate = |name| {
+            ResponseGenerator::generate_example_from_schema(
+                &spec,
+                component_schema(&spec, name),
+                None,
+            )
+        };
+        assert_eq!(generate("State"), json!("active"));
+        assert!(
+            chrono::DateTime::parse_from_rfc3339(generate("DateTime").as_str().unwrap()).is_ok()
+        );
+        assert!(uuid::Uuid::parse_str(generate("Uuid").as_str().unwrap()).is_ok());
+        assert!(generate("Email").as_str().unwrap().contains('@'));
+        assert_eq!(generate("Bounded"), json!(10));
+        assert_eq!(generate("Multiple"), json!(1.5));
+        assert_eq!(generate("States"), json!(["active"]));
+        assert_eq!(generate("Nested"), json!({"state": "active"}));
+    }
+
     // ─── Type-level generation ──────────────────────────────────────────────
 
     #[test]
@@ -1371,6 +1729,185 @@ components:
         assert!(timestamp.starts_with("2023-"), "{timestamp}");
         assert!(timestamp.ends_with("00Z"), "{timestamp}");
         assert_eq!(timestamp.len(), 20, "{timestamp}");
+    }
+
+    #[test]
+    fn uuid_id_does_not_skip_name_variation() {
+        let mut item = json!({"id":"00000000-0000-4000-8000-000000000000", "name":"Meadow Apiary"});
+        ResponseGenerator::add_item_variation(&mut item, 2);
+        assert_eq!(item["id"], json!("00000000-0000-4000-8000-000000000000"));
+        assert_eq!(item["name"], json!("Prairie Apiary"));
+    }
+
+    #[test]
+    fn numeric_suffix_preserves_underscores_in_base() {
+        let mut item = json!({"id":"some_enum_value"});
+        ResponseGenerator::add_item_variation(&mut item, 2);
+        assert_eq!(item["id"], json!("some_enum_value_002"));
+    }
+
+    #[test]
+    fn number_exclusive_bounds_are_finite() {
+        let schema =
+            |minimum, maximum, exclusive_minimum, exclusive_maximum| openapiv3::NumberType {
+                format: openapiv3::VariantOrUnknownOrEmpty::Empty,
+                minimum,
+                maximum,
+                exclusive_minimum,
+                exclusive_maximum,
+                multiple_of: None,
+                enumeration: vec![],
+            };
+        for n in [
+            schema(Some(-1.0), None, true, false),
+            schema(None, Some(0.0), false, true),
+            schema(Some(0.0), Some(1.0), true, true),
+        ] {
+            let v = ResponseGenerator::generate_number_value(&n).as_f64().unwrap();
+            assert!(v.is_finite());
+        }
+    }
+
+    #[test]
+    fn integer_multiple_of_stays_inside_bounds_when_unsatisfiable() {
+        let schema = openapiv3::IntegerType {
+            minimum: Some(1),
+            maximum: Some(4),
+            multiple_of: Some(5),
+            ..Default::default()
+        };
+        let value = ResponseGenerator::generate_integer_value(&schema).as_i64().unwrap();
+        assert!((1..=4).contains(&value));
+    }
+
+    #[test]
+    fn integer_multiple_of_handles_negative_ranges_and_i64_max() {
+        let negative = openapiv3::IntegerType {
+            minimum: Some(-10),
+            maximum: Some(-3),
+            multiple_of: Some(4),
+            ..Default::default()
+        };
+        assert!(matches!(
+            ResponseGenerator::generate_integer_value(&negative).as_i64(),
+            Some(-8 | -4)
+        ));
+        let max = openapiv3::IntegerType {
+            minimum: Some(i64::MAX),
+            maximum: Some(i64::MAX),
+            multiple_of: Some(7),
+            ..Default::default()
+        };
+        assert_eq!(ResponseGenerator::generate_integer_value(&max).as_i64(), Some(i64::MAX));
+    }
+
+    #[test]
+    fn number_multiple_of_rounds_to_decimal_step_with_lower_bound() {
+        let schema = openapiv3::NumberType {
+            minimum: Some(0.3),
+            multiple_of: Some(0.5),
+            ..Default::default()
+        };
+        let value = ResponseGenerator::generate_number_value(&schema).as_f64().unwrap();
+        assert!((value - 0.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn decimal_multiple_of_uses_exact_scaled_arithmetic_when_possible() {
+        for (minimum, step, expected) in [(0.7, 0.1, 0.7), (0.3, 0.1, 0.3), (0.25, 0.05, 0.25)] {
+            let schema = openapiv3::NumberType {
+                minimum: Some(minimum),
+                maximum: Some(minimum),
+                multiple_of: Some(step),
+                ..Default::default()
+            };
+            assert_eq!(
+                ResponseGenerator::generate_number_value(&schema).as_f64().unwrap(),
+                expected
+            );
+        }
+
+        let fallback = openapiv3::NumberType {
+            minimum: Some(0.000_000_000_001),
+            maximum: Some(0.000_000_000_002),
+            multiple_of: Some(1e-12),
+            ..Default::default()
+        };
+        let value = ResponseGenerator::generate_number_value(&fallback).as_f64().unwrap();
+        assert!(value.is_finite());
+        assert!((0.000_000_000_001..=0.000_000_000_002).contains(&value));
+    }
+
+    #[test]
+    fn schema_constrained_ids_skip_suffix_but_names_still_vary() {
+        let spec = spec_from_yaml(
+            r#"
+openapi: 3.0.3
+info: {title: ids, version: '1'}
+paths: {}
+components:
+  schemas:
+    EnumId: {type: object, properties: {id: {type: string, enum: [alpha]}, name: {type: string}}}
+    StatusId: {type: string, enum: [open, closed]}
+    RefId: {type: object, properties: {id: {$ref: '#/components/schemas/StatusId'}, name: {type: string}}}
+    Ipv4Id: {type: object, properties: {id: {type: string, format: ipv4}, name: {type: string}}}
+    DateId: {type: object, properties: {id: {type: string, format: date}, name: {type: string}}}
+    ShortId: {type: object, properties: {id: {type: string, maxLength: 8}, name: {type: string}}}
+    PlainId: {type: object, properties: {id: {type: string}, name: {type: string}}}
+"#,
+        );
+        for (name, id, original, expected_name) in [
+            ("EnumId", "alpha", "alpha", "Prairie Apiary"),
+            ("Ipv4Id", "192.0.2.1", "192.0.2.1", "Prairie Apiary"),
+            ("DateId", "2024-01-01", "2024-01-01", "Prairie Apiary"),
+            ("ShortId", "abcde", "abcde", "Prairie Apiary"),
+        ] {
+            let mut item = json!({"id": id, "name": "Meadow Apiary"});
+            ResponseGenerator::add_item_variation_with_schema(
+                &mut item,
+                2,
+                Some(component_schema(&spec, name)),
+                Some(&spec),
+            );
+            assert_eq!(item["id"], json!(original), "{name}");
+            assert_eq!(item["name"], json!(expected_name), "{name}");
+        }
+        let mut plain = json!({"id": "abc", "name": "Meadow Apiary"});
+        ResponseGenerator::add_item_variation_with_schema(
+            &mut plain,
+            2,
+            Some(component_schema(&spec, "PlainId")),
+            Some(&spec),
+        );
+        assert_eq!(plain["id"], json!("abc_002"));
+
+        let mut referenced = json!({"id": "open", "name": "Meadow Apiary"});
+        ResponseGenerator::add_item_variation_with_schema(
+            &mut referenced,
+            2,
+            Some(component_schema(&spec, "RefId")),
+            Some(&spec),
+        );
+        assert_eq!(referenced["id"], json!("open"));
+    }
+
+    #[test]
+    fn formatted_strings_fall_back_to_length_valid_plain_text() {
+        let email = openapiv3::StringType {
+            format: openapiv3::VariantOrUnknownOrEmpty::Unknown("email".into()),
+            max_length: Some(5),
+            ..Default::default()
+        };
+        assert_eq!(ResponseGenerator::generate_string_value(&email).as_str().unwrap().len(), 5);
+        let date_time = openapiv3::StringType {
+            format: openapiv3::VariantOrUnknownOrEmpty::Unknown("date-time".into()),
+            min_length: Some(40),
+            ..Default::default()
+        };
+        assert_eq!(
+            ResponseGenerator::generate_string_value(&date_time).as_str().unwrap().len(),
+            40
+        );
     }
 
     // ─── generate_example_for_property ──────────────────────────────────────

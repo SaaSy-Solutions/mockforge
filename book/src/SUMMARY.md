@@ -171,6 +171,7 @@
 - [Conformance Self-Test Probes](reference/conformance-self-test-probes.md)
 - [Bench Custom Checks (Uploads + Chains)](reference/bench-custom-checks.md)
 - [Bench Capacity Sizing](reference/bench-capacity-sizing.md)
+- [Mock server comparison benchmark](reference/comparison-benchmark.md)
 - [Agent / LLM / MCP Traffic (Packet-Level)](reference/agent-llm-mcp-traffic.md)
 - [Troubleshooting](reference/troubleshooting.md)
 - [Common Issues & Solutions](reference/common-issues.md)
