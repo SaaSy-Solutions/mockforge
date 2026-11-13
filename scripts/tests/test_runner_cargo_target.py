@@ -126,6 +126,30 @@ class TrimRunnerCargoTargetTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertTrue((foreign / "blob").exists())
 
+    def test_refuses_symlinked_parent(self):
+        foreign = self.root / "foreign"
+        self.fill(foreign / "release")
+        (self.root / "cargo-mockforge-target-runner-a").symlink_to(foreign)
+        target = self.root / "cargo-mockforge-target-runner-a/release"
+        result = self.run_trim(target, MOCKFORGE_RELEASE_TARGET_MAX_GB="0")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertTrue((foreign / "release/blob").exists())
+
+    def test_refuses_trailing_slash_and_dotdot_spellings(self):
+        target = self.root / "cargo-mockforge-target-runner-a/release"
+        self.fill(target)
+        for spelling in (f"{target}/", f"{target}/../release"):
+            result = self.run_trim(spelling, MOCKFORGE_RELEASE_TARGET_MAX_GB="0")
+            self.assertNotEqual(result.returncode, 0, spelling)
+            self.assertTrue((target / "blob").exists(), spelling)
+
+    def test_refuses_missing_runner_name(self):
+        target = self.root / "cargo-mockforge-target-runner-a/release"
+        self.fill(target)
+        result = self.run_trim(target, RUNNER_NAME="", MOCKFORGE_RELEASE_TARGET_MAX_GB="0")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertTrue((target / "blob").exists())
+
     def test_refuses_path_outside_expected_target(self):
         foreign = self.root / "foreign"
         self.fill(foreign)

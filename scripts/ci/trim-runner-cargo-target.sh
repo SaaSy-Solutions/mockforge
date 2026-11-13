@@ -29,6 +29,13 @@ if [ -L "$target" ] || [ ! -d "$target" ]; then
   echo "::error::$target is not a plain directory; refusing to trim" >&2
   exit 1
 fi
+# A symlinked parent would redirect the delete into another directory tree.
+for parent in "$root" "$root/cargo-mockforge-target-$runner"; do
+  if [ -L "$parent" ]; then
+    echo "::error::$parent is a symlink; refusing to trim" >&2
+    exit 1
+  fi
+done
 
 max_gb="${MOCKFORGE_RELEASE_TARGET_MAX_GB:-40}"
 case "$max_gb" in
