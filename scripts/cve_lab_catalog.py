@@ -133,6 +133,43 @@ PACKS = {
     },
 }
 
+def validate_data_driven_pack(pack):
+    """Check a pack that uses the generic data-driven evidence path.
+
+    A pack needs no classifier code when its outcome is a plain response
+    status: it names ``data-driven`` for both ``baseline_gate`` and
+    ``classifier`` and declares everything else as data. This validator
+    enforces the shape so a wrongly declared pack fails loudly before any run
+    instead of producing unverifiable verdicts.
+    """
+    if pack["baseline_gate"] != "data-driven" or pack["classifier"] != "data-driven":
+        raise ValueError(
+            "validate_data_driven_pack requires the data-driven gate and classifier"
+        )
+    for key in ("catalog", "probe", "app", "controls"):
+        if key not in pack:
+            raise ValueError(f"data-driven pack is missing {key}")
+    for image in (pack["catalog"]["application_image"], pack["catalog"]["runner_image"]):
+        if "@sha256:" not in image:
+            raise ValueError(f"{image} is not pinned by digest")
+    controls = pack["controls"]
+    for key in ("benign_path", "benign_status", "ordinary_path", "ordinary_status"):
+        if key not in controls:
+            raise ValueError(f"data-driven pack controls are missing {key}")
+    probe = pack["probe"]
+    for key in ("template_id", "template_name", "method", "path", "marker"):
+        if key not in probe:
+            raise ValueError(f"data-driven pack probe is missing {key}")
+    seen_ids = set()
+    for case in pack.get("extra_cases", ()):
+        for key in ("id", "path", "expect_status"):
+            if key not in case:
+                raise ValueError(f"extra case is missing {key}: {case}")
+        if case["id"] in seen_ids:
+            raise ValueError(f"duplicate extra case id: {case['id']}")
+        seen_ids.add(case["id"])
+
+
 # Legacy single-pack exports; existing callers and tests import these names.
 CVE = "CVE-2025-29927"
 CATALOG = PACKS[CVE]["catalog"]
