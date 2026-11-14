@@ -107,7 +107,9 @@ jobs:
       # registry persists in CARGO_HOME above; see runner-cargo-target.sh.
       - name: Use runner-persistent cargo target
         if: steps.detect-specs.outputs.specs != ''
-        run: bash scripts/ci/runner-cargo-target.sh contract-diff >> "$GITHUB_ENV"
+        env:
+          MOCKFORGE_RUNNER_TARGET_MAX_GB: ${{ vars.MOCKFORGE_RUNNER_TARGET_MAX_GB || '40' }}
+        run: bash scripts/ci/guard-runner-cargo-targets.sh && bash scripts/ci/runner-cargo-target.sh contract-diff >> "$GITHUB_ENV"
 
       - name: Build MockForge CLI
         if: steps.detect-specs.outputs.specs != ''
