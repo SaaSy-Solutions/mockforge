@@ -271,7 +271,8 @@ def main(argv=None):
                 entry
                 for entries in listing.values()
                 for entry in entries
-                if entry["status"] != "present"
+                # Unpinned (pending-review) images are listed, not counted.
+                if entry["status"] == "missing"
             ]
             if missing:
                 print(

@@ -912,6 +912,25 @@ class ImageVerificationTests(unittest.TestCase):
         ):
             self.assertEqual(engine.image_status("docker", "some@sha256:abc"), "missing")
 
+    def test_image_status_reports_a_tag_as_unpinned_without_inspecting(self):
+        with patch.object(engine, "command") as command:
+            self.assertEqual(
+                engine.image_status("docker", "some/image:pending-review"), "unpinned"
+            )
+        command.assert_not_called()
+
+    def test_images_command_does_not_fail_on_unpinned_images(self):
+        stdout = io.StringIO()
+        with patch.object(lab, "doctor"), patch.object(
+            lab,
+            "verify_images",
+            return_value=[
+                {"role": "application", "image": "app:pending", "status": "unpinned"},
+                {"role": "runner", "image": "runner@sha256:b", "status": "present"},
+            ],
+        ), contextlib.redirect_stdout(stdout):
+            self.assertEqual(lab.main(["images"]), 0)
+
     def test_verify_images_reports_both_pinned_images_with_roles(self):
         pack = catalog.PACKS["CVE-2025-29927"]
         statuses = iter(("present", "missing"))

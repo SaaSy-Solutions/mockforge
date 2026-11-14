@@ -97,6 +97,10 @@ def image_status(engine, image):
     parse of ``docker images`` output, which does not list digest-pulled
     images the way tagged ones appear.
     """
+    if "@sha256:" not in image:
+        # A tag (a pack still pending review) is not a pinned image: a local
+        # image with that tag proves nothing, and prepare refuses it anyway.
+        return "unpinned"
     result = command([engine, "image", "inspect", image], check=False)
     return "present" if result.returncode == 0 else "missing"
 
