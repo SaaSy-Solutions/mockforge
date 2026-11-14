@@ -17,6 +17,26 @@ from cve_lab_transport import target_url, receiver, control, unverified_context
 from cve_lab_nuclei import probe
 import cve_lab_evidence as evidence
 from cve_lab_evidence import BASELINE_GATES, CLASSIFIERS, describe
+from cve_lab_exploits import BASELINE_EXPLOITS, TARGET_EXPLOITS
+
+
+UNVERIFIED_MESSAGE = (
+    "is an unverified lab pack (its trigger has not reproduced on a lab host); "
+    "pass --include-unverified to run it for development"
+)
+
+
+def verified_cves(include_unverified=False):
+    return tuple(
+        cve
+        for cve, pack in PACKS.items()
+        if include_unverified or pack.get("verified", True)
+    )
+
+
+def require_verified(cve, include_unverified):
+    if not PACKS[cve].get("verified", True) and not include_unverified:
+        raise ValueError(f"{cve} {UNVERIFIED_MESSAGE}")
 
 
 def run_plan_lines(args):
@@ -49,10 +69,17 @@ def run_plan_lines(args):
             "Lab image pending review: this pack refuses to run until the "
             "reviewed image digest is pinned (see `mockforge cve list`)"
         )
+    if pack_catalog.get("verification_status") == "pending-lab-host-verification":
+        lines.append(
+            "Trigger pending lab-host verification: the pack runs only its "
+            "reviewed advisory-derived choreography and reports inconclusive "
+            "unless the documented corruption marker appears"
+        )
     return lines
 
 
 def run(args):
+    require_verified(args.cve, args.include_unverified)
     pack = PACKS[args.cve]
     if pack["baseline_gate"] == "data-driven" or pack["classifier"] == "data-driven":
         validate_data_driven_pack(pack)
@@ -88,12 +115,17 @@ def run(args):
         )
     try:
         prepare(args.engine, pack)
+        for name, content in pack.get("application_files", {}).items():
+            # The reviewed lab application ships inside the pack and is
+            # mounted read-only into the pinned image by lab().
+            (output / name).write_text(content)
         with lab(args.engine, run_id, output, pack) as backend:
             with receiver(
                 args.origin_port,
                 args.listen_address,
                 backend,
                 signature_header=pack["probe"].get("signature_header"),
+                max_body=(pack.get("exploit") or {}).get("max_forwarded_body"),
             ) as records:
                 direct_host = (
                     "127.0.0.1"
@@ -117,6 +149,13 @@ def run(args):
                     baseline_control=baseline_control,
                     unauthenticated_status=baseline_control["root_status"],
                 )
+                if pack.get("baseline_exploit"):
+                    exploit_result = BASELINE_EXPLOITS[pack["baseline_exploit"]](
+                        args.engine, origin, output, run_id, pack
+                    )
+                    report.update(baseline_exploit=exploit_result)
+                    baseline = {**baseline, "crash_confirmed": exploit_result["crash_confirmed"]}
+                    report["baseline"] = baseline
                 BASELINE_GATES[pack["baseline_gate"]](pack, baseline_control, baseline)
                 if pack.get("extra_cases"):
                     _entries, extras_ok, _tokens = evidence.extra_case_evidence(
@@ -130,11 +169,10 @@ def run(args):
                 if args.target:
                     target_start = len(records)
                     before = control(pack, args.target, run_id, "before", context=tls_context)
-                    tested = probe(
+                    tested = TARGET_EXPLOITS[pack.get("target_exploit", "nuclei")](
                         args.engine,
                         args.target.rstrip("/"),
                         output,
-                        "target",
                         run_id,
                         pack,
                         insecure=args.skip_tls_verify,
@@ -151,8 +189,9 @@ def run(args):
                         args.block_status,
                     )
                     if (
-                        before["body_sha256"] != baseline_control["body_sha256"]
-                        or after["body_sha256"] != baseline_control["body_sha256"]
+                        # control() is tolerant: a failed one has no body_sha256.
+                        before.get("body_sha256") != baseline_control.get("body_sha256")
+                        or after.get("body_sha256") != baseline_control.get("body_sha256")
                     ):
                         verdict, reason = (
                             "inconclusive",
@@ -194,20 +233,29 @@ def run(args):
 
 
 def main(argv=None):
+    argv = list(sys.argv[1:] if argv is None else argv)
+    # Let argparse handle options and command shape, then validate CVE names
+    # ourselves so an unverified CVE gets the actionable refusal message.
     parser = argparse.ArgumentParser(prog="mockforge cve", description=__doc__)
     parser.add_argument("--engine", choices=("docker", "podman"), default="docker")
+    parser.add_argument(
+        "--include-unverified",
+        action="store_true",
+        help="Include unverified CVE packs for development only",
+    )
+    valid_cves = verified_cves(False)
     commands = parser.add_subparsers(dest="action", required=True)
     commands.add_parser("doctor", help="Check local prerequisites without downloading")
-    commands.add_parser("list", help="Show reviewed pack and pinned versions")
+    commands.add_parser("list", help="Show verified pack and pinned versions")
     prepare_parser = commands.add_parser(
         "prepare", help="Download and cache the reviewed images"
     )
-    prepare_parser.add_argument("cve", choices=tuple(PACKS))
+    prepare_parser.add_argument("cve")
     runner = commands.add_parser(
         "run",
         help="Auto-prepare, reproduce directly, optionally compare through your LB, then stop",
     )
-    runner.add_argument("cve", choices=tuple(PACKS))
+    runner.add_argument("cve")
     runner.add_argument(
         "--target",
         help="Your authorized LB HTTP(S) origin, configured to forward to origin-port",
@@ -239,11 +287,23 @@ def main(argv=None):
     )
     down.add_argument("--output-dir", required=True)
     args = parser.parse_args(argv)
+    valid_cves = verified_cves(args.include_unverified)
     try:
+        if args.action in ("prepare", "run"):
+            if args.cve not in PACKS:
+                parser.error(
+                    f"argument cve: invalid choice: {args.cve!r} (choose from "
+                    + ", ".join(repr(cve) for cve in verified_cves())
+                    + ")"
+                )
+            if args.cve not in valid_cves:
+                raise ValueError(f"{args.cve} {UNVERIFIED_MESSAGE}")
+            require_verified(args.cve, args.include_unverified)
         if args.action == "doctor":
             print(json.dumps(doctor(args.engine), indent=2))
         elif args.action == "list":
-            print(json.dumps({cve: PACKS[cve]["catalog"] for cve in PACKS}, indent=2))
+            cves = verified_cves(args.include_unverified)
+            print(json.dumps({cve: PACKS[cve]["catalog"] for cve in cves}, indent=2))
         elif args.action == "prepare":
             prepare(args.engine, PACKS[args.cve])
             print(
