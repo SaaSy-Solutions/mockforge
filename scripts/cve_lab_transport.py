@@ -152,7 +152,7 @@ def receiver(port, address, backend, signature_header=None, max_body=None):
 
 
 def control(pack, base, run_id, phase, context=None):
-    """Send a pack's benign and ordinary control requests to one origin.
+    """Send a pack's control requests to one origin and return what is known.
 
     The benign control exercises the pack's vulnerable endpoint without the
     injection payload; the ordinary request exercises an everyday route. Their
@@ -161,6 +161,10 @@ def control(pack, base, run_id, phase, context=None):
     A failed control never raises: it returns what is known - the correlation
     tokens plus an ``error`` - because a control that reached a dying origin
     is evidence a crash-pack classifier must correlate, not an abort.
+    instead". The pack may also declare ``extra_cases`` - additional data-only
+    requests, each with its own expected status - which are sent after the
+    two built-in controls and never abort the phase: a failed extra case is
+    returned as evidence for the classifier, not raised.
     """
     controls = pack["controls"]
     token = f"{run_id}-{phase}-{uuid.uuid4().hex}"
@@ -177,7 +181,6 @@ def control(pack, base, run_id, phase, context=None):
         outcome["body_sha256"] = hashlib.sha256(body).hexdigest()
     except (OSError, ValueError, http.client.HTTPException) as exc:
         outcome["error"] = str(exc)
-        return outcome
     try:
         outcome["root_status"] = request(
             base,
@@ -187,6 +190,28 @@ def control(pack, base, run_id, phase, context=None):
         )[0]
     except (OSError, ValueError, http.client.HTTPException) as exc:
         outcome["error"] = str(exc)
+    extras = {}
+    for case in pack.get("extra_cases", ()):
+        case_id = case["id"]
+        case_token = f"{token}-{case_id}"
+        case_outcome = {"token": case_token}
+        try:
+            headers = {
+                name: value.replace("{token}", case_token)
+                for name, value in case.get("headers", {}).items()
+            }
+            headers["X-Mockforge-Cve"] = case_token
+            case_outcome["status"] = request(
+                base,
+                case["path"].replace("{token}", case_token),
+                headers,
+                method=case.get("method", "GET"),
+                context=context,
+            )[0]
+        except (OSError, ValueError, http.client.HTTPException) as exc:
+            case_outcome["error"] = str(exc)
+        extras[case_id] = case_outcome
+    outcome["extras"] = extras
     return outcome
 
 
