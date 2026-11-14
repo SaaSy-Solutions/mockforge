@@ -15,7 +15,7 @@ categories = ["development-tools", "email"]
 
 [dependencies]
 # MockForge protocol support
-mockforge-protocol = { version = "0.3.241", path = "../mockforge-protocol", features = ["scripting"] }
+mockforge-protocol = { version = "0.3.245", path = "../mockforge-protocol", features = ["scripting"] }
 
 # Standard workspace dependencies
 tokio = { workspace = true, features = ["net", "io-util"] }

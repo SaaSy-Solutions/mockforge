@@ -222,7 +222,9 @@ jobs:
       # Replaces actions/cache (billed GitHub storage) with a warm target on
       # the runner disk; see scripts/ci/runner-cargo-target.sh.
       - name: Use runner-persistent cargo target
-        run: bash scripts/ci/runner-cargo-target.sh load-bench >> "$GITHUB_ENV"
+        env:
+          MOCKFORGE_RUNNER_TARGET_MAX_GB: ${{ vars.MOCKFORGE_RUNNER_TARGET_MAX_GB || '40' }}
+        run: bash scripts/ci/guard-runner-cargo-targets.sh && bash scripts/ci/runner-cargo-target.sh load-bench >> "$GITHUB_ENV"
 
       - name: Run benchmarks
         # criterion 0.5 has no `json` output format (only `criterion` and

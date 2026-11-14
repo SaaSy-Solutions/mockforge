@@ -100,10 +100,10 @@ exclude = ["vendor/aws-sigv4"]
 
 # Workspace-wide package metadata
 [workspace.package]
-version = "0.3.241"
+version = "0.3.245"
 edition = "2021"
 rust-version = "1.96.0"
-authors = ["SaaSy Solutions LLC <ray.clanan@saasysolutionsllc.com>"]
+authors = ["MockForge LLC"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/SaaSy-Solutions/mockforge"
 homepage = "https://mockforge.dev"
