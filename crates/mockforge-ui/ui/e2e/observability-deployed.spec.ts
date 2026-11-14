@@ -83,9 +83,9 @@ test.describe('Observability Dashboard — Deployed Site', () => {
       const banner = page.getByRole('banner');
       const hasBreadcrumb = await banner.getByText('Observability')
         .isVisible({ timeout: 3000 }).catch(() => false);
-      const hasHomeBreadcrumb = await banner.getByText('Home')
+      const hasSection = await banner.getByText('Observe', { exact: true })
         .isVisible({ timeout: 3000 }).catch(() => false);
-      expect(hasBreadcrumb || hasHomeBreadcrumb).toBeTruthy();
+      expect(hasBreadcrumb && hasSection).toBeTruthy();
     });
   });
 

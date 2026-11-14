@@ -73,11 +73,11 @@ test.describe('Learning Hub — Deployed Site', () => {
         .getByText('Learning Hub')
         .isVisible({ timeout: 3000 })
         .catch(() => false);
-      const hasHomeBreadcrumb = await banner
-        .getByText('Home')
+      const hasSection = await banner
+        .getByText('Ecosystem', { exact: true })
         .isVisible({ timeout: 3000 })
         .catch(() => false);
-      expect(hasBreadcrumb || hasHomeBreadcrumb).toBeTruthy();
+      expect(hasBreadcrumb && hasSection).toBeTruthy();
     });
   });
 

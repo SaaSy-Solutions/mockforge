@@ -66,7 +66,7 @@ test.describe('API Tokens — Deployed Site', () => {
 
     test('should display breadcrumbs', async ({ page }) => {
       const banner = page.getByRole('banner');
-      await expect(banner.getByText('Home')).toBeVisible();
+      await expect(banner.getByText('Settings', { exact: true })).toBeVisible();
       await expect(banner.getByText('API Tokens')).toBeVisible();
     });
 

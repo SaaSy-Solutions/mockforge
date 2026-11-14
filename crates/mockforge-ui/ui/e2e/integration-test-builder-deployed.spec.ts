@@ -76,12 +76,10 @@ test.describe('Integration Test Builder — Deployed Site', () => {
 
     test('should display breadcrumb navigation', async ({ page }) => {
       const banner = page.getByRole('banner');
-      await expect(banner.getByText('Home').first()).toBeVisible();
+      await expect(banner.getByText('Test & Verify', { exact: true }).first()).toBeVisible();
       const hasBreadcrumb = await banner.getByText(/Integration Test/i).first()
         .isVisible({ timeout: 3000 }).catch(() => false);
-      const hasHomeBreadcrumb = await banner.getByText('Home').first()
-        .isVisible({ timeout: 3000 }).catch(() => false);
-      expect(hasBreadcrumb || hasHomeBreadcrumb).toBeTruthy();
+      expect(hasBreadcrumb).toBeTruthy();
     });
 
     test('should display the Workflow Configuration section', async ({ page }) => {

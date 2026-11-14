@@ -77,11 +77,11 @@ test.describe('Request Verification — Deployed Site', () => {
 
     test('should display breadcrumb navigation', async ({ page }) => {
       const banner = page.getByRole('banner');
-      const hasHome = await banner.getByText('Home').first()
+      const hasSection = await banner.getByText('Test & Verify', { exact: true }).first()
         .isVisible({ timeout: 3000 }).catch(() => false);
       const hasVerification = await banner.getByText('Verification').first()
         .isVisible({ timeout: 3000 }).catch(() => false);
-      expect(hasHome || hasVerification || true).toBeTruthy();
+      expect(hasSection && hasVerification).toBeTruthy();
     });
 
     test('should display the empty state when no verification has been run', async ({ page }) => {

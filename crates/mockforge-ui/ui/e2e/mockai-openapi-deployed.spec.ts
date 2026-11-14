@@ -73,9 +73,9 @@ test.describe('MockAI OpenAPI Generator — Deployed Site', () => {
       const banner = page.getByRole('banner');
       const hasBreadcrumb = await banner.getByText(/OpenAPI|Generate/i)
         .isVisible({ timeout: 3000 }).catch(() => false);
-      const hasHome = await banner.getByText('Home')
+      const hasSection = await banner.getByText('AI', { exact: true })
         .isVisible({ timeout: 3000 }).catch(() => false);
-      expect(hasBreadcrumb || hasHome).toBeTruthy();
+      expect(hasBreadcrumb && hasSection).toBeTruthy();
     });
 
     test('should display the Generation Filters card', async ({ page }) => {

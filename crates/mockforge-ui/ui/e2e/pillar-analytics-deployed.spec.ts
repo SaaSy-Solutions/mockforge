@@ -66,7 +66,7 @@ test.describe('Pillar Analytics — Deployed Site', () => {
       // In cloud mode the local Analytics tab is hidden and pillar-analytics
       // surfaces under the plain "Analytics" label (#394).
       const banner = page.getByRole('banner');
-      await expect(banner.getByText('Home')).toBeVisible();
+      await expect(banner.getByText('Observe', { exact: true })).toBeVisible();
       await expect(banner.getByText('Analytics', { exact: true })).toBeVisible();
     });
   });

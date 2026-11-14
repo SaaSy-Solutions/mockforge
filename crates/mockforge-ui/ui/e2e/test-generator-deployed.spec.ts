@@ -74,11 +74,11 @@ test.describe('Test Generator — Deployed Site', () => {
 
     test('should display breadcrumb navigation', async ({ page }) => {
       const banner = page.getByRole('banner');
-      const hasBreadcrumb = await banner.getByText('Home')
+      const hasSection = await banner.getByText('Test & Verify', { exact: true })
         .isVisible({ timeout: 3000 }).catch(() => false);
       const hasTestGen = await banner.getByText('Test Generator')
         .isVisible({ timeout: 3000 }).catch(() => false);
-      expect(hasBreadcrumb || hasTestGen).toBeTruthy();
+      expect(hasSection && hasTestGen).toBeTruthy();
     });
 
     test('should display the Configuration panel', async ({ page }) => {
