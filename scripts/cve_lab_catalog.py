@@ -225,7 +225,12 @@ http.createServer((req, res) => {
             }
           });
         } else {
-          decoder.end();
+          decoder.end(() => {
+            if (!res.headersSent) {
+              res.writeHead(200, { 'content-type': 'text/plain' });
+              res.end('decoded\\n');
+            }
+          });
         }
       });
       return;
