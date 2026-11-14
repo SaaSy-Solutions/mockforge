@@ -188,7 +188,7 @@ jobs:
     - name: Use the runner's persistent Cargo target dir on Hetzner
       if: runner.environment == 'self-hosted'
       env:
-        MOCKFORGE_RUNNER_TARGET_MAX_GB: ${{ vars.MOCKFORGE_RUNNER_TARGET_MAX_GB || '40' }}
+        MOCKFORGE_RUNNER_TARGET_MAX_GB: ${{ vars.MOCKFORGE_RUNNER_TARGET_MAX_GB || '25' }}
       run: bash scripts/ci/guard-runner-cargo-targets.sh && bash scripts/ci/runner-cargo-target.sh ci-test >> "$GITHUB_ENV"
 
     - name: Install mold
@@ -433,7 +433,7 @@ jobs:
     - name: Use the runner's persistent Cargo target dir on Hetzner
       if: runner.environment == 'self-hosted'
       env:
-        MOCKFORGE_RUNNER_TARGET_MAX_GB: ${{ vars.MOCKFORGE_RUNNER_TARGET_MAX_GB || '40' }}
+        MOCKFORGE_RUNNER_TARGET_MAX_GB: ${{ vars.MOCKFORGE_RUNNER_TARGET_MAX_GB || '25' }}
       run: bash scripts/ci/guard-runner-cargo-targets.sh && bash scripts/ci/runner-cargo-target.sh ci-warning-gate >> "$GITHUB_ENV"
 
     - name: Install mold
@@ -599,7 +599,7 @@ jobs:
     - name: Use runner-persistent cargo target on Hetzner
       if: runner.environment == 'self-hosted'
       env:
-        MOCKFORGE_RUNNER_TARGET_MAX_GB: ${{ vars.MOCKFORGE_RUNNER_TARGET_MAX_GB || '40' }}
+        MOCKFORGE_RUNNER_TARGET_MAX_GB: ${{ vars.MOCKFORGE_RUNNER_TARGET_MAX_GB || '25' }}
       run: bash scripts/ci/guard-runner-cargo-targets.sh && bash scripts/ci/runner-cargo-target.sh ci-coverage >> "$GITHUB_ENV"
 
     - name: Install cargo-llvm-cov
@@ -701,7 +701,7 @@ jobs:
     - name: Use the runner's persistent Cargo target dir on Hetzner
       if: runner.environment == 'self-hosted'
       env:
-        MOCKFORGE_RUNNER_TARGET_MAX_GB: ${{ vars.MOCKFORGE_RUNNER_TARGET_MAX_GB || '40' }}
+        MOCKFORGE_RUNNER_TARGET_MAX_GB: ${{ vars.MOCKFORGE_RUNNER_TARGET_MAX_GB || '25' }}
       run: bash scripts/ci/guard-runner-cargo-targets.sh && bash scripts/ci/runner-cargo-target.sh ci-msrv >> "$GITHUB_ENV"
 
     - name: Install mold
