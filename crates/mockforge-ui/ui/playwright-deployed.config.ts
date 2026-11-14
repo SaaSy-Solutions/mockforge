@@ -22,9 +22,11 @@ export default defineConfig({
   // them — see cloudHiddenNavItemIds in src/components/layout/navigation.ts
   // — and their data comes from the local admin API (/api/chaos/*,
   // /api/recorder/*, /api/users, ...), which the registry does not serve.
-  // The local variants of these pages stay covered by the plain *.spec.ts
+  // Most local variants of these pages stay covered by the plain *.spec.ts
   // files under the local project (playwright.config.ts), which ignores
-  // *-deployed.spec.ts. These files are kept in-tree on purpose, not deleted.
+  // *-deployed.spec.ts. behavioral-cloning, incidents and contract-diff have
+  // no local spec yet, so no project runs them for now (user-management's
+  // page was retired). These files are kept in-tree on purpose, not deleted.
   testIgnore: [
     'e2e/chaos-deployed.spec.ts', // /chaos → cloud-chaos (CloudChaosPage)
     'e2e/recorder-deployed.spec.ts', // /recorder → cloud-recorder
