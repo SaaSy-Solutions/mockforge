@@ -199,6 +199,10 @@ PACKS = {
         "classifier": "cgi-argument-injection",
     },
     "CVE-2026-109618": {
+        # Reviewer evidence on PR #1524: trigger returned "200 upload processed"
+        # with no crash marker on Docker 29.1.4 / PHP 8.4.26 / Apache 2.4.69 at
+        # 418c289e, so this pack remains hidden until it reproduces on a lab host.
+        "verified": False,
         "catalog": {
             "schema_version": 1,
             "pack_revision": 1,
@@ -275,6 +279,9 @@ PACKS = {
         "target_exploit": "modphp-oom",
     },
     "CVE-2026-109619": {
+        # Reviewer evidence on PR #1524: trigger did not reproduce on Docker
+        # 29.1.4 / PHP 8.4.26 / Apache 2.4.69 at 418c289e; see PR #1524.
+        "verified": False,
         "catalog": {
             "schema_version": 1,
             "pack_revision": 1,

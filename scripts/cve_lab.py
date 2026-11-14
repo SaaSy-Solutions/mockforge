@@ -20,6 +20,25 @@ from cve_lab_evidence import BASELINE_GATES, CLASSIFIERS, describe
 from cve_lab_exploits import BASELINE_EXPLOITS, TARGET_EXPLOITS
 
 
+UNVERIFIED_MESSAGE = (
+    "is an unverified lab pack (its trigger has not reproduced on a lab host); "
+    "pass --include-unverified to run it for development"
+)
+
+
+def verified_cves(include_unverified=False):
+    return tuple(
+        cve
+        for cve, pack in PACKS.items()
+        if include_unverified or pack.get("verified", True)
+    )
+
+
+def require_verified(cve, include_unverified):
+    if not PACKS[cve].get("verified", True) and not include_unverified:
+        raise ValueError(f"{cve} {UNVERIFIED_MESSAGE}")
+
+
 def run_plan_lines(args):
     """Human-readable plan printed before anything downloads or starts."""
     pack_catalog = PACKS[args.cve]["catalog"]
@@ -60,6 +79,7 @@ def run_plan_lines(args):
 
 
 def run(args):
+    require_verified(args.cve, args.include_unverified)
     pack = PACKS[args.cve]
     if pack["baseline_gate"] == "data-driven" or pack["classifier"] == "data-driven":
         validate_data_driven_pack(pack)
@@ -212,20 +232,29 @@ def run(args):
 
 
 def main(argv=None):
+    argv = list(sys.argv[1:] if argv is None else argv)
+    # argparse validates positional choices after parsing, but the option may
+    # appear before or after the subcommand. Remove it before selecting the
+    # accepted CVEs, then restore the parsed value on the namespace.
+    include_unverified = "--include-unverified" in argv
+    argv = [arg for arg in argv if arg != "--include-unverified"]
+    # Let argparse handle options and command shape, then validate CVE names
+    # ourselves so an unverified CVE gets the actionable refusal message.
+    valid_cves = verified_cves(include_unverified)
     parser = argparse.ArgumentParser(prog="mockforge cve", description=__doc__)
     parser.add_argument("--engine", choices=("docker", "podman"), default="docker")
     commands = parser.add_subparsers(dest="action", required=True)
     commands.add_parser("doctor", help="Check local prerequisites without downloading")
-    commands.add_parser("list", help="Show reviewed pack and pinned versions")
+    commands.add_parser("list", help="Show verified pack and pinned versions")
     prepare_parser = commands.add_parser(
         "prepare", help="Download and cache the reviewed images"
     )
-    prepare_parser.add_argument("cve", choices=tuple(PACKS))
+    prepare_parser.add_argument("cve")
     runner = commands.add_parser(
         "run",
         help="Auto-prepare, reproduce directly, optionally compare through your LB, then stop",
     )
-    runner.add_argument("cve", choices=tuple(PACKS))
+    runner.add_argument("cve")
     runner.add_argument(
         "--target",
         help="Your authorized LB HTTP(S) origin, configured to forward to origin-port",
@@ -257,11 +286,23 @@ def main(argv=None):
     )
     down.add_argument("--output-dir", required=True)
     args = parser.parse_args(argv)
+    args.include_unverified = include_unverified
     try:
+        if args.action in ("prepare", "run"):
+            if args.cve not in PACKS:
+                parser.error(
+                    f"argument cve: invalid choice: {args.cve!r} (choose from "
+                    + ", ".join(repr(cve) for cve in verified_cves())
+                    + ")"
+                )
+            if args.cve not in valid_cves:
+                raise ValueError(f"{args.cve} {UNVERIFIED_MESSAGE}")
+            require_verified(args.cve, args.include_unverified)
         if args.action == "doctor":
             print(json.dumps(doctor(args.engine), indent=2))
         elif args.action == "list":
-            print(json.dumps({cve: PACKS[cve]["catalog"] for cve in PACKS}, indent=2))
+            cves = verified_cves(include_unverified)
+            print(json.dumps({cve: PACKS[cve]["catalog"] for cve in cves}, indent=2))
         elif args.action == "prepare":
             prepare(args.engine, PACKS[args.cve])
             print(

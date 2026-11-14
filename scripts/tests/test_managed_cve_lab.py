@@ -213,6 +213,51 @@ class LifecycleTests(unittest.TestCase):
 
 
 class InputTests(unittest.TestCase):
+    def test_unverified_packs_are_hidden_and_refused_unless_opted_in(self):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(lab.main(["list"]), 0)
+        packs = json.loads(output.getvalue())
+        self.assertIn("CVE-2025-29927", packs)
+        for cve in ("CVE-2026-109618", "CVE-2026-109619"):
+            self.assertNotIn(cve, packs)
+
+        for action in ("run", "prepare"):
+            err = io.StringIO()
+            with self.subTest(action=action), patch.object(lab, "prepare") as prepare, patch.object(lab, "run") as run, contextlib.redirect_stderr(err):
+                args = [action, "CVE-2026-109618"]
+                if action == "run":
+                    args += ["--output-dir", "unused-output"]
+                self.assertEqual(lab.main(args), 1)
+                self.assertIn(
+                    "CVE-2026-109618 is an unverified lab pack (its trigger has not reproduced on a lab host); pass --include-unverified to run it for development",
+                    err.getvalue(),
+                )
+                prepare.assert_not_called()
+                run.assert_not_called()
+
+    def test_include_unverified_lists_and_runs_development_pack(self):
+        for flag_order in (
+            ["--include-unverified", "list"],
+            ["list", "--include-unverified"],
+        ):
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                self.assertEqual(lab.main(flag_order), 0)
+            packs = json.loads(output.getvalue())
+            self.assertIn("CVE-2026-109618", packs)
+            self.assertIn("CVE-2026-109619", packs)
+
+        with patch.object(lab, "run", return_value=0) as run:
+            self.assertEqual(
+                lab.main([
+                    "run", "CVE-2026-109618", "--include-unverified",
+                    "--output-dir", "unused-output",
+                ]),
+                0,
+            )
+        run.assert_called_once()
+
     def test_unsupported_cve_is_rejected_before_download(self):
         for action in ("prepare", "run"):
             with self.subTest(action=action), patch.object(
@@ -852,7 +897,7 @@ class RunPlanTests(unittest.TestCase):
         with contextlib.redirect_stdout(stdout):
             self.assertEqual(lab.main(["list"]), 0)
         packs = json.loads(stdout.getvalue())
-        self.assertEqual(set(packs), set(catalog.PACKS))
+        self.assertEqual(set(packs), {"CVE-2025-29927", "CVE-2024-4577"})
         for cve, entry in packs.items():
             with self.subTest(cve=cve):
                 self.assertEqual(entry["origin_port"], 18082)
@@ -1003,7 +1048,10 @@ class Php2Shell2026PackTests(unittest.TestCase):
         ):
             output = Path(directory) / "out"
             self.assertEqual(
-                lab.main(["run", "CVE-2026-109618", "--output-dir", str(output)]), 1
+                lab.main([
+                    "run", "CVE-2026-109618", "--include-unverified",
+                    "--output-dir", str(output),
+                ]), 1
             )
             report = json.loads((output / "report.json").read_text())
         self.assertEqual(report["verdict"], "inconclusive")
