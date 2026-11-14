@@ -1,3 +1,8 @@
+// Not run by playwright-deployed.config.ts (issue #1051): /metrics is hidden on
+// the cloud app because Pillar Analytics supersedes it — cloudHiddenNavItemIds in
+// src/components/layout/navigation.ts points metrics at /pillar-analytics, and
+// this spec asserts the local-server metrics UI. Kept in-tree; see the
+// testIgnore note in playwright-deployed.config.ts.
 import { test, expect } from '@playwright/test';
 
 /**

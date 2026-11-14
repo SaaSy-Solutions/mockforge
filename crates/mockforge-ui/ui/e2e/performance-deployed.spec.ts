@@ -1,3 +1,8 @@
+// Not run by playwright-deployed.config.ts (issue #1051): /performance is hidden
+// on the cloud app because cloud test runs supersede it — cloudHiddenNavItemIds
+// in src/components/layout/navigation.ts points performance at /cloud-test-runs,
+// and this spec asserts the local-server performance UI. Kept in-tree; see the
+// testIgnore note in playwright-deployed.config.ts.
 import { test, expect } from '@playwright/test';
 
 /**

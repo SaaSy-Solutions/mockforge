@@ -1,3 +1,9 @@
+// Not run by playwright-deployed.config.ts (issue #1051): /recorder is hidden on
+// the cloud app because the cloud recorder supersedes it — cloudHiddenNavItemIds in
+// src/components/layout/navigation.ts points recorder at /cloud-recorder, and this
+// spec asserts the local-server recorder UI (/api/recorder/*, /api/chaos/recording/*),
+// which the registry does not serve. Kept in-tree; see the testIgnore note in
+// playwright-deployed.config.ts.
 import { test, expect } from '@playwright/test';
 
 /**
