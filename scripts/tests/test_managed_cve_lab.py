@@ -37,6 +37,59 @@ def completed_output(stdout="", stderr="", returncode=0):
 
 
 class LifecycleTests(unittest.TestCase):
+    def test_pack_capabilities_are_narrow_and_ordered_after_cap_drop(self):
+        for cve in ("CVE-2026-109618", "CVE-2026-109619"):
+            with self.subTest(cve=cve), tempfile.TemporaryDirectory() as directory:
+                with patch.object(
+                    engine,
+                    "command",
+                    side_effect=[
+                        completed(),
+                        completed("127.0.0.1:12345\n"),
+                        completed("application log"),
+                    ],
+                ) as command, patch.object(engine, "request", return_value=(200, [], b"ok")), patch.object(
+                    engine, "owned_remove"
+                ):
+                    with engine.lab(
+                        "docker", "our-run", Path(directory), catalog.PACKS[cve]
+                    ):
+                        pass
+                run_args = command.call_args_list[0].args[0]
+                drop = run_args.index("--cap-drop=ALL")
+                add_uid = run_args.index("--cap-add=SETUID")
+                add_gid = run_args.index("--cap-add=SETGID")
+                self.assertLess(drop, add_uid)
+                self.assertLess(drop, add_gid)
+                self.assertLess(add_uid, add_gid)
+                self.assertIn("--security-opt=no-new-privileges", run_args)
+
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(
+                engine, "command", side_effect=[completed(), completed("127.0.0.1:12345\n"), completed("log")]
+            ) as command, patch.object(engine, "request", return_value=(200, [], b"ok")), patch.object(
+                engine, "owned_remove"
+            ):
+                with engine.lab(
+                    "docker", "our-run", Path(directory), catalog.PACKS["CVE-2025-29927"]
+                ):
+                    pass
+            run_args = command.call_args_list[0].args[0]
+            self.assertIn("--cap-drop=ALL", run_args)
+            self.assertFalse(any(arg.startswith("--cap-add=") for arg in run_args))
+
+    def test_lab_rejects_unapproved_app_capability(self):
+        pack = catalog.PACKS["CVE-2026-109618"]
+        pack = {**pack, "app": {**pack["app"], "cap_add": ["SYS_ADMIN"]}}
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(engine, "command") as command, patch.object(
+                engine, "owned_remove"
+            ):
+                with self.assertRaisesRegex(RuntimeError, "allowlist: SETUID, SETGID, CHOWN"):
+                    with engine.lab("docker", "our-run", Path(directory), pack):
+                        pass
+            command.assert_not_called()
+
     def test_cleanup_refuses_unowned_container(self):
         for labels in ({}, {catalog.LABEL: "another-run"}):
             with self.subTest(labels=labels):

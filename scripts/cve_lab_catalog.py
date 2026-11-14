@@ -79,6 +79,8 @@ PHP2SHELL_2026_FILES = {
 
 LABEL = "io.mockforge.cve.run"
 
+# Pack shape: app may include ``cap_add`` for narrowly reviewed capabilities
+# from the engine allowlist; every pack still starts with --cap-drop=ALL.
 PACKS = {
     "CVE-2025-29927": {
         "catalog": {
@@ -237,6 +239,7 @@ PACKS = {
         },
         "app": {
             "port": "8080/tcp",
+            "cap_add": ["SETUID", "SETGID"],
             "env": {},
             "readiness": {"path": "/health.php", "status": 200},
             "workdir": "/var/www/html",
@@ -312,6 +315,7 @@ PACKS = {
         },
         "app": {
             "port": "8080/tcp",
+            "cap_add": ["SETUID", "SETGID"],
             "env": {},
             "readiness": {"path": "/health.php", "status": 200},
             "workdir": "/var/www/html",

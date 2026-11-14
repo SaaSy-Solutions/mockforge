@@ -15,6 +15,9 @@ from cve_lab_transport import request
 import re
 
 
+ALLOWED_APP_CAPABILITIES = frozenset(("SETUID", "SETGID", "CHOWN"))
+
+
 def command(args, timeout=120, check=True):
     result = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
     if check and result.returncode:
@@ -139,6 +142,13 @@ def container_log(engine, run_id, tail=400):
 @contextmanager
 def lab(engine, run_id, output, pack):
     app = pack["app"]
+    cap_add = app.get("cap_add", ())
+    if not isinstance(cap_add, (list, tuple)) or any(
+        capability not in ALLOWED_APP_CAPABILITIES for capability in cap_add
+    ):
+        raise RuntimeError(
+            "app.cap_add entries must be from the allowlist: SETUID, SETGID, CHOWN"
+        )
     name = "mockforge-cve-" + run_id
     try:
         run_args = [
@@ -156,6 +166,7 @@ def lab(engine, run_id, output, pack):
             "-p",
             f"127.0.0.1::{app['port']}",
         ]
+        run_args.extend(f"--cap-add={capability}" for capability in cap_add)
         for key, value in app["env"].items():
             run_args.extend(["-e", f"{key}={value}"])
         for mount in app.get("mounts", ()):
