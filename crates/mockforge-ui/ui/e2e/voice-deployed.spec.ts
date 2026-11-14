@@ -80,11 +80,11 @@ test.describe('Voice + LLM Interface — Deployed Site', () => {
 
     test('should display breadcrumb navigation', async ({ page }) => {
       const banner = page.getByRole('banner');
-      const hasHome = await banner.getByText('Home')
+      const hasSection = await banner.getByText('AI', { exact: true })
         .isVisible({ timeout: 3000 }).catch(() => false);
       const hasVoice = await banner.getByText('Voice')
         .isVisible({ timeout: 3000 }).catch(() => false);
-      expect(hasHome || hasVoice).toBeTruthy();
+      expect(hasSection && hasVoice).toBeTruthy();
     });
 
     test('should display the three tabs', async ({ page }) => {
