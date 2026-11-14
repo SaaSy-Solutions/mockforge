@@ -233,16 +233,16 @@ def run(args):
 
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
-    # argparse validates positional choices after parsing, but the option may
-    # appear before or after the subcommand. Remove it before selecting the
-    # accepted CVEs, then restore the parsed value on the namespace.
-    include_unverified = "--include-unverified" in argv
-    argv = [arg for arg in argv if arg != "--include-unverified"]
     # Let argparse handle options and command shape, then validate CVE names
     # ourselves so an unverified CVE gets the actionable refusal message.
-    valid_cves = verified_cves(include_unverified)
     parser = argparse.ArgumentParser(prog="mockforge cve", description=__doc__)
     parser.add_argument("--engine", choices=("docker", "podman"), default="docker")
+    parser.add_argument(
+        "--include-unverified",
+        action="store_true",
+        help="Include unverified CVE packs for development only",
+    )
+    valid_cves = verified_cves(False)
     commands = parser.add_subparsers(dest="action", required=True)
     commands.add_parser("doctor", help="Check local prerequisites without downloading")
     commands.add_parser("list", help="Show verified pack and pinned versions")
@@ -286,7 +286,7 @@ def main(argv=None):
     )
     down.add_argument("--output-dir", required=True)
     args = parser.parse_args(argv)
-    args.include_unverified = include_unverified
+    valid_cves = verified_cves(args.include_unverified)
     try:
         if args.action in ("prepare", "run"):
             if args.cve not in PACKS:
@@ -301,7 +301,7 @@ def main(argv=None):
         if args.action == "doctor":
             print(json.dumps(doctor(args.engine), indent=2))
         elif args.action == "list":
-            cves = verified_cves(include_unverified)
+            cves = verified_cves(args.include_unverified)
             print(json.dumps({cve: PACKS[cve]["catalog"] for cve in cves}, indent=2))
         elif args.action == "prepare":
             prepare(args.engine, PACKS[args.cve])

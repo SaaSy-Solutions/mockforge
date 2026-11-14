@@ -239,7 +239,6 @@ class InputTests(unittest.TestCase):
     def test_include_unverified_lists_and_runs_development_pack(self):
         for flag_order in (
             ["--include-unverified", "list"],
-            ["list", "--include-unverified"],
         ):
             output = io.StringIO()
             with contextlib.redirect_stdout(output):
@@ -248,15 +247,33 @@ class InputTests(unittest.TestCase):
             self.assertIn("CVE-2026-109618", packs)
             self.assertIn("CVE-2026-109619", packs)
 
+        with patch.object(lab, "prepare") as prepare:
+            self.assertEqual(
+                lab.main(["--include-unverified", "prepare", "CVE-2026-109618"]),
+                0,
+            )
+        prepare.assert_called_once()
+
         with patch.object(lab, "run", return_value=0) as run:
             self.assertEqual(
                 lab.main([
-                    "run", "CVE-2026-109618", "--include-unverified",
+                    "--include-unverified", "run", "CVE-2026-109618",
                     "--output-dir", "unused-output",
                 ]),
                 0,
             )
         run.assert_called_once()
+
+    def test_include_unverified_is_helped_and_global_only(self):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output), self.assertRaises(SystemExit) as error:
+            lab.main(["--help"])
+        self.assertEqual(error.exception.code, 0)
+        self.assertIn("--include-unverified", output.getvalue())
+
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
+            lab.main(["down", "--include-unverified", "--output-dir", "unused-output"])
+        self.assertEqual(error.exception.code, 2)
 
     def test_unsupported_cve_is_rejected_before_download(self):
         for action in ("prepare", "run"):
@@ -1040,20 +1057,21 @@ class Php2Shell2026PackTests(unittest.TestCase):
             command.assert_not_called()
 
     def test_run_of_the_packs_stops_at_the_platform_gate_honestly(self):
-        # On a non-Linux host doctor() refuses before anything downloads; the
-        # report records the inconclusive verdict with the doctor reason.
+        # Simulate the platform gate directly so this remains engine-free on
+        # hosts where Docker is available.
         stdout = io.StringIO()
         with tempfile.TemporaryDirectory() as directory, contextlib.redirect_stdout(
             stdout
-        ):
+        ), patch.object(engine, "doctor", side_effect=RuntimeError("unsupported platform")), patch.object(engine, "command") as command:
             output = Path(directory) / "out"
             self.assertEqual(
                 lab.main([
-                    "run", "CVE-2026-109618", "--include-unverified",
+                    "--include-unverified", "run", "CVE-2026-109618",
                     "--output-dir", str(output),
                 ]), 1
             )
             report = json.loads((output / "report.json").read_text())
+        command.assert_not_called()
         self.assertEqual(report["verdict"], "inconclusive")
 
 
