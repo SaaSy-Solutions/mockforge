@@ -6,7 +6,7 @@ Quick answers to common questions about MockForge.
 
 ### What is MockForge?
 
-MockForge is an open source mock API generator in Rust. It allows you to create realistic mock servers for HTTP/REST, gRPC, WebSocket, and GraphQL without writing code. Perfect for frontend development, integration testing, and parallel team development.
+MockForge is an open source mock API generator in Rust. It allows you to create realistic mock servers for 10 protocols, including HTTP/REST, gRPC, WebSocket, and GraphQL, without writing code. Perfect for frontend development, integration testing, and parallel team development.
 
 ### Is MockForge free?
 
