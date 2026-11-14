@@ -6,19 +6,27 @@ Quick answers to common questions about MockForge.
 
 ### What is MockForge?
 
-MockForge is a comprehensive multi-protocol mocking framework for APIs. It allows you to create realistic mock servers for HTTP/REST, gRPC, WebSocket, and GraphQL without writing code. Perfect for frontend development, integration testing, and parallel team development.
+MockForge is an open source mock API generator in Rust. It allows you to create realistic mock servers for 10 protocols, including HTTP/REST, gRPC, WebSocket, and GraphQL, without writing code. Perfect for frontend development, integration testing, and parallel team development.
 
 ### Is MockForge free?
 
-Yes, MockForge is completely free and open-source under MIT/Apache-2.0 licenses. There are no premium tiers, paid features, or usage limits.
+The core of MockForge is completely free and open-source under MIT/Apache-2.0 licenses — all 10 protocols, the Admin UI, plugins, and SDKs are included. MockForge Cloud (hosted mocks and team collaboration) offers Free, Pro ($29/month), and Team ($99/month) plans with monthly request allowances (10,000 / 250,000 / 1,000,000 requests). See the [pricing page](https://app.mockforge.dev/pricing) for details.
 
 ### What protocols does MockForge support?
 
-MockForge supports:
+MockForge supports 10 protocols:
 - **HTTP/REST**: OpenAPI/Swagger-based mocking with full validation
 - **gRPC**: Dynamic service discovery from `.proto` files with HTTP Bridge
 - **WebSocket**: Replay mode, interactive mode, and AI event generation
 - **GraphQL**: Schema-based mocking with automatic resolver generation
+- **Kafka**: Mock broker for event-streaming scenarios
+- **MQTT**: Broker mocking for pub/sub (3.1.1 & 5.0)
+- **AMQP**: Message queuing (RabbitMQ-compatible, 0.9.1)
+- **SMTP**: Email server mocking with mailbox inspection
+- **FTP**: File transfer mocking with a virtual file system
+- **TCP**: Raw TCP mocking
+
+SOAP/XML APIs are also supported over the HTTP adapter, using XPath-based request matching and XML response templates.
 
 ### How does MockForge compare to WireMock, Mockoon, or MockServer?
 
