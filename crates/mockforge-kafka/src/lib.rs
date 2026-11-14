@@ -135,6 +135,7 @@ pub mod fixture_file;
 pub mod fixtures;
 pub mod group_codec;
 pub mod group_coordinator;
+pub mod init_producer_id;
 pub mod listoffsets_codec;
 pub mod metrics;
 pub mod partitions;
