@@ -74,7 +74,9 @@ jobs:
       # target persists on the runner disk.
       - name: Use runner-persistent cargo target on Hetzner
         if: runner.environment == 'self-hosted'
-        run: bash scripts/ci/runner-cargo-target.sh bench >> "$GITHUB_ENV"
+        env:
+          MOCKFORGE_RUNNER_TARGET_MAX_GB: ${{ vars.MOCKFORGE_RUNNER_TARGET_MAX_GB || '40' }}
+        run: bash scripts/ci/guard-runner-cargo-targets.sh && bash scripts/ci/runner-cargo-target.sh bench >> "$GITHUB_ENV"
 
       # A warm target keeps Criterion output from earlier runs. Start empty so
       # the baseline, dashboard and artifact reflect this run only.

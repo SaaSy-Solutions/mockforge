@@ -86,10 +86,6 @@ def run(args):
         )
     try:
         prepare(args.engine, pack)
-        if pack.get("application_script"):
-            # The reviewed lab application ships inside the pack and is
-            # mounted read-only into the pinned image by lab().
-            (output / "server.js").write_text(pack["application_script"])
         with lab(args.engine, run_id, output, pack) as backend:
             with receiver(
                 args.origin_port,
@@ -132,11 +128,7 @@ def run(args):
                     target_start = len(records)
                     before = control(pack, args.target, run_id, "before", context=tls_context)
                     tested = TARGET_EXPLOITS[pack.get("target_exploit", "nuclei")](
-                        args.engine,
-                        args.target.rstrip("/"),
-                        output,
-                        run_id,
-                        pack,
+                        args.engine, args.target.rstrip("/"), output, run_id, pack,
                         insecure=args.skip_tls_verify,
                     )
                     after = control(pack, args.target, run_id, "after", context=tls_context)
@@ -151,13 +143,9 @@ def run(args):
                         args.block_status,
                     )
                     if (
-                        before.get("body_sha256") != baseline_control["body_sha256"]
-                        or after.get("body_sha256") != baseline_control["body_sha256"]
-                    ) and not (
-                        verdict == "fail" and pack["classifier"] == "decoder-crash"
-                    ):
-                        # A crash pack's dead after-control corroborates a
-                        # confirmed origin reach; do not mask that fail.
+                        before.get("body_sha256") != baseline_control.get("body_sha256")
+                        or after.get("body_sha256") != baseline_control.get("body_sha256")
+                    ) and not (verdict == "fail" and pack["classifier"] == "decoder-crash"):
                         verdict, reason = (
                             "inconclusive",
                             "LB controls did not match this application's benign control responses",

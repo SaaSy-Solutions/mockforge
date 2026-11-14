@@ -4,6 +4,7 @@ name = "mockforge-workspace"
 description = "Workspace management, Git sync, encryption, and multi-tenant routing for MockForge"
 version.workspace = true
 edition.workspace = true
+authors.workspace = true
 license.workspace = true
 repository.workspace = true
 readme = "../../README.md"

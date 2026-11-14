@@ -69,13 +69,6 @@ MAX_FORWARDED_BODY = 2 * 1024 * 1024
 
 @contextmanager
 def receiver(port, address, backend, signature_header=None, max_body=None):
-    """Forwarding recorder: HTTP/1.1 and, on the same port, cleartext h2c.
-
-    HTTP/2 connections are detected by the client preface and handled by
-    cve_lab_http2 with the same observation and forwarding semantics; the
-    connection preface never reaches the HTTP/1.1 parser. ``max_body`` lets
-    a pack widen the 2 MiB forwarding bound (pinned in the pack catalog).
-    """
     limit = MAX_FORWARDED_BODY if max_body is None else max_body
     records = []
     lock = threading.Lock()
@@ -86,19 +79,12 @@ def receiver(port, address, backend, signature_header=None, max_body=None):
 
     def h2_forward(method, path, header_items, body):
         headers = {
-            name: value
-            for name, value in header_items
-            if name.lower()
-            not in ("host", "connection", "accept-encoding", "transfer-encoding", "content-length", "keep-alive")
+            name: value for name, value in header_items
+            if name.lower() not in ("host", "connection", "accept-encoding", "transfer-encoding", "content-length", "keep-alive")
         }
-        status, response_headers, payload = request(
-            backend, path, headers, method=method, body=body or None
-        )
-        return status, [
-            (name, value)
-            for name, value in response_headers
-            if name.lower() not in ("transfer-encoding", "connection", "content-length")
-        ], payload
+        status, response_headers, payload = request(backend, path, headers, method=method, body=body or None)
+        return status, [(name, value) for name, value in response_headers
+                        if name.lower() not in ("transfer-encoding", "connection", "content-length")], payload
 
     class Handler(BaseHTTPRequestHandler):
         def _forward(self):
@@ -169,19 +155,14 @@ def receiver(port, address, backend, signature_header=None, max_body=None):
             sock.settimeout(5)
             return sock, addr
 
-        def process_request(self, request, client_address):
-            # The h2c preface check happens here, once per accepted
-            # connection: get_request must return promptly so the
-            # serve_forever loop keeps observing the shutdown flag.
-            if http2.looks_like_http2(request):
-                threading.Thread(
-                    target=http2.serve_connection,
-                    args=(request, h2_forward, h2_record, limit, signature_header),
-                    daemon=True,
-                ).start()
+        def process_request(self, request_socket, client_address):
+            if http2.looks_like_http2(request_socket):
+                threading.Thread(target=http2.serve_connection,
+                    args=(request_socket, h2_forward, h2_record, limit, signature_header),
+                    daemon=True).start()
                 return
-            request.settimeout(5)
-            super().process_request(request, client_address)
+            request_socket.settimeout(5)
+            super().process_request(request_socket, client_address)
 
     server = Server((address, port), Handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -198,40 +179,32 @@ def control(pack, base, run_id, phase, context=None):
     """Send a pack's benign and ordinary control requests to one origin.
 
     The benign control exercises the pack's vulnerable endpoint without the
-    injection payload; the ordinary request exercises an everyday route.
-    Their expected statuses live in ``pack["controls"]`` so the classifier
-    can tell "application answered normally" from "a blanket block answered
-    instead". A failed control never raises: it returns what is known - the
-    correlation tokens plus an ``error`` - because a control that reached a
-    dying origin is evidence a crash-pack classifier must correlate, not an
-    abort.
+    injection payload; the ordinary request exercises an everyday route. Their
+    expected statuses live in ``pack["controls"]`` so the classifier can tell
+    "application answered normally" from "a blanket block answered instead".
     """
     controls = pack["controls"]
     token = f"{run_id}-{phase}-{uuid.uuid4().hex}"
+    status, _headers, body = request(
+        base,
+        controls["benign_path"].replace("{token}", token),
+        {"X-Mockforge-Cve": token},
+        context=context,
+    )
     root_token = token + "-root"
-    outcome = {"token": token, "root_token": root_token}
-    try:
-        status, _headers, body = request(
-            base,
-            controls["benign_path"].replace("{token}", token),
-            {"X-Mockforge-Cve": token},
-            context=context,
-        )
-        outcome["status"] = status
-        outcome["body_sha256"] = hashlib.sha256(body).hexdigest()
-    except (OSError, ValueError, http.client.HTTPException) as exc:
-        outcome["error"] = str(exc)
-        return outcome
-    try:
-        outcome["root_status"] = request(
-            base,
-            controls["ordinary_path"].replace("{token}", root_token),
-            {"X-Mockforge-Cve": root_token},
-            context=context,
-        )[0]
-    except (OSError, ValueError, http.client.HTTPException) as exc:
-        outcome["error"] = str(exc)
-    return outcome
+    root_status = request(
+        base,
+        controls["ordinary_path"].replace("{token}", root_token),
+        {"X-Mockforge-Cve": root_token},
+        context=context,
+    )[0]
+    return {
+        "token": token,
+        "status": status,
+        "body_sha256": hashlib.sha256(body).hexdigest(),
+        "root_token": root_token,
+        "root_status": root_status,
+    }
 
 
 def observations(records, token):

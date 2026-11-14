@@ -6,8 +6,8 @@ import importlib.util
 import io
 import json
 from pathlib import Path
-import shutil
 import socket
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -33,6 +33,10 @@ SPEC.loader.exec_module(lab)
 
 def completed(stdout="", returncode=0):
     return subprocess.CompletedProcess([], returncode, stdout, "")
+
+
+def completed_output(stdout="", stderr="", returncode=0):
+    return subprocess.CompletedProcess([], returncode, stdout, stderr)
 
 
 class LifecycleTests(unittest.TestCase):
@@ -284,8 +288,6 @@ class PackRegistryTests(unittest.TestCase):
         self.assertEqual(pack["app"]["readiness"], {"path": "/login", "status": 200})
 
     def test_template_renders_the_signature_request(self):
-        import cve_lab_nuclei as nuclei
-
         text = nuclei.template(catalog.PACKS["CVE-2025-29927"], "run1-baseline")
         self.assertIn("id: mockforge-nextjs-29927-observation", text)
         self.assertIn("method: GET", text)
@@ -295,8 +297,6 @@ class PackRegistryTests(unittest.TestCase):
 
     def test_template_renders_post_bodies_for_body_packs(self):
         import copy
-
-        import cve_lab_nuclei as nuclei
 
         synthetic = copy.deepcopy(catalog.PACKS["CVE-2025-29927"])
         synthetic["probe"].update(
@@ -337,6 +337,162 @@ class PackRegistryTests(unittest.TestCase):
         self.assertEqual(pulled, [["docker", "pull", images[0]], ["docker", "pull", images[1]]])
 
 
+class Cve20244577PackTests(unittest.TestCase):
+    """The CVE-2024-4577 pack is complete except for its pending reviewed image."""
+
+    def setUp(self):
+        self.pack = catalog.PACKS["CVE-2024-4577"]
+
+    def test_pack_carries_runner_config(self):
+        for key in ("catalog", "probe", "app", "controls"):
+            self.assertIn(key, self.pack)
+        self.assertEqual(self.pack["app"]["port"], "8080/tcp")
+        self.assertEqual(
+            self.pack["app"]["readiness"],
+            {"path": "/php-cgi/php-cgi.exe", "status": 404},
+        )
+        self.assertEqual(
+            self.pack["controls"]["benign_status"], self.pack["app"]["readiness"]["status"]
+        )
+
+    def test_pack_declares_its_image_unreviewed(self):
+        self.assertEqual(
+            self.pack["catalog"]["image_status"], "pending-lab-host-review"
+        )
+        self.assertNotIn("@sha256:", self.pack["catalog"]["application_image"])
+
+    def test_probe_keeps_the_exploit_query_whole(self):
+        probe = self.pack["probe"]
+        self.assertEqual(probe["method"], "POST")
+        # php-cgi parses the query string argv-style; a correlated query
+        # parameter would fold into the injected switches, so the token only
+        # rides the header.
+        self.assertNotIn("__mockforge_cve", probe["path"])
+        self.assertIn("%ADd+allow_url_include%3D1", probe["path"])
+        self.assertIn("auto_prepend_file%3Dphp%3A%2F%2Finput", probe["path"])
+        self.assertIsNone(probe["signature_header"])
+        self.assertIn(probe["marker"], probe["body"])
+
+    def test_prepare_refuses_the_unreviewed_image_before_any_engine_call(self):
+        with patch.object(engine, "command") as command:
+            with self.assertRaisesRegex(RuntimeError, "not pinned by digest"):
+                engine.prepare("docker", self.pack)
+        command.assert_not_called()
+
+    def test_run_of_the_pending_pack_refuses_and_records_why(self):
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+            engine, "command"
+        ) as command, contextlib.redirect_stdout(
+            stdout
+        ), contextlib.redirect_stderr(stderr):
+            output = Path(directory) / "out"
+            self.assertEqual(
+                lab.main(["run", "CVE-2024-4577", "--output-dir", str(output)]), 1
+            )
+            command.assert_not_called()
+            report = json.loads((output / "report.json").read_text())
+        self.assertIn("Lab image pending review", stdout.getvalue())
+        self.assertEqual(report["verdict"], "inconclusive")
+        self.assertIn("not pinned by digest", report["reason"])
+
+    def test_template_renders_the_cgi_injection_observation(self):
+        text = nuclei.template(self.pack, "run1-baseline")
+        self.assertIn("id: mockforge-phpcgi-4577-observation", text)
+        self.assertIn("method: POST", text)
+        self.assertIn('X-Mockforge-Cve: "run1-baseline"', text)
+        self.assertIn("%ADd+allow_url_include%3D1", text)
+        self.assertIn("<?php echo 'MOCKFORGE-CVE-2024-4577'; ?>", text)
+        self.assertNotIn("__mockforge_cve", text)
+
+
+class Cve20244577VerdictTests(unittest.TestCase):
+    """The CGI classifier mirrors the blocking semantics for the PHP pack."""
+
+    def setUp(self):
+        self.pack = catalog.PACKS["CVE-2024-4577"]
+        self.baseline = {"status": 200, "marker": True}
+        self.target = {"token": "attack", "status": 403, "marker": False}
+        self.before = {
+            "token": "before",
+            "status": 404,
+            "root_token": "before-root",
+            "root_status": 200,
+        }
+        self.after = {
+            "token": "after",
+            "status": 404,
+            "root_token": "after-root",
+            "root_status": 200,
+        }
+        self.records = [
+            {"tokens": [control[key]], "status": status}
+            for control in (self.before, self.after)
+            for key, status in (("token", 404), ("root_token", 200))
+        ]
+
+    def outcome(self):
+        return evidence.CLASSIFIERS["cgi-argument-injection"](
+            self.pack, self.baseline, self.target, self.before, self.after, self.records, 403
+        )
+
+    def verdict(self):
+        return self.outcome()[0]
+
+    def test_correlated_controls_and_blocked_exploit_pass(self):
+        self.assertEqual(self.verdict(), "pass")
+
+    def test_baseline_must_execute_the_payload(self):
+        for baseline in (
+            {"status": 404, "marker": True},
+            {"status": 200, "marker": False},
+        ):
+            with self.subTest(baseline=baseline):
+                self.baseline = baseline
+                self.assertEqual(self.verdict(), "inconclusive")
+
+    def test_failed_benign_control_is_inconclusive(self):
+        self.after["status"] = 200
+        self.assertEqual(self.verdict(), "inconclusive")
+
+    def test_blanket_block_of_the_ordinary_path_is_inconclusive(self):
+        self.before["root_status"] = 403
+        self.after["root_status"] = 403
+        self.assertEqual(self.verdict(), "inconclusive")
+
+    def test_exploit_reaching_origin_fails_even_if_response_is_block_status(self):
+        self.records.append({"tokens": ["attack"], "status": 200})
+        self.assertEqual(self.verdict(), "fail")
+
+    def test_unexpected_rejection_is_inconclusive(self):
+        self.target["status"] = 502
+        self.assertEqual(self.verdict(), "inconclusive")
+
+    def test_uncorrelated_origin_request_cannot_pass(self):
+        self.records.append({"tokens": [None, None], "status": 200})
+        self.assertEqual(self.verdict(), "inconclusive")
+
+    def test_gate_accepts_a_reproduced_direct_run(self):
+        baseline_control = {"status": 404, "root_status": 200}
+        baseline = {"status": 200, "marker": True}
+        evidence.BASELINE_GATES["cgi-argument-injection"](
+            self.pack, baseline_control, baseline
+        )
+
+    def test_gate_rejects_mismatched_direct_runs(self):
+        for baseline_control, baseline in (
+            ({"status": 200, "root_status": 200}, {"status": 200, "marker": True}),
+            ({"status": 404, "root_status": 404}, {"status": 200, "marker": True}),
+            ({"status": 404, "root_status": 200}, {"status": 200, "marker": False}),
+        ):
+            with self.subTest(baseline_control=baseline_control):
+                with self.assertRaisesRegex(RuntimeError, "PHP code execution"):
+                    evidence.BASELINE_GATES["cgi-argument-injection"](
+                        self.pack, baseline_control, baseline
+                    )
+
+
 class TransportForwardingTests(unittest.TestCase):
     """The recorder forwards GET and POST with bodies on owned loopback ports."""
 
@@ -371,13 +527,16 @@ class TransportForwardingTests(unittest.TestCase):
         self.backend.server_close()
 
     @contextlib.contextmanager
-    def recorder(self):
+    def recorder(self, signature_header=None):
         with socket.socket() as reservation:
             reservation.bind(("127.0.0.1", 0))
             port = reservation.getsockname()[1]
         records = []
         with transport.receiver(
-            port, "127.0.0.1", f"http://127.0.0.1:{self.backend_port}"
+            port,
+            "127.0.0.1",
+            f"http://127.0.0.1:{self.backend_port}",
+            signature_header=signature_header,
         ) as records:
             yield f"http://127.0.0.1:{port}", records
 
@@ -409,6 +568,48 @@ class TransportForwardingTests(unittest.TestCase):
         self.assertEqual(self.seen[0][2], b"<?php echo 'tok2';?>")
         self.assertEqual(records[0]["method"], "POST")
         self.assertIn("tok2", records[0]["tokens"])
+
+    def test_signature_header_is_recorded_only_when_configured(self):
+        with self.recorder(signature_header="x-middleware-subrequest") as (
+            base,
+            records,
+        ):
+            transport.request(
+                base,
+                "/?__mockforge_cve=tok3",
+                {"X-Mockforge-Cve": "tok3", "x-middleware-subrequest": "middleware:chain"},
+            )
+        self.assertEqual(records[0]["signature"], "middleware:chain")
+        with self.recorder() as (base, records):
+            transport.request(
+                base,
+                "/php-cgi/php-cgi.exe?%ADd+allow_url_include%3D1",
+                {"X-Mockforge-Cve": "tok4"},
+                method="POST",
+            )
+        self.assertIsNone(records[0]["signature"])
+        self.assertIn("tok4", records[0]["tokens"])
+
+    def test_control_requests_follow_the_pack_paths(self):
+        pack = {
+            "controls": {
+                "benign_path": "/benign?__mockforge_cve={token}",
+                "benign_status": 404,
+                "ordinary_path": "/ordinary?__mockforge_cve={token}",
+                "ordinary_status": 200,
+            }
+        }
+        with self.recorder() as (base, records):
+            outcome = transport.control(pack, base, "run1", "phase")
+        paths = [item[1] for item in self.seen]
+        self.assertEqual(len(paths), 2)
+        self.assertTrue(paths[0].startswith("/benign?__mockforge_cve=run1-phase-"))
+        ordinary_token = paths[1].split("__mockforge_cve=")[1]
+        self.assertTrue(ordinary_token.startswith("run1-phase-"))
+        self.assertTrue(ordinary_token.endswith("-root"))
+        self.assertEqual(outcome["root_token"], ordinary_token)
+        self.assertEqual(outcome["root_token"], outcome["token"] + "-root")
+        self.assertEqual(len(records), 2)
 
     def test_oversized_post_bodies_are_rejected(self):
         import http.client as http_client
@@ -581,8 +782,20 @@ class RunPlanTests(unittest.TestCase):
             with self.subTest(cve=cve):
                 self.assertEqual(entry["origin_port"], 18082)
                 self.assertIn("--listen-address", entry["listen_address_guidance"])
-        self.assertIn("@sha256:", packs["CVE-2025-29927"]["application_image"])
-        self.assertIn("@sha256:", packs["CVE-2026-111497"]["application_image"])
+        self.assertIn(
+            "@sha256:", packs["CVE-2025-29927"]["application_image"]
+        )
+        self.assertEqual(
+            packs["CVE-2024-4577"]["image_status"], "pending-lab-host-review"
+        )
+
+    def test_pending_pack_plan_states_the_image_is_under_review(self):
+        lines = lab.run_plan_lines(self.args(cve="CVE-2024-4577", target=None))
+        self.assertIn("Lab image pending review", "\n".join(lines))
+
+    def test_reviewed_pack_plan_does_not_mention_pending_review(self):
+        lines = lab.run_plan_lines(self.args(target=None))
+        self.assertNotIn("pending", "\n".join(lines))
 
 
 
@@ -976,6 +1189,7 @@ class RecorderProtocolTests(unittest.TestCase):
         self.assertIn("tokcurl", records[0]["tokens"])
 
 
+
 class TlsVerifyTests(unittest.TestCase):
     """--skip-tls-verify is an explicit opt-in; the default path verifies."""
 
@@ -1073,6 +1287,56 @@ class TlsVerifyTests(unittest.TestCase):
                     insecure=True,
                 )
                 self.assertIn("-insecure", command.call_args.args[0])
+
+    def test_probe_failure_writes_outputs_and_reports_stdout(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            pack = catalog.PACKS[catalog.CVE]
+            with patch.object(nuclei, "owned_remove"), patch.object(
+                nuclei,
+                "command",
+                return_value=completed_output(stdout="container failed", returncode=2),
+            ) as command:
+                with self.assertRaises(RuntimeError) as raised:
+                    nuclei.probe(
+                        "docker", "http://127.0.0.1:1", output, "baseline", "run1", pack
+                    )
+
+            message = str(raised.exception)
+            self.assertIn("baseline", message)
+            self.assertIn("code 2", message)
+            self.assertIn("container failed", message)
+            self.assertIn(str(output / "baseline.log"), message)
+            self.assertIn(str(output / "baseline.jsonl"), message)
+            self.assertTrue((output / "baseline.log").exists())
+            self.assertEqual((output / "baseline.log").read_text(), "")
+            self.assertEqual((output / "baseline.jsonl").read_text(), "container failed")
+            command.assert_called_once()
+            self.assertFalse(command.call_args.kwargs.get("check", True))
+
+    def test_probe_success_still_writes_findings_and_returns_observation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            pack = catalog.PACKS[catalog.CVE]
+            finding = json.dumps(
+                {
+                    "template-id": "mockforge-nextjs-29927-observation",
+                    "response": "HTTP/1.1 200 OK\r\n",
+                }
+            ) + "\n"
+            with patch.object(nuclei, "owned_remove"), patch.object(
+                nuclei,
+                "command",
+                return_value=completed_output(stdout=finding, stderr="debug output"),
+            ):
+                result = nuclei.probe(
+                    "docker", "http://127.0.0.1:1", output, "target", "run1", pack
+                )
+
+            self.assertEqual(result["status"], 200)
+            self.assertTrue((output / "target.jsonl").exists())
+            self.assertEqual((output / "target.jsonl").read_text(), finding)
+            self.assertEqual((output / "target.log").read_text(), "debug output")
 
 
 if __name__ == "__main__":

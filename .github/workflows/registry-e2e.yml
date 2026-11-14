@@ -190,7 +190,9 @@ jobs:
         # Replaces Swatinem/rust-cache: no target or registry tarballs in
         # GitHub cache storage. See scripts/ci/runner-cargo-target.sh.
         if: runner.environment == 'self-hosted'
-        run: bash scripts/ci/runner-cargo-target.sh registry-e2e >> "$GITHUB_ENV"
+        env:
+          MOCKFORGE_RUNNER_TARGET_MAX_GB: ${{ vars.MOCKFORGE_RUNNER_TARGET_MAX_GB || '40' }}
+        run: bash scripts/ci/guard-runner-cargo-targets.sh && bash scripts/ci/runner-cargo-target.sh registry-e2e >> "$GITHUB_ENV"
 
       - name: Build registry-server
         # Debug build (not --release): this is a behavioral E2E lane, not a perf
@@ -575,7 +577,9 @@ jobs:
         # Replaces Swatinem/rust-cache: no target or registry tarballs in
         # GitHub cache storage. See scripts/ci/runner-cargo-target.sh.
         if: runner.environment == 'self-hosted'
-        run: bash scripts/ci/runner-cargo-target.sh registry-rls >> "$GITHUB_ENV"
+        env:
+          MOCKFORGE_RUNNER_TARGET_MAX_GB: ${{ vars.MOCKFORGE_RUNNER_TARGET_MAX_GB || '40' }}
+        run: bash scripts/ci/guard-runner-cargo-targets.sh && bash scripts/ci/runner-cargo-target.sh registry-rls >> "$GITHUB_ENV"
 
       # Static half of the gate: every statement on a FORCE-RLS table must run
       # GUC-bound on the runtime pool or be a reviewed ELEVATED owner-pool path.
