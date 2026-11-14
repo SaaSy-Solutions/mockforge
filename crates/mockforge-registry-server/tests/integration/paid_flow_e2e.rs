@@ -44,6 +44,7 @@ use hmac::{Hmac, Mac};
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use sha2::Sha256;
+use std::sync::atomic::{AtomicI64, Ordering};
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -61,6 +62,15 @@ struct PaidFlowHelper {
     org_id: Option<String>,
     customer_id: String,
     subscription_id: String,
+    /// Strictly increasing source of event `created` seconds. Stripe orders
+    /// events emitted in the same second ambiguously, and the handler resolves
+    /// that ambiguity with a Stripe readback this harness cannot perform
+    /// (#1575), so every event must get its own second.
+    event_sequence: AtomicI64,
+    /// The subscription object's own `created` — fixed when the subscription
+    /// is created and identical on every event for `subscription_id`, as real
+    /// Stripe payloads behave.
+    subscription_created: i64,
 }
 
 impl PaidFlowHelper {
@@ -76,6 +86,10 @@ impl PaidFlowHelper {
             // server treats them as one subscription lifecycle (create → delete).
             customer_id: format!("cus_e2e_{}", ts),
             subscription_id: format!("sub_e2e_{}", ts),
+            // The first event is stamped at the harness start time; each
+            // subsequent event ticks one second later.
+            event_sequence: AtomicI64::new(ts),
+            subscription_created: ts,
         }
     }
 
@@ -99,8 +113,8 @@ impl PaidFlowHelper {
         format!("t={},v1={}", timestamp, hex::encode(sig_bytes))
     }
 
-    /// POST a signed event body to `/api/v1/billing/webhook` and assert 2xx.
-    async fn post_webhook(&self, body: &str) {
+    /// POST a signed event body to `/api/v1/billing/webhook`.
+    async fn post_webhook_raw(&self, body: &str) -> (StatusCode, String) {
         let ts = chrono::Utc::now().timestamp();
         let signature = self.sign(body, ts);
         let res = self
@@ -115,6 +129,12 @@ impl PaidFlowHelper {
 
         let status = res.status();
         let text = res.text().await.unwrap_or_default();
+        (status, text)
+    }
+
+    /// POST a signed event body and assert 2xx.
+    async fn post_webhook(&self, body: &str) {
+        let (status, text) = self.post_webhook_raw(body).await;
         assert!(
             status.is_success(),
             "webhook POST returned {}: {}\nbody was: {}",
@@ -124,6 +144,11 @@ impl PaidFlowHelper {
         );
     }
 
+    /// Next strictly increasing `created` second for a webhook event.
+    fn next_event_created(&self) -> i64 {
+        self.event_sequence.fetch_add(1, Ordering::Relaxed)
+    }
+
     /// Build a minimal `customer.subscription.created` event body. The
     /// fields here are the ones `handle_subscription_event` actually reads
     /// (price.id, customer, current_period_*, status, metadata.org_id) —
@@ -131,12 +156,16 @@ impl PaidFlowHelper {
     /// `Event` type, so any required-by-the-type fields also have to be
     /// present even if the handler ignores them.
     fn subscription_event(&self, event_type: &str, status: &str, price_id: &str) -> String {
-        let now = chrono::Utc::now().timestamp();
+        // The event's `created` ticks up strictly; the subscription object's
+        // own timeline stays fixed at the moment the subscription was
+        // created, like a real Stripe event sequence (#1575).
+        let created = self.next_event_created();
+        let subscription_created = self.subscription_created;
         json!({
             "id": format!("evt_e2e_{}", uuid::Uuid::new_v4()),
             "object": "event",
             "api_version": "2024-04-10",
-            "created": now,
+            "created": created,
             "type": event_type,
             "livemode": false,
             "pending_webhooks": 0,
@@ -153,17 +182,17 @@ impl PaidFlowHelper {
                     // event object" after the signature check passes.
                     "livemode": false,
                     "automatic_tax": { "enabled": false },
-                    "current_period_start": now,
-                    "current_period_end": now + 30 * 86400,
+                    "current_period_start": subscription_created,
+                    "current_period_end": subscription_created + 30 * 86400,
                     "cancel_at_period_end": event_type == "customer.subscription.deleted",
                     "canceled_at": if event_type == "customer.subscription.deleted" {
-                        Value::from(now)
+                        Value::from(created)
                     } else {
                         Value::Null
                     },
-                    "created": now,
-                    "start_date": now,
-                    "billing_cycle_anchor": now,
+                    "created": subscription_created,
+                    "start_date": subscription_created,
+                    "billing_cycle_anchor": subscription_created,
                     "collection_method": "charge_automatically",
                     "currency": "usd",
                     "items": {
@@ -350,16 +379,33 @@ async fn test_paid_flow_e2e() {
     assert!(status.is_success(), "Pro gRPC deploy should succeed, got {}: {}", status, body);
 
     // ─────────────────────────────────────────────────────────────────
-    // Step 5b: trial_will_end is acknowledged and leaves the plan alone
-    // (#714). It emails the owner when EMAIL_PROVIDER is configured; an
-    // unknown subscription is acknowledged too, so Stripe stops retrying.
+    // Step 5b: trial_will_end leaves the plan alone. A missing subscription
+    // for a real org remains retryable while its prerequisite may arrive.
     // ─────────────────────────────────────────────────────────────────
     println!("Step 5b: customer.subscription.trial_will_end");
     let body = h.trial_will_end_event(&h.subscription_id.clone());
     h.post_webhook(&body).await;
     assert_eq!(h.fetch_plan().await, "pro", "trial_will_end must not change the plan");
     let body = h.trial_will_end_event(&format!("sub_e2e_unknown_{}", ts));
-    h.post_webhook(&body).await;
+    let (status, response) = h.post_webhook_raw(&body).await;
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE, "{response}");
+    assert!(response.contains("retry"), "{response}");
+
+    let mut no_org: Value = serde_json::from_str(&body).expect("event JSON");
+    no_org["data"]["object"]["metadata"] = json!({});
+    no_org["id"] = json!(format!("evt_e2e_{}", uuid::Uuid::new_v4()));
+    no_org["created"] = json!(h.next_event_created());
+    let (status, response) = h.post_webhook_raw(&no_org.to_string()).await;
+    assert_eq!(status, StatusCode::OK, "{response}");
+    assert!(response.contains("ignored"), "{response}");
+
+    let mut expired: Value = serde_json::from_str(&body).expect("event JSON");
+    expired["data"]["object"]["trial_end"] = json!(chrono::Utc::now().timestamp() - 1);
+    expired["id"] = json!(format!("evt_e2e_{}", uuid::Uuid::new_v4()));
+    expired["created"] = json!(h.next_event_created());
+    let (status, response) = h.post_webhook_raw(&expired.to_string()).await;
+    assert_eq!(status, StatusCode::OK, "{response}");
+    assert!(response.contains("ignored"), "{response}");
 
     // ─────────────────────────────────────────────────────────────────
     // Step 6: Webhook cancels the subscription → back to Free
