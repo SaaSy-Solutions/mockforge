@@ -462,11 +462,28 @@ impl KafkaMockBroker {
                 Ok(Ok(_)) => {
                     let message_size = i32::from_be_bytes(size_buf) as usize;
 
-                    // Validate message size (prevent DoS)
-                    if message_size > 10 * 1024 * 1024 {
-                        // 10MB limit
+                    // Validate message size (prevent DoS). Oversized requests used to be skipped
+                    // without reading their body, so the body bytes were parsed as the next size
+                    // header and the connection desynchronised (clients then fail with
+                    // `CorrelationIdMismatchException`). The Java producer batches several
+                    // partitions into one Produce request that easily exceeds 10 MB, so the limit
+                    // (`KafkaConfig::max_request_bytes`) defaults to 100 MiB and anything above it
+                    // is drained, keeping the stream in sync.
+                    if message_size > self.config.max_request_bytes {
                         self.metrics.record_error();
-                        tracing::warn!("Message size too large: {} bytes", message_size);
+                        tracing::warn!(
+                            "Message size too large: {} bytes; discarding",
+                            message_size
+                        );
+                        let mut remaining = message_size;
+                        let mut sink = vec![0u8; 64 * 1024];
+                        while remaining > 0 {
+                            let n = remaining.min(sink.len());
+                            if socket.read_exact(&mut sink[..n]).await.is_err() {
+                                return Ok(());
+                            }
+                            remaining -= n;
+                        }
                         continue;
                     }
 

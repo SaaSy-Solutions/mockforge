@@ -481,6 +481,11 @@ pub struct KafkaConfig {
     pub broker_id: i32,
     /// Maximum connections
     pub max_connections: usize,
+    /// Largest request frame (bytes) the broker buffers and processes. A larger request is read
+    /// off the socket and discarded, so the connection stays in sync, and the client gets no
+    /// response for it. The Java producer batches several partitions into a single Produce
+    /// request, which easily exceeds 10 MB. Override with `MOCKFORGE_KAFKA_MAX_REQUEST_BYTES`.
+    pub max_request_bytes: usize,
     /// Log retention time in milliseconds
     pub log_retention_ms: i64,
     /// Log segment size in bytes
@@ -529,8 +534,9 @@ impl Default for KafkaConfig {
             host: "0.0.0.0".to_string(),
             broker_id: 1,
             max_connections: 1000,
-            log_retention_ms: 604800000,   // 7 days
-            log_segment_bytes: 1073741824, // 1 GB
+            max_request_bytes: 100 * 1024 * 1024, // 100 MiB
+            log_retention_ms: 604800000,          // 7 days
+            log_segment_bytes: 1073741824,        // 1 GB
             fixtures_dir: None,
             auto_create_topics: true,
             default_partitions: 3,
