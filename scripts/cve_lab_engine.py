@@ -15,6 +15,9 @@ from cve_lab_transport import request
 import re
 
 
+ALLOWED_APP_CAPABILITIES = frozenset(("SETUID", "SETGID", "CHOWN"))
+
+
 def command(args, timeout=120, check=True):
     result = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
     if check and result.returncode:
@@ -105,9 +108,47 @@ def owned_remove(engine, name, run_id):
     command([engine, "rm", "-f", name])
 
 
+def container_running(engine, run_id):
+    """Whether this run's application container is still alive.
+
+    Crash-evidence packs use this to distinguish a reviewed exploit outcome
+    from a healthy application.
+    """
+    result = command(
+        [engine, "inspect", "mockforge-cve-" + run_id, "--format", "{{.State.Running}}"],
+        check=False,
+    )
+    if result.returncode:
+        return False
+    return result.stdout.strip().lower() == "true"
+
+
+def container_log(engine, run_id, tail=400):
+    """The application container's recent log output, mid-run.
+
+    Evidence packs whose exploit outcome lives in the application log (an
+    Apache prefork child segmentation fault, for example) compare marker
+    counts before and after the exploit request.
+    """
+    result = command(
+        [engine, "logs", "--tail", str(tail), "mockforge-cve-" + run_id],
+        check=False,
+    )
+    if result.returncode:
+        return ""
+    return result.stdout + result.stderr
+
+
 @contextmanager
 def lab(engine, run_id, output, pack):
     app = pack["app"]
+    cap_add = app.get("cap_add", ())
+    if not isinstance(cap_add, (list, tuple)) or any(
+        capability not in ALLOWED_APP_CAPABILITIES for capability in cap_add
+    ):
+        raise RuntimeError(
+            "app.cap_add entries must be from the allowlist: SETUID, SETGID, CHOWN"
+        )
     name = "mockforge-cve-" + run_id
     try:
         run_args = [
@@ -125,11 +166,28 @@ def lab(engine, run_id, output, pack):
             "-p",
             f"127.0.0.1::{app['port']}",
         ]
+        run_args.extend(f"--cap-add={capability}" for capability in cap_add)
         for key, value in app["env"].items():
             run_args.extend(["-e", f"{key}={value}"])
+        for mount in app.get("mounts", ()):
+            host = mount["host"].replace("{output}", str(output))
+            run_args.extend(["-v", f"{host}:{mount['container']}:ro"])
+        if app.get("workdir"):
+            run_args.extend(["-w", app["workdir"]])
         run_args.append(pack["catalog"]["application_image"])
+        run_args.extend(app.get("command", ()))
         command(run_args)
         ports = command([engine, "port", name, app["port"]]).stdout.strip().splitlines()
+        if not ports:
+            # No published mapping means the container never bound app["port"]
+            # (it exited or failed to start, e.g. the server could not bind the
+            # port). Surface the clean readiness diagnostic that run() catches
+            # instead of letting an IndexError escape as a raw traceback.
+            raise RuntimeError(
+                "Application did not expose "
+                + app["port"]
+                + "; it failed to start (see application.log)"
+            )
         backend = "http://" + ports[0]
         deadline = time.monotonic() + 90
         while time.monotonic() < deadline:

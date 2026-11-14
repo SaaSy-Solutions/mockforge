@@ -12,8 +12,75 @@ has not completed its build-and-review carries an explicit unreviewed tag and
 silently pulling an unpinned image.
 """
 
+# Reviewed lab application and configuration for the PHP2Shell 2026 packs,
+# shipped inside the pack and mounted read-only into the pinned official
+# image. The advisory's corruption happens before application code runs;
+# these files give healthy requests a deterministic answer and make the
+# worker identity observable. lab.ini deliberately sets memory_limit BELOW
+# post_max_size: the advisory's OOM-during-input-parse trigger class is then
+# reachable with the pack's bounded request bodies, whereas on the default
+# ordering post_max_size would reject the body before memory pressure is
+# reachable. This is a reviewed lab configuration, not a production
+# recommendation.
+PHP2SHELL_2026_FILES = {
+    "index.php": (
+        "<?php\n"
+        "// MockForge PHP2Shell 2026 managed lab application (reviewed).\n"
+        "header('X-Worker-Pid: ' . getmypid());\n"
+        "echo \"mockforge-php2shell-2026\\n\";\n"
+    ),
+    "health.php": (
+        "<?php\n"
+        "// MockForge PHP2Shell 2026 managed lab application (reviewed).\n"
+        "header('X-Worker-Pid: ' . getmypid());\n"
+        "echo \"mockforge-php2shell-2026\\n\";\n"
+    ),
+    "upload.php": (
+        "<?php\n"
+        "// MockForge PHP2Shell 2026 managed lab application (reviewed).\n"
+        "// Multipart parsing already happened before this runs; a corrupted\n"
+        "// parse never reaches this file.\n"
+        "header('X-Worker-Pid: ' . getmypid());\n"
+        "echo \"upload processed\\n\";\n"
+    ),
+    "lab.ini": (
+        "; Reviewed lab configuration for the PHP2Shell 2026 packs.\n"
+        "memory_limit=16M\n"
+        "post_max_size=48M\n"
+        "upload_max_filesize=48M\n"
+        "max_file_uploads=64\n"
+        "log_errors=On\n"
+    ),
+    ".htaccess": (
+        "# Reviewed lab configuration: exercises the pre-startup php_value\n"
+        "# directive path the advisory names as a mod_php consumer route.\n"
+        "php_value memory_limit 16M\n"
+    ),
+    # The lab harness starts every container with --cap-drop=ALL, which removes
+    # CAP_NET_BIND_SERVICE, so Apache cannot bind the privileged default port 80.
+    # Serve on an unprivileged port (8080) instead of weakening the harness.
+    "ports.conf": (
+        "# Reviewed lab configuration: bind the unprivileged port 8080 because the\n"
+        "# lab harness runs with --cap-drop=ALL (no CAP_NET_BIND_SERVICE for :80).\n"
+        "Listen 8080\n"
+    ),
+    "000-default.conf": (
+        "# Reviewed lab configuration: serve the mod_php app on the unprivileged\n"
+        "# port 8080 that ports.conf binds under --cap-drop=ALL.\n"
+        "<VirtualHost *:8080>\n"
+        "    DocumentRoot /var/www/html\n"
+        "    <Directory /var/www/html>\n"
+        "        AllowOverride All\n"
+        "        Require all granted\n"
+        "    </Directory>\n"
+        "</VirtualHost>\n"
+    ),
+}
+
 LABEL = "io.mockforge.cve.run"
 
+# Pack shape: app may include ``cap_add`` for narrowly reviewed capabilities
+# from the engine allowlist; every pack still starts with --cap-drop=ALL.
 PACKS = {
     "CVE-2025-29927": {
         "catalog": {
@@ -130,6 +197,165 @@ PACKS = {
         },
         "baseline_gate": "cgi-argument-injection",
         "classifier": "cgi-argument-injection",
+    },
+    "CVE-2026-109618": {
+        # Reviewer evidence on PR #1524: trigger returned "200 upload processed"
+        # with no crash marker on Docker 29.1.4 / PHP 8.4.26 / Apache 2.4.69 at
+        # 418c289e, so this pack remains hidden until it reproduces on a lab host.
+        "verified": False,
+        "catalog": {
+            "schema_version": 1,
+            "pack_revision": 1,
+            "cve": "CVE-2026-109618",
+            "title": "PHP2Shell 2026: PHP core OOM request-lifecycle corruption (mod_php)",
+            "platform": "Linux, local Docker/Podman engine, amd64",
+            "application_version": "PHP 8.4.26 (official image), Apache with mod_php, reviewed lab configuration",
+            "application_image": "docker.io/library/php@sha256:60111400ff77bdc44fa79b4f072afe49a42abba71e0846ad496be4761dc9c11a",
+            "runner_version": "Nuclei 3.11.1",
+            "runner_image": "docker.io/projectdiscovery/nuclei@sha256:582d5546902e67052097cb2d07296c642d50a1afc5e44623cb038845df9a32eb",
+            "references": [
+                "https://github.com/php/php-src/security/advisories/GHSA-w8hw-w9fx-j79w",
+                "https://www.php.net/releases/8.4/release-8.4.27.php",
+            ],
+            "coverage": "One reviewed OOM-during-input-parse corruption case on mod_php and benign controls; not remote code execution, not FPM, not every trigger variant",
+            "origin_port": 18082,
+            "listen_address_guidance": (
+                "The recorder defaults to 127.0.0.1:18082, which only accepts local "
+                "connections. Testing an LB/WAAP on another machine requires "
+                "--listen-address <an isolated lab interface IP>; keep that interface "
+                "restricted to the test network because the recorder forwards to the "
+                "vulnerable application."
+            ),
+            "verification_status": "pending-lab-host-verification",
+        },
+        "probe": {
+            "template_id": "mockforge-php2026-618-observation",
+            "template_name": "MockForge PHP2Shell 2026 controlled lab observation",
+            "method": "GET",
+            "path": "/health.php?__mockforge_cve={token}",
+            "headers": {
+                "X-Mockforge-Cve": "{token}",
+            },
+            "body": None,
+            "signature_header": None,
+            # Body marker proving the application was healthy and observable.
+            "marker": "mockforge-php2shell-2026",
+        },
+        "app": {
+            "port": "8080/tcp",
+            "cap_add": ["SETUID", "SETGID"],
+            "env": {},
+            "readiness": {"path": "/health.php", "status": 200},
+            "workdir": "/var/www/html",
+            "mounts": [
+                {"host": "{output}/index.php", "container": "/var/www/html/index.php"},
+                {"host": "{output}/health.php", "container": "/var/www/html/health.php"},
+                {"host": "{output}/upload.php", "container": "/var/www/html/upload.php"},
+                {"host": "{output}/lab.ini", "container": "/usr/local/etc/php/conf.d/zz-mockforge-lab.ini"},
+                {"host": "{output}/.htaccess", "container": "/var/www/html/.htaccess"},
+                {"host": "{output}/ports.conf", "container": "/etc/apache2/ports.conf"},
+                {"host": "{output}/000-default.conf", "container": "/etc/apache2/sites-enabled/000-default.conf"},
+            ],
+        },
+        "application_files": PHP2SHELL_2026_FILES,
+        "controls": {
+            "benign_path": "/health.php?__mockforge_cve={token}",
+            "benign_status": 200,
+            "ordinary_path": "/?__mockforge_cve={token}",
+            "ordinary_status": 200,
+        },
+        "exploit": {
+            "method": "POST",
+            "path": "/upload.php?__mockforge_cve={token}",
+            "headers": {
+                "X-Mockforge-Cve": "{token}",
+            },
+            "max_forwarded_body": 48 * 1024 * 1024,
+            "timeout": 60,
+        },
+        "baseline_gate": "modphp-segfault",
+        "classifier": "modphp-segfault",
+        "baseline_exploit": "modphp-oom",
+        "target_exploit": "modphp-oom",
+    },
+    "CVE-2026-109619": {
+        # Reviewer evidence on PR #1524: trigger did not reproduce on Docker
+        # 29.1.4 / PHP 8.4.26 / Apache 2.4.69 at 418c289e; see PR #1524.
+        "verified": False,
+        "catalog": {
+            "schema_version": 1,
+            "pack_revision": 1,
+            "cve": "CVE-2026-109619",
+            "title": "PHP2Shell 2026: PHP core same-worker use-after-free (mod_php)",
+            "platform": "Linux, local Docker/Podman engine, amd64",
+            "application_version": "PHP 8.4.26 (official image), Apache with mod_php, reviewed lab configuration",
+            "application_image": "docker.io/library/php@sha256:60111400ff77bdc44fa79b4f072afe49a42abba71e0846ad496be4761dc9c11a",
+            "runner_version": "Nuclei 3.11.1",
+            "runner_image": "docker.io/projectdiscovery/nuclei@sha256:582d5546902e67052097cb2d07296c642d50a1afc5e44623cb038845df9a32eb",
+            "references": [
+                "https://github.com/php/php-src/security/advisories/GHSA-6wmf-4rv5-p3rp",
+                "https://www.php.net/releases/8.4/release-8.4.27.php",
+            ],
+            "coverage": "One reviewed producer-then-consumer same-worker case on mod_php and benign controls; not remote code execution, not FPM, not every consumer path",
+            "origin_port": 18082,
+            "listen_address_guidance": (
+                "The recorder defaults to 127.0.0.1:18082, which only accepts local "
+                "connections. Testing an LB/WAAP on another machine requires "
+                "--listen-address <an isolated lab interface IP>; keep that interface "
+                "restricted to the test network because the recorder forwards to the "
+                "vulnerable application."
+            ),
+            "verification_status": "pending-lab-host-verification",
+        },
+        "probe": {
+            "template_id": "mockforge-php2026-619-observation",
+            "template_name": "MockForge PHP2Shell 2026 controlled lab observation",
+            "method": "GET",
+            "path": "/health.php?__mockforge_cve={token}",
+            "headers": {
+                "X-Mockforge-Cve": "{token}",
+            },
+            "body": None,
+            "signature_header": None,
+            # Body marker proving the application was healthy and observable.
+            "marker": "mockforge-php2shell-2026",
+        },
+        "app": {
+            "port": "8080/tcp",
+            "cap_add": ["SETUID", "SETGID"],
+            "env": {},
+            "readiness": {"path": "/health.php", "status": 200},
+            "workdir": "/var/www/html",
+            "mounts": [
+                {"host": "{output}/index.php", "container": "/var/www/html/index.php"},
+                {"host": "{output}/health.php", "container": "/var/www/html/health.php"},
+                {"host": "{output}/upload.php", "container": "/var/www/html/upload.php"},
+                {"host": "{output}/lab.ini", "container": "/usr/local/etc/php/conf.d/zz-mockforge-lab.ini"},
+                {"host": "{output}/.htaccess", "container": "/var/www/html/.htaccess"},
+                {"host": "{output}/ports.conf", "container": "/etc/apache2/ports.conf"},
+                {"host": "{output}/000-default.conf", "container": "/etc/apache2/sites-enabled/000-default.conf"},
+            ],
+        },
+        "application_files": PHP2SHELL_2026_FILES,
+        "controls": {
+            "benign_path": "/health.php?__mockforge_cve={token}",
+            "benign_status": 200,
+            "ordinary_path": "/?__mockforge_cve={token}",
+            "ordinary_status": 200,
+        },
+        "exploit": {
+            "method": "POST",
+            "path": "/upload.php?__mockforge_cve={token}",
+            "headers": {
+                "X-Mockforge-Cve": "{token}",
+            },
+            "max_forwarded_body": 48 * 1024 * 1024,
+            "timeout": 60,
+        },
+        "baseline_gate": "modphp-segfault",
+        "classifier": "modphp-segfault",
+        "baseline_exploit": "modphp-worker-sequence",
+        "target_exploit": "modphp-worker-sequence",
     },
 }
 

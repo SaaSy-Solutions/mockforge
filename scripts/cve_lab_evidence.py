@@ -39,9 +39,27 @@ def verify_cgi_injection_baseline(pack, baseline_control, baseline):
         )
 
 
+def verify_modphp_segfault_baseline(pack, baseline_control, baseline):
+    """Direct-run gate for the mod_php packs: both controls must match the
+    application's healthy behavior and the pinned runner must have observed
+    it. The corruption itself is asserted by the pack's exploit step, which
+    owns the segmentation-fault log check."""
+    controls = pack["controls"]
+    if (
+        baseline_control.get("status") != controls["benign_status"]
+        or baseline_control.get("root_status") != controls["ordinary_status"]
+        or baseline["status"] != 200
+        or not baseline["marker"]
+    ):
+        raise RuntimeError(
+            "Direct baseline did not demonstrate the request-lifecycle corruption"
+        )
+
+
 BASELINE_GATES = {
     "middleware-bypass": verify_middleware_bypass_baseline,
     "cgi-argument-injection": verify_cgi_injection_baseline,
+    "modphp-segfault": verify_modphp_segfault_baseline,
 }
 
 
@@ -325,6 +343,104 @@ def classify_php_cgi_argument_injection(
     )
 
 
+def classify_modphp_segfault(
+    pack, baseline, target, before, after, records, block_status
+):
+    """Return (verdict, reason, checks) for one mod_php target run.
+
+    Serves both PHP2Shell 2026 packs (single-request OOM and same-worker
+    sequence): pass requires a reproduced direct baseline (a new
+    segmentation-fault log entry after the reviewed trigger), a healthy
+    before-control, fully correlated origin traffic, and a blocked exploit
+    request; any origin hit for the exploit request fails the run. The
+    after-control is evaluated only on the blocked path: when the exploit
+    reaches the origin it crashes an Apache child, so a dead control after
+    the exploit corroborates the failure instead of masking it.
+    """
+    checks = []
+    controls = pack["controls"]
+
+    def record(check, ok):
+        checks.append({"check": check, "outcome": "ok" if ok else "not satisfied"})
+        return ok
+
+    if baseline.get("status") != 200 or not baseline.get("marker") or not baseline.get("crash_confirmed"):
+        record("direct baseline corrupts request lifecycle state", False)
+        return "inconclusive", "direct application vulnerability was not reproduced", checks
+    record("direct baseline corrupts request lifecycle state", True)
+    if not (
+        before.get("status") == controls["benign_status"]
+        and len(observations(records, before.get("token"))) == 1
+        and observations(records, before.get("token"))[0].get("status")
+        == controls["benign_status"]
+        and before.get("root_status") == controls["ordinary_status"]
+        and len(observations(records, before.get("root_token"))) == 1
+        and observations(records, before.get("root_token"))[0].get("status")
+        == controls["ordinary_status"]
+    ):
+        record("benign controls corroborate origin reachability", False)
+        return "inconclusive", "benign controls did not corroborate origin reachability", checks
+    record("benign controls corroborate origin reachability", True)
+    expected_tokens = {target["token"]} | {
+        c[key] for c in (before, after) for key in ("token", "root_token") if key in c
+    }
+    if any(not expected_tokens.intersection(r["tokens"]) for r in records):
+        record("every origin request correlates with this run", False)
+        return (
+            "inconclusive",
+            "uncorrelated origin traffic prevents a blocking assertion",
+            checks,
+        )
+    record("every origin request correlates with this run", True)
+    seen = observations(records, target["token"])
+    if seen:
+        detail = f"reached the origin with status {seen[0].get('status')}"
+        if seen[0].get("error"):
+            detail += f" ({seen[0]['error']})"
+        checks.append(
+            {
+                "check": "exploit request was blocked at the target",
+                "outcome": f"not satisfied, {detail}",
+            }
+        )
+        return (
+            "fail",
+            "exploit request reached the origin; blocking assertion failed",
+            checks,
+        )
+    record("exploit request was blocked at the target", True)
+    if not (
+        after.get("status") == controls["benign_status"]
+        and len(observations(records, after.get("token"))) == 1
+        and observations(records, after.get("token"))[0].get("status")
+        == controls["benign_status"]
+        and after.get("root_status") == controls["ordinary_status"]
+        and len(observations(records, after.get("root_token"))) == 1
+        and observations(records, after.get("root_token"))[0].get("status")
+        == controls["ordinary_status"]
+    ):
+        record("benign controls after the blocked exploit stay healthy", False)
+        return (
+            "inconclusive",
+            "benign controls after the blocked exploit did not corroborate origin reachability",
+            checks,
+        )
+    record("benign controls after the blocked exploit stay healthy", True)
+    if target["status"] != block_status:
+        record(
+            f"target response matched the configured block status ({block_status})",
+            False,
+        )
+        return "inconclusive", "response did not match the configured block status", checks
+    record(f"target response matched the configured block status ({block_status})", True)
+    return (
+        "pass",
+        "expected rejection with no correlated origin request and healthy controls",
+        checks,
+    )
+
+
+
 def classify_data_driven(pack, baseline, target, before, after, records, block_status):
     """Return (verdict, reason, checks) using only pack-declared data.
 
@@ -342,19 +458,17 @@ def classify_data_driven(pack, baseline, target, before, after, records, block_s
         checks.append({"check": check, "outcome": "ok" if ok else "not satisfied"})
         return ok
 
-    if baseline["status"] != 200 or not baseline["marker"]:
+    if baseline.get("status") != 200 or not baseline.get("marker"):
         record("direct baseline reproduces the vulnerability", False)
         return "inconclusive", "direct application vulnerability was not reproduced", checks
     record("direct baseline reproduces the vulnerability", True)
     if not all(
         c.get("status") == controls["benign_status"]
         and len(observations(records, c.get("token"))) == 1
-        and observations(records, c.get("token"))[0].get("status")
-        == controls["benign_status"]
+        and observations(records, c.get("token"))[0].get("status") == controls["benign_status"]
         and c.get("root_status") == controls["ordinary_status"]
         and len(observations(records, c.get("root_token"))) == 1
-        and observations(records, c.get("root_token"))[0].get("status")
-        == controls["ordinary_status"]
+        and observations(records, c.get("root_token"))[0].get("status") == controls["ordinary_status"]
         for c in (before,)
     ):
         record("benign controls corroborate origin reachability", False)
@@ -362,17 +476,13 @@ def classify_data_driven(pack, baseline, target, before, after, records, block_s
     record("benign controls corroborate origin reachability", True)
     extras_ok_before, extras_tokens = _extras_phase(pack, before, records, checks)
     if not extras_ok_before:
-        return (
-            "inconclusive",
-            "a data-driven extra case did not match its expected status",
-            checks,
-        )
+        return "inconclusive", "a data-driven extra case did not match its expected status", checks
     phase_tokens = set()
     for phase in (before, after):
         phase_tokens |= {phase[key] for key in ("token", "root_token") if key in phase}
-        for seen in (phase.get("extras") or {}).values():
-            if seen.get("token"):
-                phase_tokens.add(seen["token"])
+        for seen_case in (phase.get("extras") or {}).values():
+            if seen_case.get("token"):
+                phase_tokens.add(seen_case["token"])
     expected_tokens = {target["token"]} | extras_tokens | phase_tokens
     if any(not expected_tokens.intersection(r["tokens"]) for r in records):
         record("every origin request correlates with this run", False)
@@ -389,24 +499,25 @@ def classify_data_driven(pack, baseline, target, before, after, records, block_s
             detail += f" ({seen[0]['error']})"
         checks.append(
             {
-                "check": "signature request was blocked at the target",
+                "check": "exploit request was blocked at the target",
                 "outcome": f"not satisfied, {detail}",
             }
         )
-        return "fail", "signature request reached the origin; blocking assertion failed", checks
-    record("signature request was blocked at the target", True)
-    # only a blocked run needs healthy post-exploit evidence: a dead origin
-    # after a forwarded signature must not mask the fail
-    if not all(
-        c.get("status") == controls["benign_status"]
-        and len(observations(records, c.get("token"))) == 1
-        and observations(records, c.get("token"))[0].get("status")
+        return (
+            "fail",
+            "exploit request reached the origin; blocking assertion failed",
+            checks,
+        )
+    record("exploit request was blocked at the target", True)
+    if not (
+        after.get("status") == controls["benign_status"]
+        and len(observations(records, after.get("token"))) == 1
+        and observations(records, after.get("token"))[0].get("status")
         == controls["benign_status"]
-        and c.get("root_status") == controls["ordinary_status"]
-        and len(observations(records, c.get("root_token"))) == 1
-        and observations(records, c.get("root_token"))[0].get("status")
+        and after.get("root_status") == controls["ordinary_status"]
+        and len(observations(records, after.get("root_token"))) == 1
+        and observations(records, after.get("root_token"))[0].get("status")
         == controls["ordinary_status"]
-        for c in (after,)
     ):
         record("benign controls after the blocked exploit stay healthy", False)
         return (
@@ -417,11 +528,7 @@ def classify_data_driven(pack, baseline, target, before, after, records, block_s
     record("benign controls after the blocked exploit stay healthy", True)
     extras_ok_after, _tokens = _extras_phase(pack, after, records, checks)
     if not extras_ok_after:
-        return (
-            "inconclusive",
-            "a data-driven extra case did not match its expected status",
-            checks,
-        )
+        return "inconclusive", "a data-driven extra case did not match its expected status", checks
     if target["status"] != block_status:
         record(
             f"target response matched the configured block status ({block_status})",
@@ -439,6 +546,7 @@ def classify_data_driven(pack, baseline, target, before, after, records, block_s
 CLASSIFIERS = {
     "middleware-bypass": _classify_middleware_bypass,
     "cgi-argument-injection": classify_php_cgi_argument_injection,
+    "modphp-segfault": classify_modphp_segfault,
     "data-driven": classify_data_driven,
 }
 

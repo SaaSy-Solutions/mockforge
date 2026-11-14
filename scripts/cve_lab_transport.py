@@ -66,7 +66,8 @@ MAX_FORWARDED_BODY = 2 * 1024 * 1024
 
 
 @contextmanager
-def receiver(port, address, backend, signature_header=None):
+def receiver(port, address, backend, signature_header=None, max_body=None):
+    limit = MAX_FORWARDED_BODY if max_body is None else max_body
     records = []
     lock = threading.Lock()
 
@@ -89,7 +90,7 @@ def receiver(port, address, backend, signature_header=None):
             body = None
             if self.command == "POST":
                 length = int(self.headers.get("Content-Length") or 0)
-                if length < 0 or length > MAX_FORWARDED_BODY:
+                if length < 0 or length > limit:
                     self.send_error(413)
                     return
                 body = self.rfile.read(length) if length else None
@@ -154,9 +155,12 @@ def control(pack, base, run_id, phase, context=None):
     """Send a pack's control requests to one origin and return what is known.
 
     The benign control exercises the pack's vulnerable endpoint without the
-    injection payload; the ordinary request exercises an everyday route.
-    Their expected statuses live in ``pack["controls"]`` so the classifier
-    can tell "application answered normally" from "a blanket block answered
+    injection payload; the ordinary request exercises an everyday route. Their
+    expected statuses live in ``pack["controls"]`` so the classifier can tell
+    "application answered normally" from "a blanket block answered instead".
+    A failed control never raises: it returns what is known - the correlation
+    tokens plus an ``error`` - because a control that reached a dying origin
+    is evidence a crash-pack classifier must correlate, not an abort.
     instead". The pack may also declare ``extra_cases`` - additional data-only
     requests, each with its own expected status - which are sent after the
     two built-in controls and never abort the phase: a failed extra case is
@@ -164,19 +168,28 @@ def control(pack, base, run_id, phase, context=None):
     """
     controls = pack["controls"]
     token = f"{run_id}-{phase}-{uuid.uuid4().hex}"
-    status, _headers, body = request(
-        base,
-        controls["benign_path"].replace("{token}", token),
-        {"X-Mockforge-Cve": token},
-        context=context,
-    )
     root_token = token + "-root"
-    root_status = request(
-        base,
-        controls["ordinary_path"].replace("{token}", root_token),
-        {"X-Mockforge-Cve": root_token},
-        context=context,
-    )[0]
+    outcome = {"token": token, "root_token": root_token}
+    try:
+        status, _headers, body = request(
+            base,
+            controls["benign_path"].replace("{token}", token),
+            {"X-Mockforge-Cve": token},
+            context=context,
+        )
+        outcome["status"] = status
+        outcome["body_sha256"] = hashlib.sha256(body).hexdigest()
+    except (OSError, ValueError, http.client.HTTPException) as exc:
+        outcome["error"] = str(exc)
+    try:
+        outcome["root_status"] = request(
+            base,
+            controls["ordinary_path"].replace("{token}", root_token),
+            {"X-Mockforge-Cve": root_token},
+            context=context,
+        )[0]
+    except (OSError, ValueError, http.client.HTTPException) as exc:
+        outcome["error"] = str(exc)
     extras = {}
     for case in pack.get("extra_cases", ()):
         case_id = case["id"]
@@ -198,14 +211,8 @@ def control(pack, base, run_id, phase, context=None):
         except (OSError, ValueError, http.client.HTTPException) as exc:
             case_outcome["error"] = str(exc)
         extras[case_id] = case_outcome
-    return {
-        "token": token,
-        "status": status,
-        "body_sha256": hashlib.sha256(body).hexdigest(),
-        "root_token": root_token,
-        "root_status": root_status,
-        "extras": extras,
-    }
+    outcome["extras"] = extras
+    return outcome
 
 
 def observations(records, token):

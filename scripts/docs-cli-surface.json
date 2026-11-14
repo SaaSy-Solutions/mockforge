@@ -1599,6 +1599,7 @@
      "flags": {
       "--engine": 1,
       "--help": 0,
+      "--include-unverified": 0,
       "-h": 0
      },
      "subcommands": {
@@ -1643,6 +1644,7 @@
         "--listen-address": 1,
         "--origin-port": 1,
         "--output-dir": 1,
+        "--skip-tls-verify": 0,
         "--target": 1,
         "-h": 0
        },
