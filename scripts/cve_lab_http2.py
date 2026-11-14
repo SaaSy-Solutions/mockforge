@@ -16,6 +16,7 @@ tables and rules follow RFC 7541; the frame rules follow RFC 7540.
 """
 
 import socket as _socket
+import time as _time
 from urllib.parse import parse_qs, urlsplit
 
 MAGIC = b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
@@ -51,6 +52,21 @@ LAB_WINDOW = 1 << 25
 ERROR_NO_ERROR = 0x0
 ERROR_PROTOCOL = 0x1
 ERROR_CANCEL = 0x8
+
+
+def _drain_peer_input(sock, timeout=1.0):
+    """Discard bytes already sent by the peer before closing after a rejection."""
+    deadline = _time.monotonic() + timeout
+    while True:
+        remaining = deadline - _time.monotonic()
+        if remaining <= 0:
+            return
+        try:
+            sock.settimeout(remaining)
+            if not sock.recv(65536):
+                return
+        except (OSError, _socket.timeout):
+            return
 
 
 class Http2Error(Exception):
@@ -529,8 +545,12 @@ def serve_connection(sock, forward, record, max_body, signature_header):
                                 encode_headers(((":status", "413"),)),
                             )
                         )
-                        sock.sendall(frame(RST_STREAM, 0, stream_id, ERROR_CANCEL.to_bytes(4, "big")))
-                        continue
+                        # END_STREAM already closes this response; send GOAWAY
+                        # and half-close so the peer can drain the 413 headers.
+                        sock.sendall(frame(GOAWAY, 0, 0, ERROR_NO_ERROR.to_bytes(4, "big") + b"\x00" * 4))
+                        sock.shutdown(_socket.SHUT_WR)
+                        _drain_peer_input(sock)
+                        return
                     grant = len(payload).to_bytes(4, "big")
                     sock.sendall(
                         frame(WINDOW_UPDATE, 0, 0, grant)
@@ -597,7 +617,10 @@ def _finish_request(sock, stream_id, streams, forward, record, max_body, signatu
         sock.sendall(
             frame(HEADERS, FLAG_END_HEADERS | FLAG_END_STREAM, stream_id, encode_headers(((":status", "413"),)))
         )
-        sock.sendall(frame(RST_STREAM, 0, stream_id, ERROR_CANCEL.to_bytes(4, "big")))
+        # END_STREAM already closes this response; don't discard it with RST.
+        sock.sendall(frame(GOAWAY, 0, 0, ERROR_NO_ERROR.to_bytes(4, "big") + b"\x00" * 4))
+        sock.shutdown(_socket.SHUT_WR)
+        _drain_peer_input(sock)
         return
     forward_headers = [
         (name, value)
@@ -676,35 +699,43 @@ def request(host, port, method, path, headers, body=b"", timeout=10):
         stream_window = DEFAULT_WINDOW
         peer_max_frame = DEFAULT_MAX_FRAME
         offset = 0
-        while offset < len(body):
-            chunk_size = min(peer_max_frame, len(body) - offset, conn_window, stream_window)
-            if chunk_size <= 0:
-                frame_type, flags, rid, payload = read_frame(sock)
-                if frame_type == WINDOW_UPDATE:
-                    increment = int.from_bytes(payload, "big") & 0x7FFFFFFF
-                    if rid == 0:
-                        conn_window += increment
-                    elif rid == stream_id:
-                        stream_window += increment
-                elif frame_type == SETTINGS and not flags & FLAG_ACK:
-                    values = parse_settings(payload)
-                    peer_max_frame = values.get(SETTINGS_MAX_FRAME_SIZE, DEFAULT_MAX_FRAME)
-                    stream_window = values.get(SETTINGS_INITIAL_WINDOW_SIZE, DEFAULT_WINDOW)
-                    sock.sendall(frame(SETTINGS, FLAG_ACK, 0))
-                elif frame_type == PING and not flags & FLAG_ACK:
-                    sock.sendall(frame(PING, FLAG_ACK, 0, payload))
-                elif frame_type == GOAWAY:
-                    result["goaway"] = True
-                    return result
-                elif frame_type == RST_STREAM and rid == stream_id:
-                    result["reset"] = True
-                    return result
-                continue
-            sock.sendall(frame(DATA, 0, stream_id, body[offset : offset + chunk_size]))
-            offset += chunk_size
-            conn_window -= chunk_size
-            stream_window -= chunk_size
-        sock.sendall(frame(DATA, FLAG_END_STREAM, stream_id))
+        try:
+            while offset < len(body):
+                chunk_size = min(peer_max_frame, len(body) - offset, conn_window, stream_window)
+                if chunk_size <= 0:
+                    frame_type, flags, rid, payload = read_frame(sock)
+                    if frame_type == WINDOW_UPDATE:
+                        increment = int.from_bytes(payload, "big") & 0x7FFFFFFF
+                        if rid == 0:
+                            conn_window += increment
+                        elif rid == stream_id:
+                            stream_window += increment
+                    elif frame_type == SETTINGS and not flags & FLAG_ACK:
+                        values = parse_settings(payload)
+                        peer_max_frame = values.get(SETTINGS_MAX_FRAME_SIZE, DEFAULT_MAX_FRAME)
+                        stream_window = values.get(SETTINGS_INITIAL_WINDOW_SIZE, DEFAULT_WINDOW)
+                        sock.sendall(frame(SETTINGS, FLAG_ACK, 0))
+                    elif frame_type == PING and not flags & FLAG_ACK:
+                        sock.sendall(frame(PING, FLAG_ACK, 0, payload))
+                    elif frame_type == GOAWAY:
+                        result["goaway"] = True
+                        break
+                    elif frame_type == RST_STREAM and rid == stream_id:
+                        result["reset"] = True
+                        break
+                    continue
+                sock.sendall(frame(DATA, 0, stream_id, body[offset : offset + chunk_size]))
+                offset += chunk_size
+                conn_window -= chunk_size
+                stream_window -= chunk_size
+        except OSError:
+            # The peer can reject the request while DATA is still being sent.
+            # Read any response frames that arrived before the socket error.
+            pass
+        try:
+            sock.sendall(frame(DATA, FLAG_END_STREAM, stream_id))
+        except OSError:
+            pass
         decoder = HpackDecoder()
         response_body = bytearray()
         while True:
