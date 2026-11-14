@@ -9,6 +9,8 @@ from contextlib import contextmanager
 from urllib.parse import parse_qs, urlsplit
 import uuid
 
+import cve_lab_http2 as http2
+
 
 def target_url(value):
     url = urlsplit(value)
@@ -66,9 +68,23 @@ MAX_FORWARDED_BODY = 2 * 1024 * 1024
 
 
 @contextmanager
-def receiver(port, address, backend, signature_header=None):
+def receiver(port, address, backend, signature_header=None, max_body=None):
+    limit = MAX_FORWARDED_BODY if max_body is None else max_body
     records = []
     lock = threading.Lock()
+
+    def h2_record(observation):
+        with lock:
+            records.append(observation)
+
+    def h2_forward(method, path, header_items, body):
+        headers = {
+            name: value for name, value in header_items
+            if name.lower() not in ("host", "connection", "accept-encoding", "transfer-encoding", "content-length", "keep-alive")
+        }
+        status, response_headers, payload = request(backend, path, headers, method=method, body=body or None)
+        return status, [(name, value) for name, value in response_headers
+                        if name.lower() not in ("transfer-encoding", "connection", "content-length")], payload
 
     class Handler(BaseHTTPRequestHandler):
         def _forward(self):
@@ -89,7 +105,7 @@ def receiver(port, address, backend, signature_header=None):
             body = None
             if self.command == "POST":
                 length = int(self.headers.get("Content-Length") or 0)
-                if length < 0 or length > MAX_FORWARDED_BODY:
+                if length < 0 or length > limit:
                     self.send_error(413)
                     return
                 body = self.rfile.read(length) if length else None
@@ -138,6 +154,15 @@ def receiver(port, address, backend, signature_header=None):
             sock, addr = super().get_request()
             sock.settimeout(5)
             return sock, addr
+
+        def process_request(self, request_socket, client_address):
+            if http2.looks_like_http2(request_socket):
+                threading.Thread(target=http2.serve_connection,
+                    args=(request_socket, h2_forward, h2_record, limit, signature_header),
+                    daemon=True).start()
+                return
+            request_socket.settimeout(5)
+            super().process_request(request_socket, client_address)
 
     server = Server((address, port), Handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)

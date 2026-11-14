@@ -90,6 +90,21 @@ def prepare(engine, pack):
         command([engine, "image", "inspect", image])
 
 
+def container_running(engine, run_id):
+    """Whether this run's application container is still alive.
+
+    Crash-evidence packs use this to distinguish a reviewed exploit outcome
+    from a healthy application.
+    """
+    result = command(
+        [engine, "inspect", "mockforge-cve-" + run_id, "--format", "{{.State.Running}}"],
+        check=False,
+    )
+    if result.returncode:
+        return False
+    return result.stdout.strip().lower() == "true"
+
+
 def owned_remove(engine, name, run_id):
     result = command([engine, "inspect", name], check=False)
     if result.returncode:
@@ -127,7 +142,13 @@ def lab(engine, run_id, output, pack):
         ]
         for key, value in app["env"].items():
             run_args.extend(["-e", f"{key}={value}"])
+        for mount in app.get("mounts", ()):
+            host = mount["host"].replace("{output}", str(output))
+            run_args.extend(["-v", f"{host}:{mount['container']}:ro"])
+        if app.get("workdir"):
+            run_args.extend(["-w", app["workdir"]])
         run_args.append(pack["catalog"]["application_image"])
+        run_args.extend(app.get("command", ()))
         command(run_args)
         ports = command([engine, "port", name, app["port"]]).stdout.strip().splitlines()
         backend = "http://" + ports[0]

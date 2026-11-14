@@ -16,6 +16,7 @@ from cve_lab_engine import doctor, prepare, lab, cleanup
 from cve_lab_transport import target_url, receiver, control, unverified_context
 from cve_lab_nuclei import probe
 from cve_lab_evidence import BASELINE_GATES, CLASSIFIERS, describe
+from cve_lab_exploits import BASELINE_EXPLOITS, TARGET_EXPLOITS
 
 
 def run_plan_lines(args):
@@ -91,6 +92,7 @@ def run(args):
                 args.listen_address,
                 backend,
                 signature_header=pack["probe"].get("signature_header"),
+                max_body=(pack.get("exploit") or {}).get("max_forwarded_body"),
             ) as records:
                 direct_host = (
                     "127.0.0.1"
@@ -112,19 +114,21 @@ def run(args):
                 report.update(
                     baseline=baseline,
                     baseline_control=baseline_control,
-                    unauthenticated_status=baseline_control["root_status"],
+                    unauthenticated_status=baseline_control.get("root_status"),
                 )
+                if pack.get("baseline_exploit"):
+                    exploit_result = BASELINE_EXPLOITS[pack["baseline_exploit"]](
+                        args.engine, origin, output, run_id, pack
+                    )
+                    report.update(baseline_exploit=exploit_result)
+                    baseline = {**baseline, "crash_confirmed": exploit_result["crash_confirmed"]}
+                    report["baseline"] = baseline
                 BASELINE_GATES[pack["baseline_gate"]](pack, baseline_control, baseline)
                 if args.target:
                     target_start = len(records)
                     before = control(pack, args.target, run_id, "before", context=tls_context)
-                    tested = probe(
-                        args.engine,
-                        args.target.rstrip("/"),
-                        output,
-                        "target",
-                        run_id,
-                        pack,
+                    tested = TARGET_EXPLOITS[pack.get("target_exploit", "nuclei")](
+                        args.engine, args.target.rstrip("/"), output, run_id, pack,
                         insecure=args.skip_tls_verify,
                     )
                     after = control(pack, args.target, run_id, "after", context=tls_context)
@@ -139,9 +143,9 @@ def run(args):
                         args.block_status,
                     )
                     if (
-                        before["body_sha256"] != baseline_control["body_sha256"]
-                        or after["body_sha256"] != baseline_control["body_sha256"]
-                    ):
+                        before.get("body_sha256") != baseline_control.get("body_sha256")
+                        or after.get("body_sha256") != baseline_control.get("body_sha256")
+                    ) and not (verdict == "fail" and pack["classifier"] == "decoder-crash"):
                         verdict, reason = (
                             "inconclusive",
                             "LB controls did not match this application's benign control responses",
