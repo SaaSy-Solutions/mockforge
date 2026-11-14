@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Print CARGO_TARGET_DIR for one job class in a disjoint runner namespace.
 # Runner disks retain build output without uploading GitHub cache archives.
-# This selector never deletes caches; disk reclamation requires a separate,
-# explicitly authorized operation. Per-runner/per-class components avoid
+# This selector never deletes caches; disk reclamation happens in
+# guard-runner-cargo-targets.sh, the separate, explicitly authorized
+# operation, which runs at job start immediately before this selector.
+# Per-runner/per-class components avoid
 # ambiguity between runner-a and other-runner-a, even when class names overlap.
 set -euo pipefail
 
