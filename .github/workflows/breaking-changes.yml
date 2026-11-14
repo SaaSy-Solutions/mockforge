@@ -39,7 +39,9 @@ jobs:
 
       - name: Use runner-persistent cargo target
         working-directory: pr-branch
-        run: bash scripts/ci/runner-cargo-target.sh breaking-changes >> "$GITHUB_ENV"
+        env:
+          MOCKFORGE_RUNNER_TARGET_MAX_GB: ${{ vars.MOCKFORGE_RUNNER_TARGET_MAX_GB || '40' }}
+        run: bash scripts/ci/guard-runner-cargo-targets.sh && bash scripts/ci/runner-cargo-target.sh breaking-changes >> "$GITHUB_ENV"
 
       - name: Build MockForge
         working-directory: pr-branch

@@ -187,7 +187,7 @@ class WorkflowWiringTest(unittest.TestCase):
             with self.subTest(job=job):
                 step = content.split("name: Use the runner's persistent Cargo target dir on Hetzner", 1)[1].split("- name:", 1)[0]
                 self.assertIn("if: runner.environment == 'self-hosted'", step)
-                self.assertIn('run: bash scripts/ci/runner-cargo-target.sh ci-' + job + ' >> "$GITHUB_ENV"', step)
+                self.assertIn('run: bash scripts/ci/guard-runner-cargo-targets.sh && bash scripts/ci/runner-cargo-target.sh ci-' + job + ' >> "$GITHUB_ENV"', step)
                 self.assertNotIn("persistent_target.py", content)
                 self.assertNotIn("Release the persistent target", content)
                 self.assertIn("uses: rui314/setup-mold@v1", content)
@@ -208,7 +208,7 @@ class WorkflowWiringTest(unittest.TestCase):
         self.assertIn("runs-on: [self-hosted, linux, x64, rust]", NIGHTLY)
         self.assertNotIn("ubuntu-latest", NIGHTLY)
         self.assertNotIn("pull_request", NIGHTLY)
-        self.assertIn('bash scripts/ci/runner-cargo-target.sh nightly-full >> "$GITHUB_ENV"', NIGHTLY)
+        self.assertIn('bash scripts/ci/guard-runner-cargo-targets.sh && bash scripts/ci/runner-cargo-target.sh nightly-full >> "$GITHUB_ENV"', NIGHTLY)
         self.assertNotIn("persistent_target.py", NIGHTLY)
         self.assertIn("cron: '23 7 * * *'", NIGHTLY)
         self.assertIn("github.ref == 'refs/heads/main'", NIGHTLY)
