@@ -189,8 +189,9 @@ def run(args):
                         args.block_status,
                     )
                     if (
-                        before["body_sha256"] != baseline_control["body_sha256"]
-                        or after["body_sha256"] != baseline_control["body_sha256"]
+                        # control() is tolerant: a failed one has no body_sha256.
+                        before.get("body_sha256") != baseline_control.get("body_sha256")
+                        or after.get("body_sha256") != baseline_control.get("body_sha256")
                     ):
                         verdict, reason = (
                             "inconclusive",
