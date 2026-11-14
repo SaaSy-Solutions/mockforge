@@ -34,6 +34,18 @@ use crate::{
 const DEFAULT_LIMIT: i64 = 100;
 const MAX_LIMIT: i64 = 500;
 
+async fn require_site_admin(pool: &sqlx::PgPool, user_id: Uuid) -> ApiResult<()> {
+    let is_admin: Option<bool> = sqlx::query_scalar("SELECT is_admin FROM users WHERE id = $1")
+        .bind(user_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(ApiError::Database)?;
+    if is_admin != Some(true) {
+        return Err(ApiError::PermissionDenied);
+    }
+    Ok(())
+}
+
 #[derive(Debug, Deserialize)]
 pub struct ListShowcaseQuery {
     #[serde(default)]
@@ -193,8 +205,9 @@ pub async fn complete_learning_lesson(
 /// review.
 pub async fn admin_list_showcase_entries(
     State(state): State<AppState>,
-    AuthUser(_user_id): AuthUser,
+    AuthUser(user_id): AuthUser,
 ) -> ApiResult<Json<Vec<ShowcaseEntry>>> {
+    require_site_admin(state.db.pool(), user_id).await?;
     let entries = ShowcaseEntry::list_all(state.db.pool(), MAX_LIMIT)
         .await
         .map_err(ApiError::Database)?;
@@ -228,6 +241,7 @@ pub async fn admin_create_showcase_entry(
     Json(body): Json<AdminCreateShowcaseRequest>,
 ) -> ApiResult<Json<ShowcaseEntry>> {
     use mockforge_registry_core::models::showcase::CreateShowcaseEntry;
+    require_site_admin(state.db.pool(), user_id).await?;
     if body.slug.trim().is_empty() || body.title.trim().is_empty() {
         return Err(ApiError::InvalidRequest("slug and title are required".into()));
     }
@@ -266,11 +280,12 @@ pub struct AdminUpdateShowcaseRequest {
 
 pub async fn admin_update_showcase_entry(
     State(state): State<AppState>,
-    AuthUser(_user_id): AuthUser,
+    AuthUser(user_id): AuthUser,
     Path(id): Path<Uuid>,
     Json(body): Json<AdminUpdateShowcaseRequest>,
 ) -> ApiResult<Json<ShowcaseEntry>> {
     let pool = state.db.pool();
+    require_site_admin(pool, user_id).await?;
     let mut current = ShowcaseEntry::find_by_id(pool, id)
         .await
         .map_err(ApiError::Database)?
@@ -293,9 +308,10 @@ pub async fn admin_update_showcase_entry(
 
 pub async fn admin_delete_showcase_entry(
     State(state): State<AppState>,
-    AuthUser(_user_id): AuthUser,
+    AuthUser(user_id): AuthUser,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<serde_json::Value>> {
+    require_site_admin(state.db.pool(), user_id).await?;
     let deleted = ShowcaseEntry::delete(state.db.pool(), id).await.map_err(ApiError::Database)?;
     if !deleted {
         return Err(ApiError::InvalidRequest("Showcase entry not found".into()));

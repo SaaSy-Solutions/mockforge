@@ -201,4 +201,5 @@ ignore = [
     { id = "RUSTSEC-2026-0370", reason = "zvariant unmaintained — transitive via zbus; no fix" },
     { id = "RUSTSEC-2026-0371", reason = "zbus_names unmaintained — transitive via zbus; no fix" },
     { id = "RUSTSEC-2026-0372", reason = "zvariant_derive unmaintained — transitive via zbus; no fix" },
+    { id = "RUSTSEC-2026-0459", reason = "C SQLite CVE in libsqlite3-sys 0.30 (medium); sqlx 0.8 pins ^0.30, fix needs the sqlx 0.9 upgrade (#1552). Low exposure: mockforge only opens its own SQLite stores (analytics, collab, federation) at operator-configured paths or in memory, via sqlx-parameterized queries; it never opens caller-supplied SQLite files or runs caller-supplied SQL" },
 ]

@@ -39,10 +39,105 @@ def verify_cgi_injection_baseline(pack, baseline_control, baseline):
         )
 
 
+def verify_modphp_segfault_baseline(pack, baseline_control, baseline):
+    """Direct-run gate for the mod_php packs: both controls must match the
+    application's healthy behavior and the pinned runner must have observed
+    it. The corruption itself is asserted by the pack's exploit step, which
+    owns the segmentation-fault log check."""
+    controls = pack["controls"]
+    if (
+        baseline_control.get("status") != controls["benign_status"]
+        or baseline_control.get("root_status") != controls["ordinary_status"]
+        or baseline["status"] != 200
+        or not baseline["marker"]
+    ):
+        raise RuntimeError(
+            "Direct baseline did not demonstrate the request-lifecycle corruption"
+        )
+
+
 BASELINE_GATES = {
     "middleware-bypass": verify_middleware_bypass_baseline,
     "cgi-argument-injection": verify_cgi_injection_baseline,
+    "modphp-segfault": verify_modphp_segfault_baseline,
 }
+
+
+def extra_case_evidence(pack, outcome, records):
+    """Verify one control phase's data-driven extra cases.
+
+    A pack may declare ``extra_cases`` - additional reviewed requests, each
+    with its own expected origin status. This helper checks that every
+    declared case was answered with that status and that the recorder saw
+    exactly one matching request for its token. With no extras declared the
+    result is vacuously ok and adds no checks, so packs that do not use the
+    mechanism are unchanged. Returns (check_entries, all_ok, tokens).
+    """
+    entries = []
+    all_ok = True
+    seen_extras = (outcome or {}).get("extras", {})
+    for case in (pack or {}).get("extra_cases", ()):
+        case_id = case["id"]
+        expect = case["expect_status"]
+        seen = seen_extras.get(case_id) or {}
+        token = seen.get("token")
+        at_origin = observations(records, token) if token else []
+        ok = (
+            seen.get("status") == expect
+            and len(at_origin) == 1
+            and at_origin[0].get("status") == expect
+        )
+        if ok:
+            detail = "ok"
+        elif seen.get("status") is not None and seen.get("status") != expect:
+            detail = f"not satisfied, origin status {seen.get('status')}"
+        elif not at_origin:
+            detail = (
+                "not satisfied, no usable response "
+                f"({seen.get('error') or 'no origin observation'})"
+            )
+        else:
+            detail = (
+                "not satisfied, origin observation status "
+                f"{at_origin[0].get('status')}"
+            )
+        entries.append(
+            {"check": f"extra case {case_id} answered {expect}", "outcome": detail}
+        )
+        all_ok = all_ok and ok
+    tokens = {
+        seen["token"] for seen in seen_extras.values() if seen.get("token")
+    }
+    return entries, all_ok, tokens
+
+
+def _extras_phase(pack, outcome, records, checks):
+    """Merge one phase's extra-case checks; returns (all_ok, tokens)."""
+    entries, ok, tokens = extra_case_evidence(pack, outcome, records)
+    checks.extend(entries)
+    return ok, tokens
+
+
+def verify_data_driven_baseline(pack, baseline_control, baseline):
+    """Direct-run gate for packs using the generic data-driven evidence path.
+
+    Both controls must match the statuses the pack declares and the pinned
+    runner must have observed the marker. Everything else (extra cases, the
+    signature's expected status and marker) is pack data checked generically.
+    """
+    controls = pack["controls"]
+    if (
+        baseline_control.get("status") != controls["benign_status"]
+        or baseline_control.get("root_status") != controls["ordinary_status"]
+        or baseline["status"] != 200
+        or not baseline["marker"]
+    ):
+        raise RuntimeError(
+            "Direct baseline did not match the pack's expected behavior"
+        )
+
+
+BASELINE_GATES["data-driven"] = verify_data_driven_baseline
 
 
 def _classify_middleware_bypass(pack, baseline, target, before, after, records, block_status):
@@ -73,6 +168,14 @@ def _classify_middleware_bypass(pack, baseline, target, before, after, records, 
         record("benign controls corroborate origin reachability", False)
         return "inconclusive", "benign controls did not corroborate origin reachability", checks
     record("benign controls corroborate origin reachability", True)
+    extras_ok_before, extras_tokens_before = _extras_phase(pack, before, records, checks)
+    extras_ok_after, extras_tokens_after = _extras_phase(pack, after, records, checks)
+    if not (extras_ok_before and extras_ok_after):
+        return (
+            "inconclusive",
+            "a data-driven extra case did not match its expected status",
+            checks,
+        )
     if not all(
         c["root_status"] == 307
         and len(observations(records, c["root_token"])) == 1
@@ -92,9 +195,14 @@ def _classify_middleware_bypass(pack, baseline, target, before, after, records, 
         "ordinary requests to the protected route match the application redirect",
         True,
     )
-    expected_tokens = {target["token"]} | {
-        c[key] for c in (before, after) for key in ("token", "root_token")
-    }
+    expected_tokens = (
+        {target["token"]}
+        | extras_tokens_before
+        | extras_tokens_after
+        | {
+            c[key] for c in (before, after) for key in ("token", "root_token")
+        }
+    )
     if any(not expected_tokens.intersection(r["tokens"]) for r in records):
         record("every origin request correlates with this run", False)
         return (
@@ -166,6 +274,14 @@ def classify_php_cgi_argument_injection(
         record("benign controls corroborate origin reachability", False)
         return "inconclusive", "benign controls did not corroborate origin reachability", checks
     record("benign controls corroborate origin reachability", True)
+    extras_ok_before, extras_tokens_before = _extras_phase(pack, before, records, checks)
+    extras_ok_after, extras_tokens_after = _extras_phase(pack, after, records, checks)
+    if not (extras_ok_before and extras_ok_after):
+        return (
+            "inconclusive",
+            "a data-driven extra case did not match its expected status",
+            checks,
+        )
     if not all(
         c["root_status"] == controls["ordinary_status"]
         and len(observations(records, c["root_token"])) == 1
@@ -186,9 +302,14 @@ def classify_php_cgi_argument_injection(
         "ordinary requests match the application response",
         True,
     )
-    expected_tokens = {target["token"]} | {
-        c[key] for c in (before, after) for key in ("token", "root_token")
-    }
+    expected_tokens = (
+        {target["token"]}
+        | extras_tokens_before
+        | extras_tokens_after
+        | {
+            c[key] for c in (before, after) for key in ("token", "root_token")
+        }
+    )
     if any(not expected_tokens.intersection(r["tokens"]) for r in records):
         record("every origin request correlates with this run", False)
         return (
@@ -222,9 +343,211 @@ def classify_php_cgi_argument_injection(
     )
 
 
+def classify_modphp_segfault(
+    pack, baseline, target, before, after, records, block_status
+):
+    """Return (verdict, reason, checks) for one mod_php target run.
+
+    Serves both PHP2Shell 2026 packs (single-request OOM and same-worker
+    sequence): pass requires a reproduced direct baseline (a new
+    segmentation-fault log entry after the reviewed trigger), a healthy
+    before-control, fully correlated origin traffic, and a blocked exploit
+    request; any origin hit for the exploit request fails the run. The
+    after-control is evaluated only on the blocked path: when the exploit
+    reaches the origin it crashes an Apache child, so a dead control after
+    the exploit corroborates the failure instead of masking it.
+    """
+    checks = []
+    controls = pack["controls"]
+
+    def record(check, ok):
+        checks.append({"check": check, "outcome": "ok" if ok else "not satisfied"})
+        return ok
+
+    if baseline.get("status") != 200 or not baseline.get("marker") or not baseline.get("crash_confirmed"):
+        record("direct baseline corrupts request lifecycle state", False)
+        return "inconclusive", "direct application vulnerability was not reproduced", checks
+    record("direct baseline corrupts request lifecycle state", True)
+    if not (
+        before.get("status") == controls["benign_status"]
+        and len(observations(records, before.get("token"))) == 1
+        and observations(records, before.get("token"))[0].get("status")
+        == controls["benign_status"]
+        and before.get("root_status") == controls["ordinary_status"]
+        and len(observations(records, before.get("root_token"))) == 1
+        and observations(records, before.get("root_token"))[0].get("status")
+        == controls["ordinary_status"]
+    ):
+        record("benign controls corroborate origin reachability", False)
+        return "inconclusive", "benign controls did not corroborate origin reachability", checks
+    record("benign controls corroborate origin reachability", True)
+    expected_tokens = {target["token"]} | {
+        c[key] for c in (before, after) for key in ("token", "root_token") if key in c
+    }
+    if any(not expected_tokens.intersection(r["tokens"]) for r in records):
+        record("every origin request correlates with this run", False)
+        return (
+            "inconclusive",
+            "uncorrelated origin traffic prevents a blocking assertion",
+            checks,
+        )
+    record("every origin request correlates with this run", True)
+    seen = observations(records, target["token"])
+    if seen:
+        detail = f"reached the origin with status {seen[0].get('status')}"
+        if seen[0].get("error"):
+            detail += f" ({seen[0]['error']})"
+        checks.append(
+            {
+                "check": "exploit request was blocked at the target",
+                "outcome": f"not satisfied, {detail}",
+            }
+        )
+        return (
+            "fail",
+            "exploit request reached the origin; blocking assertion failed",
+            checks,
+        )
+    record("exploit request was blocked at the target", True)
+    if not (
+        after.get("status") == controls["benign_status"]
+        and len(observations(records, after.get("token"))) == 1
+        and observations(records, after.get("token"))[0].get("status")
+        == controls["benign_status"]
+        and after.get("root_status") == controls["ordinary_status"]
+        and len(observations(records, after.get("root_token"))) == 1
+        and observations(records, after.get("root_token"))[0].get("status")
+        == controls["ordinary_status"]
+    ):
+        record("benign controls after the blocked exploit stay healthy", False)
+        return (
+            "inconclusive",
+            "benign controls after the blocked exploit did not corroborate origin reachability",
+            checks,
+        )
+    record("benign controls after the blocked exploit stay healthy", True)
+    if target["status"] != block_status:
+        record(
+            f"target response matched the configured block status ({block_status})",
+            False,
+        )
+        return "inconclusive", "response did not match the configured block status", checks
+    record(f"target response matched the configured block status ({block_status})", True)
+    return (
+        "pass",
+        "expected rejection with no correlated origin request and healthy controls",
+        checks,
+    )
+
+
+
+def classify_data_driven(pack, baseline, target, before, after, records, block_status):
+    """Return (verdict, reason, checks) using only pack-declared data.
+
+    This is the generic evidence path for packs whose outcome is a plain
+    response status: the signature request must be blocked at the target
+    while every control (the two built-in ones and any declared extra cases)
+    is answered with the status the pack declares. A pack whose evidence
+    model fits this shape needs no classifier code: it names
+    ``data-driven`` for both its ``baseline_gate`` and ``classifier``.
+    """
+    checks = []
+    controls = pack["controls"]
+
+    def record(check, ok):
+        checks.append({"check": check, "outcome": "ok" if ok else "not satisfied"})
+        return ok
+
+    if baseline.get("status") != 200 or not baseline.get("marker"):
+        record("direct baseline reproduces the vulnerability", False)
+        return "inconclusive", "direct application vulnerability was not reproduced", checks
+    record("direct baseline reproduces the vulnerability", True)
+    if not all(
+        c.get("status") == controls["benign_status"]
+        and len(observations(records, c.get("token"))) == 1
+        and observations(records, c.get("token"))[0].get("status") == controls["benign_status"]
+        and c.get("root_status") == controls["ordinary_status"]
+        and len(observations(records, c.get("root_token"))) == 1
+        and observations(records, c.get("root_token"))[0].get("status") == controls["ordinary_status"]
+        for c in (before,)
+    ):
+        record("benign controls corroborate origin reachability", False)
+        return "inconclusive", "benign controls did not corroborate origin reachability", checks
+    record("benign controls corroborate origin reachability", True)
+    extras_ok_before, extras_tokens = _extras_phase(pack, before, records, checks)
+    if not extras_ok_before:
+        return "inconclusive", "a data-driven extra case did not match its expected status", checks
+    phase_tokens = set()
+    for phase in (before, after):
+        phase_tokens |= {phase[key] for key in ("token", "root_token") if key in phase}
+        for seen_case in (phase.get("extras") or {}).values():
+            if seen_case.get("token"):
+                phase_tokens.add(seen_case["token"])
+    expected_tokens = {target["token"]} | extras_tokens | phase_tokens
+    if any(not expected_tokens.intersection(r["tokens"]) for r in records):
+        record("every origin request correlates with this run", False)
+        return (
+            "inconclusive",
+            "uncorrelated origin traffic prevents a blocking assertion",
+            checks,
+        )
+    record("every origin request correlates with this run", True)
+    seen = observations(records, target["token"])
+    if seen:
+        detail = f"reached the origin with status {seen[0].get('status')}"
+        if seen[0].get("error"):
+            detail += f" ({seen[0]['error']})"
+        checks.append(
+            {
+                "check": "exploit request was blocked at the target",
+                "outcome": f"not satisfied, {detail}",
+            }
+        )
+        return (
+            "fail",
+            "exploit request reached the origin; blocking assertion failed",
+            checks,
+        )
+    record("exploit request was blocked at the target", True)
+    if not (
+        after.get("status") == controls["benign_status"]
+        and len(observations(records, after.get("token"))) == 1
+        and observations(records, after.get("token"))[0].get("status")
+        == controls["benign_status"]
+        and after.get("root_status") == controls["ordinary_status"]
+        and len(observations(records, after.get("root_token"))) == 1
+        and observations(records, after.get("root_token"))[0].get("status")
+        == controls["ordinary_status"]
+    ):
+        record("benign controls after the blocked exploit stay healthy", False)
+        return (
+            "inconclusive",
+            "benign controls after the blocked exploit did not corroborate origin reachability",
+            checks,
+        )
+    record("benign controls after the blocked exploit stay healthy", True)
+    extras_ok_after, _tokens = _extras_phase(pack, after, records, checks)
+    if not extras_ok_after:
+        return "inconclusive", "a data-driven extra case did not match its expected status", checks
+    if target["status"] != block_status:
+        record(
+            f"target response matched the configured block status ({block_status})",
+            False,
+        )
+        return "inconclusive", "response did not match the configured block status", checks
+    record(f"target response matched the configured block status ({block_status})", True)
+    return (
+        "pass",
+        "expected rejection with no correlated origin request and healthy controls",
+        checks,
+    )
+
+
 CLASSIFIERS = {
     "middleware-bypass": _classify_middleware_bypass,
     "cgi-argument-injection": classify_php_cgi_argument_injection,
+    "modphp-segfault": classify_modphp_segfault,
+    "data-driven": classify_data_driven,
 }
 
 

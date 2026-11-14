@@ -32,7 +32,64 @@ def completed(stdout="", returncode=0):
     return subprocess.CompletedProcess([], returncode, stdout, "")
 
 
+def completed_output(stdout="", stderr="", returncode=0):
+    return subprocess.CompletedProcess([], returncode, stdout, stderr)
+
+
 class LifecycleTests(unittest.TestCase):
+    def test_pack_capabilities_are_narrow_and_ordered_after_cap_drop(self):
+        for cve in ("CVE-2026-109618", "CVE-2026-109619"):
+            with self.subTest(cve=cve), tempfile.TemporaryDirectory() as directory:
+                with patch.object(
+                    engine,
+                    "command",
+                    side_effect=[
+                        completed(),
+                        completed("127.0.0.1:12345\n"),
+                        completed("application log"),
+                    ],
+                ) as command, patch.object(engine, "request", return_value=(200, [], b"ok")), patch.object(
+                    engine, "owned_remove"
+                ):
+                    with engine.lab(
+                        "docker", "our-run", Path(directory), catalog.PACKS[cve]
+                    ):
+                        pass
+                run_args = command.call_args_list[0].args[0]
+                drop = run_args.index("--cap-drop=ALL")
+                add_uid = run_args.index("--cap-add=SETUID")
+                add_gid = run_args.index("--cap-add=SETGID")
+                self.assertLess(drop, add_uid)
+                self.assertLess(drop, add_gid)
+                self.assertLess(add_uid, add_gid)
+                self.assertIn("--security-opt=no-new-privileges", run_args)
+
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(
+                engine, "command", side_effect=[completed(), completed("127.0.0.1:12345\n"), completed("log")]
+            ) as command, patch.object(engine, "request", return_value=(200, [], b"ok")), patch.object(
+                engine, "owned_remove"
+            ):
+                with engine.lab(
+                    "docker", "our-run", Path(directory), catalog.PACKS["CVE-2025-29927"]
+                ):
+                    pass
+            run_args = command.call_args_list[0].args[0]
+            self.assertIn("--cap-drop=ALL", run_args)
+            self.assertFalse(any(arg.startswith("--cap-add=") for arg in run_args))
+
+    def test_lab_rejects_unapproved_app_capability(self):
+        pack = catalog.PACKS["CVE-2026-109618"]
+        pack = {**pack, "app": {**pack["app"], "cap_add": ["SYS_ADMIN"]}}
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(engine, "command") as command, patch.object(
+                engine, "owned_remove"
+            ):
+                with self.assertRaisesRegex(RuntimeError, "allowlist: SETUID, SETGID, CHOWN"):
+                    with engine.lab("docker", "our-run", Path(directory), pack):
+                        pass
+            command.assert_not_called()
+
     def test_cleanup_refuses_unowned_container(self):
         for labels in ({}, {catalog.LABEL: "another-run"}):
             with self.subTest(labels=labels):
@@ -133,8 +190,91 @@ class LifecycleTests(unittest.TestCase):
                 (Path(directory) / "application.log").read_text(), "application log"
             )
 
+    def test_missing_port_mapping_raises_clean_diagnostic(self):
+        # When the container never binds app["port"] (it exited or failed to
+        # start), `docker port` returns no mapping. The engine must raise the
+        # readiness RuntimeError that run() catches, not let an IndexError
+        # escape as a raw traceback. General robustness fix for every pack.
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(
+                engine,
+                "command",
+                side_effect=[
+                    completed(),  # run -d
+                    completed(""),  # port -> no mapping
+                    completed("application log"),  # logs
+                ],
+            ), patch.object(engine, "owned_remove"):
+                with self.assertRaisesRegex(RuntimeError, "failed to start"):
+                    with engine.lab(
+                        "docker", "our-run", Path(directory), catalog.PACKS[catalog.CVE]
+                    ):
+                        pass
+
 
 class InputTests(unittest.TestCase):
+    def test_unverified_packs_are_hidden_and_refused_unless_opted_in(self):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(lab.main(["list"]), 0)
+        packs = json.loads(output.getvalue())
+        self.assertIn("CVE-2025-29927", packs)
+        for cve in ("CVE-2026-109618", "CVE-2026-109619"):
+            self.assertNotIn(cve, packs)
+
+        for action in ("run", "prepare"):
+            err = io.StringIO()
+            with self.subTest(action=action), patch.object(lab, "prepare") as prepare, patch.object(lab, "run") as run, contextlib.redirect_stderr(err):
+                args = [action, "CVE-2026-109618"]
+                if action == "run":
+                    args += ["--output-dir", "unused-output"]
+                self.assertEqual(lab.main(args), 1)
+                self.assertIn(
+                    "CVE-2026-109618 is an unverified lab pack (its trigger has not reproduced on a lab host); pass --include-unverified to run it for development",
+                    err.getvalue(),
+                )
+                prepare.assert_not_called()
+                run.assert_not_called()
+
+    def test_include_unverified_lists_and_runs_development_pack(self):
+        for flag_order in (
+            ["--include-unverified", "list"],
+        ):
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                self.assertEqual(lab.main(flag_order), 0)
+            packs = json.loads(output.getvalue())
+            self.assertIn("CVE-2026-109618", packs)
+            self.assertIn("CVE-2026-109619", packs)
+
+        with patch.object(lab, "prepare") as prepare:
+            self.assertEqual(
+                lab.main(["--include-unverified", "prepare", "CVE-2026-109618"]),
+                0,
+            )
+        prepare.assert_called_once()
+
+        with patch.object(lab, "run", return_value=0) as run:
+            self.assertEqual(
+                lab.main([
+                    "--include-unverified", "run", "CVE-2026-109618",
+                    "--output-dir", "unused-output",
+                ]),
+                0,
+            )
+        run.assert_called_once()
+
+    def test_include_unverified_is_helped_and_global_only(self):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output), self.assertRaises(SystemExit) as error:
+            lab.main(["--help"])
+        self.assertEqual(error.exception.code, 0)
+        self.assertIn("--include-unverified", output.getvalue())
+
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
+            lab.main(["down", "--include-unverified", "--output-dir", "unused-output"])
+        self.assertEqual(error.exception.code, 2)
+
     def test_unsupported_cve_is_rejected_before_download(self):
         for action in ("prepare", "run"):
             with self.subTest(action=action), patch.object(
@@ -774,7 +914,7 @@ class RunPlanTests(unittest.TestCase):
         with contextlib.redirect_stdout(stdout):
             self.assertEqual(lab.main(["list"]), 0)
         packs = json.loads(stdout.getvalue())
-        self.assertEqual(set(packs), set(catalog.PACKS))
+        self.assertEqual(set(packs), {"CVE-2025-29927", "CVE-2024-4577"})
         for cve, entry in packs.items():
             with self.subTest(cve=cve):
                 self.assertEqual(entry["origin_port"], 18082)
@@ -795,6 +935,358 @@ class RunPlanTests(unittest.TestCase):
         self.assertNotIn("pending", "\n".join(lines))
 
 
+
+class Php2Shell2026PackTests(unittest.TestCase):
+    """The PHP2Shell 2026 packs (CVE-2026-109618/109619) are distinct from
+    the CVE-2024-4577 pack and carry advisory-derived, digest-pinned input."""
+
+    def setUp(self):
+        self.packs = (
+            catalog.PACKS["CVE-2026-109618"],
+            catalog.PACKS["CVE-2026-109619"],
+        )
+
+    def test_packs_are_distinct_from_the_2024_windows_cgi_pack(self):
+        legacy = catalog.PACKS["CVE-2024-4577"]
+        for pack in self.packs:
+            self.assertNotEqual(pack["catalog"]["cve"], legacy["catalog"]["cve"])
+            self.assertNotEqual(pack["catalog"]["title"], legacy["catalog"]["title"])
+            self.assertNotEqual(
+                pack["catalog"]["application_image"],
+                legacy["catalog"]["application_image"],
+            )
+            self.assertIn("PHP2Shell 2026", pack["catalog"]["title"])
+            self.assertNotIn("Wine", pack["catalog"]["application_version"])
+
+    def test_packs_carry_runner_config(self):
+        for pack in self.packs:
+            for key in ("catalog", "probe", "app", "controls", "exploit", "application_files"):
+                self.assertIn(key, pack)
+            # Unprivileged port: the harness runs --cap-drop=ALL, so Apache
+            # cannot bind :80 (no CAP_NET_BIND_SERVICE).
+            self.assertEqual(pack["app"]["port"], "8080/tcp")
+            self.assertEqual(
+                pack["app"]["readiness"], {"path": "/health.php", "status": 200}
+            )
+            self.assertTrue(pack["app"]["mounts"])
+            mount_targets = {m["container"] for m in pack["app"]["mounts"]}
+            self.assertIn("/etc/apache2/ports.conf", mount_targets)
+            self.assertIn(
+                "/etc/apache2/sites-enabled/000-default.conf", mount_targets
+            )
+
+    def test_images_are_digest_pinned_and_verification_is_declared(self):
+        for pack in self.packs:
+            self.assertIn("@sha256:", pack["catalog"]["application_image"])
+            self.assertIn("@sha256:", pack["catalog"]["runner_image"])
+            self.assertEqual(
+                pack["catalog"]["verification_status"],
+                "pending-lab-host-verification",
+            )
+        self.assertEqual(
+            self.packs[0]["catalog"]["application_image"],
+            self.packs[1]["catalog"]["application_image"],
+        )
+
+    def test_application_files_review_the_trigger_configuration(self):
+        files = self.packs[0]["application_files"]
+        self.assertEqual(files, self.packs[1]["application_files"])
+        self.assertIn("memory_limit=16M", files["lab.ini"])
+        self.assertIn("post_max_size=48M", files["lab.ini"])
+        self.assertIn("mockforge-php2shell-2026", files["health.php"])
+        self.assertIn("X-Worker-Pid", files["index.php"])
+        self.assertIn("php_value memory_limit", files[".htaccess"])
+        self.assertIn("Listen 8080", files["ports.conf"])
+        self.assertIn("*:8080", files["000-default.conf"])
+
+    def test_exploit_steps_declare_the_advisory_choreography(self):
+        self.assertEqual(self.packs[0]["baseline_exploit"], "modphp-oom")
+        self.assertEqual(self.packs[0]["target_exploit"], "modphp-oom")
+        self.assertEqual(self.packs[1]["baseline_exploit"], "modphp-worker-sequence")
+        self.assertEqual(self.packs[1]["target_exploit"], "modphp-worker-sequence")
+        for pack in self.packs:
+            self.assertGreaterEqual(
+                pack["exploit"]["max_forwarded_body"], 32 * 1024 * 1024
+            )
+            self.assertIn("__mockforge_cve={token}", pack["exploit"]["path"])
+
+    def test_trigger_bodies_match_the_pinned_digests(self):
+        import hashlib
+
+        import cve_lab_payloads as payloads
+
+        self.assertEqual(
+            hashlib.sha256(payloads.oom_body()).hexdigest(), payloads.OOM_BODY_SHA256
+        )
+        self.assertEqual(
+            hashlib.sha256(payloads.oom_body_with_progress()).hexdigest(),
+            payloads.OOM_BODY_WITH_PROGRESS_SHA256,
+        )
+        self.assertEqual(
+            hashlib.sha256(payloads.consumer_body()).hexdigest(),
+            payloads.CONSUMER_BODY_SHA256,
+        )
+
+    def test_producer_body_exceeds_the_reviewed_memory_limit(self):
+        import cve_lab_payloads as payloads
+
+        # memory_limit=16M in the reviewed lab configuration; the parsed
+        # part headers must exceed it to reach the OOM bail-out.
+        self.assertGreater(len(payloads.oom_body()), 16 * 1024 * 1024)
+        self.assertGreater(len(payloads.oom_body_with_progress()), 16 * 1024 * 1024)
+        self.assertLess(len(payloads.oom_body()), 48 * 1024 * 1024)
+        self.assertIn(b"PHP_SESSION_UPLOAD_PROGRESS", payloads.oom_body_with_progress())
+        self.assertIn(b"PHP_SESSION_UPLOAD_PROGRESS", payloads.consumer_body())
+        self.assertNotIn(b"PHP_SESSION_UPLOAD_PROGRESS", payloads.oom_body())
+
+    def test_probe_template_observes_a_healthy_request(self):
+        for pack in self.packs:
+            text = nuclei.template(pack, "run1-baseline")
+            self.assertIn("/health.php?__mockforge_cve=run1-baseline", text)
+            self.assertIn("method: GET", text)
+
+    def test_prepare_refuses_unpinned_images_before_any_engine_call(self):
+        import copy
+
+        for pack in self.packs:
+            unpinned = copy.deepcopy(pack)
+            unpinned["catalog"]["application_image"] = "docker.io/library/php:8.4-apache"
+            with patch.object(engine, "command") as command:
+                with self.assertRaisesRegex(RuntimeError, "not pinned by digest"):
+                    engine.prepare("docker", unpinned)
+            command.assert_not_called()
+
+    def test_run_of_the_packs_stops_at_the_platform_gate_honestly(self):
+        # Simulate the platform gate directly so this remains engine-free on
+        # hosts where Docker is available.
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as directory, contextlib.redirect_stdout(
+            stdout
+        ), patch.object(engine, "doctor", side_effect=RuntimeError("unsupported platform")), patch.object(engine, "command") as command:
+            output = Path(directory) / "out"
+            self.assertEqual(
+                lab.main([
+                    "--include-unverified", "run", "CVE-2026-109618",
+                    "--output-dir", str(output),
+                ]), 1
+            )
+            report = json.loads((output / "report.json").read_text())
+        command.assert_not_called()
+        self.assertEqual(report["verdict"], "inconclusive")
+
+
+class Php2Shell2026GateTests(unittest.TestCase):
+    """The mod_php gate demands healthy controls and the observed marker."""
+
+    def setUp(self):
+        self.pack = catalog.PACKS["CVE-2026-109618"]
+        self.control = {"status": 200, "root_status": 200}
+        self.baseline = {"status": 200, "marker": True, "crash_confirmed": True}
+
+    def test_gate_accepts_a_reproduced_direct_run(self):
+        evidence.BASELINE_GATES["modphp-segfault"](
+            self.pack, self.control, self.baseline
+        )
+
+    def test_gate_rejects_mismatched_direct_runs(self):
+        for control, baseline in (
+            ({"status": 500, "root_status": 200}, self.baseline),
+            ({"status": 200, "root_status": 404}, self.baseline),
+            ({"status": 200, "root_status": 200}, {"status": 200, "marker": False}),
+        ):
+            with self.subTest(control=control):
+                with self.assertRaisesRegex(
+                    RuntimeError, "request-lifecycle corruption"
+                ):
+                    evidence.BASELINE_GATES["modphp-segfault"](
+                        self.pack, control, baseline
+                    )
+
+
+class Php2Shell2026VerdictTests(unittest.TestCase):
+    """The mod_php classifier mirrors the blocking semantics for both packs."""
+
+    def setUp(self):
+        self.pack = catalog.PACKS["CVE-2026-109618"]
+        self.baseline = {"status": 200, "marker": True, "crash_confirmed": True}
+        self.target = {"token": "attack", "status": 403, "marker": False}
+        self.before = {
+            "token": "before",
+            "status": 200,
+            "root_token": "before-root",
+            "root_status": 200,
+        }
+        self.after = {
+            "token": "after",
+            "status": 200,
+            "root_token": "after-root",
+            "root_status": 200,
+        }
+        self.records = [
+            {"tokens": [control[key]], "status": status}
+            for control in (self.before, self.after)
+            for key, status in (("token", 200), ("root_token", 200))
+        ]
+
+    def outcome(self):
+        return evidence.CLASSIFIERS["modphp-segfault"](
+            self.pack, self.baseline, self.target, self.before, self.after, self.records, 403
+        )
+
+    def verdict(self):
+        return self.outcome()[0]
+
+    def test_blocked_exploit_with_healthy_controls_passes(self):
+        self.assertEqual(self.verdict(), "pass")
+
+    def test_baseline_must_show_the_confirmed_corruption(self):
+        for baseline in (
+            {"status": 200, "marker": True},
+            {"status": 200, "marker": True, "crash_confirmed": False},
+            {"status": 200, "marker": False, "crash_confirmed": True},
+        ):
+            with self.subTest(baseline=baseline):
+                self.baseline = baseline
+                self.assertEqual(self.verdict(), "inconclusive")
+
+    def test_failed_before_control_is_inconclusive(self):
+        self.before["status"] = 503
+        self.assertEqual(self.verdict(), "inconclusive")
+
+    def test_exploit_reaching_origin_fails_even_when_it_crashed_the_worker(self):
+        self.records.append(
+            {"tokens": ["attack"], "status": None, "error": "ConnectionReset"}
+        )
+        self.after = {
+            "token": self.after["token"],
+            "root_token": self.after["root_token"],
+            "error": "connection refused",
+        }
+        verdict, reason, checks = self.outcome()
+        self.assertEqual(verdict, "fail")
+        self.assertIn("reached the origin", reason)
+        blocked = [c for c in checks if c["check"] == "exploit request was blocked at the target"]
+        self.assertEqual(len(blocked), 1)
+        self.assertIn("reached the origin", blocked[0]["outcome"])
+
+    def test_blocked_exploit_with_dead_after_control_is_inconclusive(self):
+        self.after = {
+            "token": self.after["token"],
+            "root_token": self.after["root_token"],
+            "error": "connection refused",
+        }
+        self.assertEqual(self.verdict(), "inconclusive")
+
+    def test_blanket_block_of_the_ordinary_path_is_inconclusive(self):
+        self.before["root_status"] = 403
+        self.assertEqual(self.verdict(), "inconclusive")
+
+    def test_uncorrelated_origin_request_cannot_pass(self):
+        self.records.append({"tokens": [None, None], "status": 200})
+        self.assertEqual(self.verdict(), "inconclusive")
+
+
+class Php2Shell2026ExploitStepTests(unittest.TestCase):
+    """The mod_php steps confirm baselines from the segfault log marker."""
+
+    def setUp(self):
+        import cve_lab_exploits as exploits
+
+        self.exploits = exploits
+        self.pack = catalog.PACKS["CVE-2026-109618"]
+
+    def test_baseline_confirms_from_the_log_marker_delta(self):
+        result = {"status": 200, "error": None, "worker_pid": "42", "body_preview": "upload processed"}
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+            self.exploits, "_post_tolerant", return_value=result
+        ), patch.object(
+            self.exploits,
+            "container_log",
+            side_effect=["log", "log crash exit signal Segmentation fault (11)"],
+        ):
+            outcome = self.exploits.modphp_oom_baseline(
+                "docker", "http://127.0.0.1:1", Path(directory), "run1", self.pack
+            )
+            self.assertTrue(outcome["crash_confirmed"])
+            evidence_file = json.loads(
+                (Path(directory) / "baseline-exploit.json").read_text()
+            )
+        self.assertEqual(evidence_file["segfault_markers_before"], 0)
+        self.assertEqual(evidence_file["segfault_markers_after"], 1)
+        self.assertTrue(evidence_file["segfault_confirmed"])
+
+    def test_baseline_without_a_marker_delta_is_refused(self):
+        result = {"status": 200, "error": None, "worker_pid": "42", "body_preview": "upload processed"}
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+            self.exploits, "_post_tolerant", return_value=result
+        ), patch.object(
+            self.exploits, "container_log", side_effect=["log", "log"]
+        ):
+            with self.assertRaisesRegex(RuntimeError, "request-lifecycle corruption"):
+                self.exploits.modphp_oom_baseline(
+                    "docker", "http://127.0.0.1:1", Path(directory), "run1", self.pack
+                )
+
+    def test_sequence_baseline_confirms_and_records_worker_identity(self):
+        pack = catalog.PACKS["CVE-2026-109619"]
+        phases = [
+            {"path": "/upload.php", "status": None, "error": "ConnectionReset", "worker_pid": None},
+            {"path": "/upload.php", "status": 200, "error": None, "worker_pid": "42"},
+        ]
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+            self.exploits, "_post_sequence", return_value=phases
+        ), patch.object(
+            self.exploits,
+            "container_log",
+            side_effect=["log", "log crash exit signal Segmentation fault (11)"],
+        ):
+            outcome = self.exploits.modphp_sequence_baseline(
+                "docker", "http://127.0.0.1:1", Path(directory), "run1", pack
+            )
+            self.assertTrue(outcome["crash_confirmed"])
+            evidence_file = json.loads(
+                (Path(directory) / "baseline-exploit.json").read_text()
+            )
+        self.assertEqual(evidence_file["worker_pids_seen"], ["42"])
+        self.assertEqual(evidence_file["same_worker_observed"], True)
+        self.assertTrue(evidence_file["segfault_confirmed"])
+
+    def test_target_steps_report_transport_evidence(self):
+        result = {"status": 403, "error": None, "worker_pid": "7", "body_preview": ""}
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+            self.exploits, "_post_tolerant", return_value=result
+        ):
+            outcome = self.exploits.modphp_oom_target(
+                "docker", "http://127.0.0.1:1", Path(directory), "run1", self.pack
+            )
+        self.assertEqual(outcome["status"], 403)
+        self.assertEqual(outcome["token"], "run1-target")
+
+    def test_sequence_steps_send_producer_then_consumer_on_one_connection(self):
+        import cve_lab_payloads as payloads
+
+        pack = catalog.PACKS["CVE-2026-109619"]
+        seen_phases = []
+
+        def record_phases(host, port, phases, timeout):
+            seen_phases.extend(phases)
+            return [
+                {"path": phases[0][0], "status": 200, "error": None, "worker_pid": "7"},
+                {"path": phases[1][0], "status": 403, "error": None, "worker_pid": "7"},
+            ]
+
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+            self.exploits, "_post_sequence", side_effect=record_phases
+        ):
+            self.exploits.modphp_sequence_target(
+                "docker", "http://127.0.0.1:1", Path(directory), "run1", pack
+            )
+        self.assertEqual(len(seen_phases), 2)
+        first_path, _headers, first_body = seen_phases[0]
+        second_path, _headers, second_body = seen_phases[1]
+        self.assertEqual(first_path, second_path)
+        self.assertEqual(first_body, payloads.oom_body_with_progress())
+        self.assertEqual(second_body, payloads.consumer_body())
 
 class TlsVerifyTests(unittest.TestCase):
     """--skip-tls-verify is an explicit opt-in; the default path verifies."""
@@ -894,6 +1386,469 @@ class TlsVerifyTests(unittest.TestCase):
                 )
                 self.assertIn("-insecure", command.call_args.args[0])
 
+    def test_probe_failure_writes_outputs_and_reports_stdout(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            pack = catalog.PACKS[catalog.CVE]
+            with patch.object(nuclei, "owned_remove"), patch.object(
+                nuclei,
+                "command",
+                return_value=completed_output(stdout="container failed", returncode=2),
+            ) as command:
+                with self.assertRaises(RuntimeError) as raised:
+                    nuclei.probe(
+                        "docker", "http://127.0.0.1:1", output, "baseline", "run1", pack
+                    )
+
+            message = str(raised.exception)
+            self.assertIn("baseline", message)
+            self.assertIn("code 2", message)
+            self.assertIn("container failed", message)
+            self.assertIn(str(output / "baseline.log"), message)
+            self.assertIn(str(output / "baseline.jsonl"), message)
+            self.assertTrue((output / "baseline.log").exists())
+            self.assertEqual((output / "baseline.log").read_text(), "")
+            self.assertEqual((output / "baseline.jsonl").read_text(), "container failed")
+            command.assert_called_once()
+            self.assertFalse(command.call_args.kwargs.get("check", True))
+
+    def test_probe_success_still_writes_findings_and_returns_observation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            pack = catalog.PACKS[catalog.CVE]
+            finding = json.dumps(
+                {
+                    "template-id": "mockforge-nextjs-29927-observation",
+                    "response": "HTTP/1.1 200 OK\r\n",
+                }
+            ) + "\n"
+            with patch.object(nuclei, "owned_remove"), patch.object(
+                nuclei,
+                "command",
+                return_value=completed_output(stdout=finding, stderr="debug output"),
+            ):
+                result = nuclei.probe(
+                    "docker", "http://127.0.0.1:1", output, "target", "run1", pack
+                )
+
+            self.assertEqual(result["status"], 200)
+            self.assertTrue((output / "target.jsonl").exists())
+            self.assertEqual((output / "target.jsonl").read_text(), finding)
+            self.assertEqual((output / "target.log").read_text(), "debug output")
+
+
+class DataDrivenCaseTests(unittest.TestCase):
+    """The data-driven case mechanism: extra cases are pack data, checked
+    generically, with no per-case code."""
+
+    def synthetic_pack(self):
+        return {
+            "catalog": {
+                "schema_version": 1,
+                "pack_revision": 1,
+                "cve": "CVE-0000-0001",
+                "title": "Synthetic data-driven pack",
+                "platform": "test",
+                "application_version": "synthetic application 1.0",
+                "application_image": "docker.io/example/app@sha256:" + "0" * 64,
+                "runner_version": "Nuclei 3.11.1",
+                "runner_image": "docker.io/projectdiscovery/nuclei@sha256:" + "5" * 64,
+                "references": [],
+                "coverage": "synthetic",
+                "origin_port": 18082,
+                "listen_address_guidance": "synthetic",
+            },
+            "probe": {
+                "template_id": "mockforge-synthetic-observation",
+                "template_name": "MockForge synthetic observation",
+                "method": "GET",
+                "path": "/?__mockforge_cve={token}",
+                "headers": {"X-Mockforge-Cve": "{token}"},
+                "body": None,
+                "signature_header": None,
+                "marker": "synthetic-marker",
+            },
+            "app": {
+                "port": "3000/tcp",
+                "env": {},
+                "readiness": {"path": "/", "status": 200},
+            },
+            "controls": {
+                "benign_path": "/benign?__mockforge_cve={token}",
+                "benign_status": 200,
+                "ordinary_path": "/?__mockforge_cve={token}",
+                "ordinary_status": 200,
+            },
+            "extra_cases": [
+                {
+                    "id": "robots",
+                    "path": "/robots.txt?__mockforge_cve={token}",
+                    "expect_status": 200,
+                },
+                {
+                    "id": "apiversion",
+                    "method": "GET",
+                    "path": "/api/version?__mockforge_cve={token}",
+                    "headers": {"Accept": "application/json"},
+                    "expect_status": 404,
+                },
+            ],
+            "baseline_gate": "data-driven",
+            "classifier": "data-driven",
+        }
+
+    def test_control_sends_extra_cases_and_returns_their_outcomes(self):
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+        seen = []
+
+        class Backend(BaseHTTPRequestHandler):
+            def _reply(self):
+                seen.append((self.command, self.path, dict(self.headers)))
+                self.send_response(404 if "api/version" in self.path else 200)
+                self.send_header("Content-Length", "2")
+                self.end_headers()
+                self.wfile.write(b"ok")
+
+            do_GET = _reply
+
+            def log_message(self, *_args):
+                pass
+
+        backend = ThreadingHTTPServer(("127.0.0.1", 0), Backend)
+        threading.Thread(target=backend.serve_forever, daemon=True).start()
+        self.addCleanup(backend.shutdown)
+        self.addCleanup(backend.server_close)
+        with socket.socket() as reservation:
+            reservation.bind(("127.0.0.1", 0))
+            recorder_port = reservation.getsockname()[1]
+        records = []
+        with transport.receiver(
+            recorder_port,
+            "127.0.0.1",
+            f"http://127.0.0.1:{backend.server_address[1]}",
+        ) as records:
+            outcome = transport.control(
+                self.synthetic_pack(), f"http://127.0.0.1:{recorder_port}", "run1", "phase"
+            )
+        self.assertEqual(outcome["status"], 200)
+        self.assertEqual(outcome["root_status"], 200)
+        self.assertEqual(set(outcome["extras"]), {"robots", "apiversion"})
+        self.assertEqual(outcome["extras"]["robots"]["status"], 200)
+        self.assertEqual(outcome["extras"]["apiversion"]["status"], 404)
+        self.assertTrue(
+            outcome["extras"]["robots"]["token"].startswith("run1-phase-")
+        )
+        self.assertIn("-robots", outcome["extras"]["robots"]["token"])
+        # every request reached the backend with its own correlation token
+        self.assertEqual(len(seen), 4)
+        api = [item for item in seen if "api/version" in item[1]][0]
+        self.assertEqual(
+            api[2].get("X-Mockforge-Cve"), outcome["extras"]["apiversion"]["token"]
+        )
+        self.assertEqual(api[2].get("Accept"), "application/json")
+        # the recorder observed all four with tokens
+        self.assertEqual(len(records), 4)
+        robots_records = [
+            record
+            for record in records
+            if outcome["extras"]["robots"]["token"] in record["tokens"]
+        ]
+        self.assertEqual(len(robots_records), 1)
+        self.assertEqual(robots_records[0]["status"], 200)
+
+    def test_extra_case_evidence_verifies_status_and_origin_observation(self):
+        pack = self.synthetic_pack()
+        outcome = {
+            "extras": {
+                "robots": {"token": "tok-robots", "status": 200},
+                "apiversion": {"token": "tok-api", "status": 404},
+            }
+        }
+        records = [
+            {"tokens": ["tok-robots"], "status": 200},
+            {"tokens": ["tok-api"], "status": 404},
+        ]
+        entries, ok, tokens = evidence.extra_case_evidence(pack, outcome, records)
+        self.assertTrue(ok)
+        self.assertEqual(len(entries), 2)
+        self.assertTrue(all(entry["outcome"] == "ok" for entry in entries))
+        self.assertEqual(tokens, {"tok-robots", "tok-api"})
+
+    def test_extra_case_evidence_fails_on_wrong_status(self):
+        pack = self.synthetic_pack()
+        outcome = {
+            "extras": {
+                "robots": {"token": "tok-robots", "status": 403},
+                "apiversion": {"token": "tok-api", "status": 404},
+            }
+        }
+        records = [
+            {"tokens": ["tok-robots"], "status": 403},
+            {"tokens": ["tok-api"], "status": 404},
+        ]
+        entries, ok, _tokens = evidence.extra_case_evidence(pack, outcome, records)
+        self.assertFalse(ok)
+        robots = [entry for entry in entries if "robots" in entry["check"]][0]
+        self.assertIn("origin status 403", robots["outcome"])
+
+    def test_extra_case_evidence_fails_when_the_origin_never_saw_it(self):
+        pack = self.synthetic_pack()
+        outcome = {
+            "extras": {
+                "robots": {"token": "tok-robots", "status": 200},
+                "apiversion": {"token": "tok-api", "status": 404},
+            }
+        }
+        entries, ok, _tokens = evidence.extra_case_evidence(pack, outcome, [])
+        self.assertFalse(ok)
+        robots = [entry for entry in entries if "robots" in entry["check"]][0]
+        self.assertIn("no origin observation", robots["outcome"])
+
+    def test_extra_case_evidence_fails_on_transport_error(self):
+        pack = self.synthetic_pack()
+        outcome = {
+            "extras": {
+                "robots": {"token": "tok-robots", "error": "connection refused"},
+                "apiversion": {"token": "tok-api", "status": 404},
+            }
+        }
+        records = [{"tokens": ["tok-api"], "status": 404}]
+        entries, ok, _tokens = evidence.extra_case_evidence(pack, outcome, records)
+        self.assertFalse(ok)
+        robots = [entry for entry in entries if "robots" in entry["check"]][0]
+        self.assertIn("connection refused", robots["outcome"])
+
+    def test_extra_case_evidence_is_vacuous_without_declared_cases(self):
+        import copy
+
+        pack = self.synthetic_pack()
+        del pack["extra_cases"]
+        entries, ok, tokens = evidence.extra_case_evidence(pack, {}, [])
+        self.assertEqual(entries, [])
+        self.assertTrue(ok)
+        self.assertEqual(tokens, set())
+        # legacy entry point (pack=None) stays vacuous too
+        entries, ok, tokens = evidence.extra_case_evidence(None, {}, [])
+        self.assertEqual((entries, ok, tokens), ([], True, set()))
+
+    def outcome_for(self, pack, **overrides):
+        baseline = overrides.get(
+            "baseline", {"status": 200, "marker": True}
+        )
+        target = overrides.get("target", {"token": "attack", "status": 403})
+        before = overrides.get(
+            "before",
+            {
+                "token": "before",
+                "status": 200,
+                "root_token": "before-root",
+                "root_status": 200,
+                "extras": {
+                    "robots": {"token": "before-robots", "status": 200},
+                    "apiversion": {"token": "before-api", "status": 404},
+                },
+            },
+        )
+        after = overrides.get(
+            "after",
+            {
+                "token": "after",
+                "status": 200,
+                "root_token": "after-root",
+                "root_status": 200,
+                "extras": {
+                    "robots": {"token": "after-robots", "status": 200},
+                    "apiversion": {"token": "after-api", "status": 404},
+                },
+            },
+        )
+        records = overrides.get(
+            "records",
+            [
+                {"tokens": ["before"], "status": 200},
+                {"tokens": ["before-root"], "status": 200},
+                {"tokens": ["before-robots"], "status": 200},
+                {"tokens": ["before-api"], "status": 404},
+                {"tokens": ["after"], "status": 200},
+                {"tokens": ["after-root"], "status": 200},
+                {"tokens": ["after-robots"], "status": 200},
+                {"tokens": ["after-api"], "status": 404},
+            ],
+        )
+        return evidence.CLASSIFIERS["data-driven"](
+            pack, baseline, target, before, after, records, 403
+        )
+
+    def test_data_driven_classifier_passes_a_healthy_blocked_run(self):
+        pack = self.synthetic_pack()
+        verdict, reason, checks = self.outcome_for(pack)
+        self.assertEqual(verdict, "pass")
+        names = [check["check"] for check in checks]
+        self.assertIn("extra case robots answered 200", names)
+        self.assertIn("extra case apiversion answered 404", names)
+        self.assertTrue(all(check["outcome"] == "ok" for check in checks))
+
+    def test_data_driven_classifier_fails_when_the_signature_reaches_the_origin(self):
+        pack = self.synthetic_pack()
+        records = [
+            {"tokens": ["before"], "status": 200},
+            {"tokens": ["before-root"], "status": 200},
+            {"tokens": ["before-robots"], "status": 200},
+            {"tokens": ["before-api"], "status": 404},
+            {"tokens": ["attack"], "status": 200},
+        ]
+        verdict, reason, checks = self.outcome_for(pack, records=records)
+        self.assertEqual(verdict, "fail")
+        self.assertIn("reached the origin", reason)
+
+    def test_data_driven_classifier_is_inconclusive_on_a_wrong_extra_status(self):
+        pack = self.synthetic_pack()
+        before = {
+            "token": "before",
+            "status": 200,
+            "root_token": "before-root",
+            "root_status": 200,
+            "extras": {
+                "robots": {"token": "before-robots", "status": 500},
+                "apiversion": {"token": "before-api", "status": 404},
+            },
+        }
+        records = [
+            {"tokens": ["before"], "status": 200},
+            {"tokens": ["before-root"], "status": 200},
+            {"tokens": ["before-robots"], "status": 500},
+            {"tokens": ["before-api"], "status": 404},
+            {"tokens": ["after"], "status": 200},
+            {"tokens": ["after-root"], "status": 200},
+            {"tokens": ["after-robots"], "status": 200},
+            {"tokens": ["after-api"], "status": 404},
+        ]
+        verdict, reason, checks = self.outcome_for(pack, before=before, records=records)
+        self.assertEqual(verdict, "inconclusive")
+        self.assertIn("extra case", reason)
+
+    def test_data_driven_classifier_is_inconclusive_on_a_wrong_block_status(self):
+        pack = self.synthetic_pack()
+        target = {"token": "attack", "status": 502}
+        verdict, _reason, _checks = self.outcome_for(pack, target=target)
+        self.assertEqual(verdict, "inconclusive")
+
+    def test_data_driven_classifier_is_inconclusive_when_the_baseline_marker_is_absent(
+        self,
+    ):
+        pack = self.synthetic_pack()
+        verdict, _reason, _checks = self.outcome_for(
+            pack, baseline={"status": 200, "marker": False}
+        )
+        self.assertEqual(verdict, "inconclusive")
+
+    def test_data_driven_classifier_correlates_extra_tokens(self):
+        # an uncorrelated record (no expected token) blocks a pass
+        pack = self.synthetic_pack()
+        records = [
+            {"tokens": ["before"], "status": 200},
+            {"tokens": ["before-root"], "status": 200},
+            {"tokens": ["before-robots"], "status": 200},
+            {"tokens": ["before-api"], "status": 404},
+            {"tokens": ["after"], "status": 200},
+            {"tokens": ["after-root"], "status": 200},
+            {"tokens": ["after-robots"], "status": 200},
+            {"tokens": ["after-api"], "status": 404},
+            {"tokens": [None, None], "status": 200},
+        ]
+        verdict, _reason, _checks = self.outcome_for(pack, records=records)
+        self.assertEqual(verdict, "inconclusive")
+
+    def test_existing_classifiers_add_no_checks_without_declared_cases(self):
+        # the shipped packs must be untouched by the mechanism
+        next_pack = catalog.PACKS["CVE-2025-29927"]
+        self.assertNotIn("extra_cases", next_pack)
+        baseline = {"status": 200, "marker": True}
+        target = {"token": "attack", "status": 403}
+        before = {
+            "token": "before",
+            "status": 200,
+            "root_token": "before-root",
+            "root_status": 307,
+        }
+        after = {
+            "token": "after",
+            "status": 200,
+            "root_token": "after-root",
+            "root_status": 307,
+        }
+        records = [
+            {"tokens": ["before"], "status": 200},
+            {"tokens": ["before-root"], "status": 307},
+            {"tokens": ["after"], "status": 200},
+            {"tokens": ["after-root"], "status": 307},
+        ]
+        _verdict, _reason, checks = evidence.CLASSIFIERS["middleware-bypass"](
+            next_pack, baseline, target, before, after, records, 403
+        )
+        self.assertFalse(
+            [check for check in checks if check["check"].startswith("extra case")]
+        )
+
+    def test_validator_accepts_the_synthetic_pack_and_rejects_broken_ones(self):
+        from cve_lab_catalog import validate_data_driven_pack
+
+        pack = self.synthetic_pack()
+        validate_data_driven_pack(pack)
+
+        broken = self.synthetic_pack()
+        broken["baseline_gate"] = "middleware-bypass"
+        with self.assertRaisesRegex(ValueError, "data-driven gate and classifier"):
+            validate_data_driven_pack(broken)
+
+        broken = self.synthetic_pack()
+        broken["catalog"]["application_image"] = "docker.io/example/app:latest"
+        with self.assertRaisesRegex(ValueError, "not pinned by digest"):
+            validate_data_driven_pack(broken)
+
+        broken = self.synthetic_pack()
+        del broken["controls"]["ordinary_status"]
+        with self.assertRaisesRegex(ValueError, "controls are missing"):
+            validate_data_driven_pack(broken)
+
+        broken = self.synthetic_pack()
+        broken["extra_cases"][1]["id"] = "robots"
+        with self.assertRaisesRegex(ValueError, "duplicate extra case id"):
+            validate_data_driven_pack(broken)
+
+        broken = self.synthetic_pack()
+        del broken["extra_cases"][0]["expect_status"]
+        with self.assertRaisesRegex(ValueError, "missing expect_status"):
+            validate_data_driven_pack(broken)
+
+    def test_a_new_pack_runs_end_to_end_as_pure_data(self):
+        # inject the synthetic pack, run the CLI; the pack passes validation
+        # and the run plan, and stops only at the (absent) container engine -
+        # no code change was involved anywhere.
+        pack = self.synthetic_pack()
+        catalog.PACKS[pack["catalog"]["cve"]] = pack
+        try:
+            stdout = io.StringIO()
+            with tempfile.TemporaryDirectory() as directory, patch.object(
+                lab, "prepare", side_effect=RuntimeError("no engine in unit test")
+            ), contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(
+                io.StringIO()
+            ):
+                output = Path(directory) / "out"
+                self.assertEqual(
+                    lab.main(["run", pack["catalog"]["cve"], "--output-dir", str(output)]),
+                    1,
+                )
+                report = json.loads((output / "report.json").read_text())
+        finally:
+            catalog.PACKS.pop(pack["catalog"]["cve"], None)
+        plan = stdout.getvalue()
+        self.assertIn("synthetic application 1.0", plan)
+        self.assertEqual(report["verdict"], "inconclusive")
+        self.assertEqual(report["pack"]["cve"], "CVE-0000-0001")
+
+
 
 class ImageVerificationTests(unittest.TestCase):
     """Pinned-image presence is reported from catalog data via by-digest
@@ -929,7 +1884,7 @@ class ImageVerificationTests(unittest.TestCase):
                 {"role": "runner", "image": "runner@sha256:b", "status": "present"},
             ],
         ), contextlib.redirect_stdout(stdout):
-            self.assertEqual(lab.main(["images"]), 0)
+            self.assertEqual(lab.main(["--include-unverified", "images"]), 0)
 
     def test_verify_images_reports_both_pinned_images_with_roles(self):
         pack = catalog.PACKS["CVE-2025-29927"]
@@ -956,14 +1911,14 @@ class ImageVerificationTests(unittest.TestCase):
             ],
         )
 
-    def test_images_command_lists_every_pack_and_exits_clean_when_present(self):
+    def test_images_command_lists_verified_packs_and_exits_clean_when_present(self):
         stdout = io.StringIO()
         with patch.object(lab, "doctor"), patch.object(
             lab, "verify_images", return_value=[{"role": "application", "image": "app@sha256:a", "status": "present"}, {"role": "runner", "image": "runner@sha256:b", "status": "present"}]
         ), contextlib.redirect_stdout(stdout):
             self.assertEqual(lab.main(["images"]), 0)
         listing = json.loads(stdout.getvalue())
-        self.assertEqual(set(listing), set(catalog.PACKS))
+        self.assertEqual(set(listing), set(lab.verified_cves()))
         for cve, entries in listing.items():
             with self.subTest(cve=cve):
                 self.assertEqual(
@@ -976,12 +1931,41 @@ class ImageVerificationTests(unittest.TestCase):
                 for entry in entries:
                     self.assertIn("@sha256:", entry["image"])
 
+    def test_images_command_requires_flag_for_unverified_pack(self):
+        stderr = io.StringIO()
+        with patch.object(lab, "doctor") as doctor, patch.object(
+            lab, "verify_images"
+        ) as verify, contextlib.redirect_stderr(stderr):
+            self.assertEqual(lab.main(["images", "CVE-2026-109618"]), 1)
+        self.assertIn(lab.UNVERIFIED_MESSAGE, stderr.getvalue())
+        doctor.assert_not_called()
+        verify.assert_not_called()
+
+    def test_images_command_includes_unverified_packs_only_when_requested(self):
+        stdout = io.StringIO()
+        entries = [{"role": "application", "image": "app:pending", "status": "unpinned"}]
+        with patch.object(lab, "doctor"), patch.object(
+            lab, "verify_images", return_value=entries
+        ), contextlib.redirect_stdout(stdout):
+            self.assertEqual(
+                lab.main(["--include-unverified", "images", "CVE-2026-109618"]), 0
+            )
+        self.assertEqual(set(json.loads(stdout.getvalue())), {"CVE-2026-109618"})
+
+    def test_images_command_rejects_unknown_cve_without_engine_access(self):
+        stderr = io.StringIO()
+        with patch.object(lab, "doctor") as doctor, contextlib.redirect_stderr(stderr), self.assertRaises(SystemExit) as error:
+            lab.main(["images", "CVE-2099-99999"])
+        self.assertEqual(error.exception.code, 2)
+        self.assertIn("invalid choice", stderr.getvalue())
+        doctor.assert_not_called()
+
     def test_images_command_exits_nonzero_when_an_image_is_missing(self):
         stdout = io.StringIO()
         stderr = io.StringIO()
 
         def verify(engine_arg, pack):
-            if pack["catalog"]["cve"] == "CVE-2024-4577":
+            if pack["catalog"]["cve"] == "CVE-2025-29927":
                 return [
                     {"role": "application", "image": "app@sha256:a", "status": "present"},
                     {"role": "runner", "image": "runner@sha256:b", "status": "missing"},
@@ -994,14 +1978,15 @@ class ImageVerificationTests(unittest.TestCase):
         with patch.object(lab, "doctor"), patch.object(
             lab, "verify_images", side_effect=verify
         ), contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
-            self.assertEqual(lab.main(["images"]), 1)
+            self.assertEqual(lab.main(["--include-unverified", "images"]), 1)
         listing = json.loads(stdout.getvalue())
         statuses = [
             (cve, entry["role"], entry["status"])
             for cve, entries in listing.items()
             for entry in entries
         ]
-        self.assertIn(("CVE-2024-4577", "runner", "missing"), statuses)
+        self.assertIn("CVE-2024-4577", listing)
+        self.assertIn(("CVE-2025-29927", "runner", "missing"), statuses)
         self.assertIn("missing on this machine", stderr.getvalue())
 
     def test_images_command_filters_to_one_pack(self):
@@ -1027,7 +2012,7 @@ class ImageVerificationTests(unittest.TestCase):
             lab, "prepare"
         ) as prepare, patch.object(
             lab, "verify_images", return_value=entries
-        ) as verify, contextlib.redirect_stdout(stdout):
+        ) as verify, patch.object(lab, "lab", side_effect=RuntimeError("mocked engine failure")), contextlib.redirect_stdout(stdout):
             output = Path(directory) / "out"
             self.assertEqual(
                 lab.main(["run", lab.CVE, "--output-dir", str(output)]), 1
@@ -1049,7 +2034,7 @@ class ImageVerificationTests(unittest.TestCase):
             lab, "prepare"
         ), patch.object(
             lab, "verify_images", return_value=entries
-        ), contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(
+        ), patch.object(lab, "lab", side_effect=RuntimeError("mocked engine failure")), contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(
             io.StringIO()
         ):
             output = Path(directory) / "out"

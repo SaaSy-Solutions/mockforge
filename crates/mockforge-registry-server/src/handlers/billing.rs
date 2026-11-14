@@ -977,13 +977,23 @@ async fn handle_trial_will_end(
     subscription: &StripeSubscription,
 ) -> Result<(), WebhookError> {
     let stripe_sub_id = subscription.id.as_str();
-    let record = Subscription::find_by_stripe_subscription_id(pool, stripe_sub_id)
-        .await?
-        .ok_or_else(|| {
-            WebhookError::Pending(format!(
-                "trial_will_end for unknown subscription {stripe_sub_id}"
-            ))
-        })?;
+    let Some(record) = Subscription::find_by_stripe_subscription_id(pool, stripe_sub_id).await?
+    else {
+        let org_id = subscription.metadata.get("org_id").and_then(|id| Uuid::parse_str(id).ok());
+        let Some(org_id) = org_id else {
+            return Err(WebhookError::Ignored("missing subscription organization".into()));
+        };
+        if Organization::find_by_id(pool, org_id).await?.is_none()
+            || subscription
+                .trial_end
+                .is_some_and(|trial_end| trial_end <= chrono::Utc::now().timestamp())
+        {
+            return Err(WebhookError::Ignored("trial event is no longer actionable".into()));
+        }
+        return Err(WebhookError::Pending(format!(
+            "trial_will_end for unknown subscription {stripe_sub_id}"
+        )));
+    };
 
     let (email_addr, username, email_notifications) =
         get_org_owner_email(pool, record.org_id).await.map_err(lookup_error)?;
