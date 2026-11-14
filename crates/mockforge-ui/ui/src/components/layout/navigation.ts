@@ -64,6 +64,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { isCloudMode as detectCloudMode } from '../../utils/cloudMode';
+import { useAuthStore } from '../../stores/useAuthStore';
 
 export interface NavItem {
   id: string;
@@ -420,10 +421,12 @@ function resolveItem(item: NavItem, sectionId: string, cloud: boolean): Resolved
  * section instead of being sprinkled (disabled) through every group.
  */
 export function getNavSections(cloud: boolean = isCloud): ResolvedNavSection[] {
+  const isAdmin = useAuthStore.getState().user?.is_admin === true;
   const resolved = navSections.map((section) => ({
     ...section,
     items: section.items
       .filter((item) => !(cloud && cloudHiddenNavItemIds.has(item.id)))
+      .filter((item) => item.id !== 'cloud-showcase-admin' || isAdmin)
       .map((item) => resolveItem(item, section.id, cloud)),
   }));
 
