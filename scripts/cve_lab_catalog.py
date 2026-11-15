@@ -83,6 +83,9 @@ LABEL = "io.mockforge.cve.run"
 # from the engine allowlist; every pack still starts with --cap-drop=ALL.
 PACKS = {
     "CVE-2025-29927": {
+        # Verified on the lab host; declared explicitly because packs without a
+        # "verified" field count as unverified.
+        "verified": True,
         "catalog": {
             "schema_version": 1,
             "pack_revision": 1,
@@ -136,6 +139,9 @@ PACKS = {
         "classifier": "middleware-bypass",
     },
     "CVE-2024-4577": {
+        # Verified on the lab host; declared explicitly because packs without a
+        # "verified" field count as unverified.
+        "verified": True,
         "catalog": {
             "schema_version": 1,
             "pack_revision": 1,

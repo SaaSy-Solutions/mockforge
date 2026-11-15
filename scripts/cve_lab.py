@@ -30,12 +30,12 @@ def verified_cves(include_unverified=False):
     return tuple(
         cve
         for cve, pack in PACKS.items()
-        if include_unverified or pack.get("verified", True)
+        if include_unverified or pack.get("verified", False)
     )
 
 
 def require_verified(cve, include_unverified):
-    if not PACKS[cve].get("verified", True) and not include_unverified:
+    if not PACKS[cve].get("verified", False) and not include_unverified:
         raise ValueError(f"{cve} {UNVERIFIED_MESSAGE}")
 
 
