@@ -40,6 +40,80 @@ def completed_output(stdout="", stderr="", returncode=0):
 
 
 class LifecycleTests(unittest.TestCase):
+    def test_pack_capabilities_are_narrow_and_ordered_after_cap_drop(self):
+        for cve in ("CVE-2026-109618", "CVE-2026-109619"):
+            with self.subTest(cve=cve), tempfile.TemporaryDirectory() as directory:
+                with patch.object(
+                    engine,
+                    "command",
+                    side_effect=[
+                        completed(),
+                        completed("127.0.0.1:12345\n"),
+                        completed("application log"),
+                    ],
+                ) as command, patch.object(engine, "request", return_value=(200, [], b"ok")), patch.object(
+                    engine, "owned_remove"
+                ):
+                    with engine.lab(
+                        "docker", "our-run", Path(directory), catalog.PACKS[cve]
+                    ):
+                        pass
+                run_args = command.call_args_list[0].args[0]
+                drop = run_args.index("--cap-drop=ALL")
+                add_uid = run_args.index("--cap-add=SETUID")
+                add_gid = run_args.index("--cap-add=SETGID")
+                self.assertLess(drop, add_uid)
+                self.assertLess(drop, add_gid)
+                self.assertLess(add_uid, add_gid)
+                self.assertIn("--security-opt=no-new-privileges", run_args)
+
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(
+                engine, "command", side_effect=[completed(), completed("127.0.0.1:12345\n"), completed("log")]
+            ) as command, patch.object(engine, "request", return_value=(200, [], b"ok")), patch.object(
+                engine, "owned_remove"
+            ):
+                with engine.lab(
+                    "docker", "our-run", Path(directory), catalog.PACKS["CVE-2025-29927"]
+                ):
+                    pass
+            run_args = command.call_args_list[0].args[0]
+            self.assertIn("--cap-drop=ALL", run_args)
+            self.assertFalse(any(arg.startswith("--cap-add=") for arg in run_args))
+
+    def test_lab_rejects_unapproved_app_capability(self):
+        pack = catalog.PACKS["CVE-2026-109618"]
+        pack = {**pack, "app": {**pack["app"], "cap_add": ["SYS_ADMIN"]}}
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(engine, "command") as command, patch.object(
+                engine, "owned_remove"
+            ):
+                with self.assertRaisesRegex(RuntimeError, "allowlist: SETUID, SETGID, CHOWN"):
+                    with engine.lab("docker", "our-run", Path(directory), pack):
+                        pass
+            command.assert_not_called()
+
+    def test_missing_port_mapping_raises_clean_diagnostic(self):
+        # When the container never binds app["port"] (it exited or failed to
+        # start), `docker port` returns no mapping. The engine must raise the
+        # readiness RuntimeError that run() catches, not let an IndexError
+        # escape as a raw traceback. General robustness fix for every pack.
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(
+                engine,
+                "command",
+                side_effect=[
+                    completed(),  # run -d
+                    completed(""),  # port -> no mapping
+                    completed("application log"),  # logs
+                ],
+            ), patch.object(engine, "owned_remove"):
+                with self.assertRaisesRegex(RuntimeError, "failed to start"):
+                    with engine.lab(
+                        "docker", "our-run", Path(directory), catalog.PACKS[catalog.CVE]
+                    ):
+                        pass
+
     def test_cleanup_refuses_unowned_container(self):
         for labels in ({}, {catalog.LABEL: "another-run"}):
             with self.subTest(labels=labels):
@@ -142,6 +216,68 @@ class LifecycleTests(unittest.TestCase):
 
 
 class InputTests(unittest.TestCase):
+    def test_unverified_packs_are_hidden_and_refused_unless_opted_in(self):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(lab.main(["list"]), 0)
+        packs = json.loads(output.getvalue())
+        self.assertIn("CVE-2025-29927", packs)
+        for cve in ("CVE-2026-109618", "CVE-2026-109619"):
+            self.assertNotIn(cve, packs)
+
+        for action in ("run", "prepare"):
+            err = io.StringIO()
+            with self.subTest(action=action), patch.object(lab, "prepare") as prepare, patch.object(lab, "run") as run, contextlib.redirect_stderr(err):
+                args = [action, "CVE-2026-109618"]
+                if action == "run":
+                    args += ["--output-dir", "unused-output"]
+                self.assertEqual(lab.main(args), 1)
+                self.assertIn(
+                    "CVE-2026-109618 is an unverified lab pack (its trigger has not reproduced on a lab host); pass --include-unverified to run it for development",
+                    err.getvalue(),
+                )
+                prepare.assert_not_called()
+                run.assert_not_called()
+
+    def test_include_unverified_lists_and_runs_development_pack(self):
+        for flag_order in (
+            ["--include-unverified", "list"],
+        ):
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                self.assertEqual(lab.main(flag_order), 0)
+            packs = json.loads(output.getvalue())
+            self.assertIn("CVE-2026-109618", packs)
+            self.assertIn("CVE-2026-109619", packs)
+
+        with patch.object(lab, "prepare") as prepare:
+            self.assertEqual(
+                lab.main(["--include-unverified", "prepare", "CVE-2026-109618"]),
+                0,
+            )
+        prepare.assert_called_once()
+
+        with patch.object(lab, "run", return_value=0) as run:
+            self.assertEqual(
+                lab.main([
+                    "--include-unverified", "run", "CVE-2026-109618",
+                    "--output-dir", "unused-output",
+                ]),
+                0,
+            )
+        run.assert_called_once()
+
+    def test_include_unverified_is_helped_and_global_only(self):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output), self.assertRaises(SystemExit) as error:
+            lab.main(["--help"])
+        self.assertEqual(error.exception.code, 0)
+        self.assertIn("--include-unverified", output.getvalue())
+
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
+            lab.main(["down", "--include-unverified", "--output-dir", "unused-output"])
+        self.assertEqual(error.exception.code, 2)
+
     def test_unsupported_cve_is_rejected_before_download(self):
         for action in ("prepare", "run"):
             with self.subTest(action=action), patch.object(
@@ -1190,7 +1326,7 @@ class RecorderProtocolTests(unittest.TestCase):
 
 
 
-class TlsVerifyTests(unittest.TestCase):
+class Node2ShellTlsVerifyTests(unittest.TestCase):
     """--skip-tls-verify is an explicit opt-in; the default path verifies."""
 
     def test_unverified_context_disables_checks(self):
@@ -1341,6 +1477,145 @@ class TlsVerifyTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class Php2Shell2026PackTests(unittest.TestCase):
+    """The PHP2Shell 2026 packs (CVE-2026-109618/109619) are distinct from
+    the CVE-2024-4577 pack and carry advisory-derived, digest-pinned input."""
+
+    def setUp(self):
+        self.packs = (
+            catalog.PACKS["CVE-2026-109618"],
+            catalog.PACKS["CVE-2026-109619"],
+        )
+
+    def test_packs_are_distinct_from_the_2024_windows_cgi_pack(self):
+        legacy = catalog.PACKS["CVE-2024-4577"]
+        for pack in self.packs:
+            self.assertNotEqual(pack["catalog"]["cve"], legacy["catalog"]["cve"])
+            self.assertNotEqual(pack["catalog"]["title"], legacy["catalog"]["title"])
+            self.assertNotEqual(
+                pack["catalog"]["application_image"],
+                legacy["catalog"]["application_image"],
+            )
+            self.assertIn("PHP2Shell 2026", pack["catalog"]["title"])
+            self.assertNotIn("Wine", pack["catalog"]["application_version"])
+
+    def test_packs_carry_runner_config(self):
+        for pack in self.packs:
+            for key in ("catalog", "probe", "app", "controls", "exploit", "application_files"):
+                self.assertIn(key, pack)
+            # Unprivileged port: the harness runs --cap-drop=ALL, so Apache
+            # cannot bind :80 (no CAP_NET_BIND_SERVICE).
+            self.assertEqual(pack["app"]["port"], "8080/tcp")
+            self.assertEqual(
+                pack["app"]["readiness"], {"path": "/health.php", "status": 200}
+            )
+            self.assertTrue(pack["app"]["mounts"])
+            mount_targets = {m["container"] for m in pack["app"]["mounts"]}
+            self.assertIn("/etc/apache2/ports.conf", mount_targets)
+            self.assertIn(
+                "/etc/apache2/sites-enabled/000-default.conf", mount_targets
+            )
+
+    def test_images_are_digest_pinned_and_verification_is_declared(self):
+        for pack in self.packs:
+            self.assertIn("@sha256:", pack["catalog"]["application_image"])
+            self.assertIn("@sha256:", pack["catalog"]["runner_image"])
+            self.assertEqual(
+                pack["catalog"]["verification_status"],
+                "pending-lab-host-verification",
+            )
+        self.assertEqual(
+            self.packs[0]["catalog"]["application_image"],
+            self.packs[1]["catalog"]["application_image"],
+        )
+
+    def test_application_files_review_the_trigger_configuration(self):
+        files = self.packs[0]["application_files"]
+        self.assertEqual(files, self.packs[1]["application_files"])
+        self.assertIn("memory_limit=16M", files["lab.ini"])
+        self.assertIn("post_max_size=48M", files["lab.ini"])
+        self.assertIn("mockforge-php2shell-2026", files["health.php"])
+        self.assertIn("X-Worker-Pid", files["index.php"])
+        self.assertIn("php_value memory_limit", files[".htaccess"])
+        self.assertIn("Listen 8080", files["ports.conf"])
+        self.assertIn("*:8080", files["000-default.conf"])
+
+    def test_exploit_steps_declare_the_advisory_choreography(self):
+        self.assertEqual(self.packs[0]["baseline_exploit"], "modphp-oom")
+        self.assertEqual(self.packs[0]["target_exploit"], "modphp-oom")
+        self.assertEqual(self.packs[1]["baseline_exploit"], "modphp-worker-sequence")
+        self.assertEqual(self.packs[1]["target_exploit"], "modphp-worker-sequence")
+        for pack in self.packs:
+            self.assertGreaterEqual(
+                pack["exploit"]["max_forwarded_body"], 32 * 1024 * 1024
+            )
+            self.assertIn("__mockforge_cve={token}", pack["exploit"]["path"])
+
+    def test_trigger_bodies_match_the_pinned_digests(self):
+        import hashlib
+
+        import cve_lab_payloads as payloads
+
+        self.assertEqual(
+            hashlib.sha256(payloads.oom_body()).hexdigest(), payloads.OOM_BODY_SHA256
+        )
+        self.assertEqual(
+            hashlib.sha256(payloads.oom_body_with_progress()).hexdigest(),
+            payloads.OOM_BODY_WITH_PROGRESS_SHA256,
+        )
+        self.assertEqual(
+            hashlib.sha256(payloads.consumer_body()).hexdigest(),
+            payloads.CONSUMER_BODY_SHA256,
+        )
+
+    def test_producer_body_exceeds_the_reviewed_memory_limit(self):
+        import cve_lab_payloads as payloads
+
+        # memory_limit=16M in the reviewed lab configuration; the parsed
+        # part headers must exceed it to reach the OOM bail-out.
+        self.assertGreater(len(payloads.oom_body()), 16 * 1024 * 1024)
+        self.assertGreater(len(payloads.oom_body_with_progress()), 16 * 1024 * 1024)
+        self.assertLess(len(payloads.oom_body()), 48 * 1024 * 1024)
+        self.assertIn(b"PHP_SESSION_UPLOAD_PROGRESS", payloads.oom_body_with_progress())
+        self.assertIn(b"PHP_SESSION_UPLOAD_PROGRESS", payloads.consumer_body())
+        self.assertNotIn(b"PHP_SESSION_UPLOAD_PROGRESS", payloads.oom_body())
+
+    def test_probe_template_observes_a_healthy_request(self):
+        for pack in self.packs:
+            text = nuclei.template(pack, "run1-baseline")
+            self.assertIn("/health.php?__mockforge_cve=run1-baseline", text)
+            self.assertIn("method: GET", text)
+
+    def test_prepare_refuses_unpinned_images_before_any_engine_call(self):
+        import copy
+
+        for pack in self.packs:
+            unpinned = copy.deepcopy(pack)
+            unpinned["catalog"]["application_image"] = "docker.io/library/php:8.4-apache"
+            with patch.object(engine, "command") as command:
+                with self.assertRaisesRegex(RuntimeError, "not pinned by digest"):
+                    engine.prepare("docker", unpinned)
+            command.assert_not_called()
+
+    def test_run_of_the_packs_stops_at_the_platform_gate_honestly(self):
+        # Simulate the platform gate directly so this remains engine-free on
+        # hosts where Docker is available.
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as directory, contextlib.redirect_stdout(
+            stdout
+        ), patch.object(engine, "doctor", side_effect=RuntimeError("unsupported platform")), patch.object(engine, "command") as command:
+            output = Path(directory) / "out"
+            self.assertEqual(
+                lab.main([
+                    "--include-unverified", "run", "CVE-2026-109618",
+                    "--output-dir", str(output),
+                ]), 1
+            )
+            report = json.loads((output / "report.json").read_text())
+        command.assert_not_called()
+        self.assertEqual(report["verdict"], "inconclusive")
+
 
 class Php2Shell2026GateTests(unittest.TestCase):
     """The mod_php gate demands healthy controls and the observed marker."""
