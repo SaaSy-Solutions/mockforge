@@ -25,6 +25,7 @@ import hashlib
 OOM_BODY_SHA256 = "058e648c1dff45a42c1a7231aad412b98f685e89c809ec9e6fe686fd6bdcd2af"
 OOM_BODY_WITH_PROGRESS_SHA256 = "f3e1c679297bf7bc8c8df378ac95dc25657dd5c2d22506c0723000f785844b28"
 CONSUMER_BODY_SHA256 = "b76da585a6490b758ffa370ea5dbc9174e0fc02fdca948136a9a928784767d11"
+PROGRESS_URLENCODED_BODY_SHA256 = "cade0d3cd3ce52e4d7f442fab4eb77259ff9f8c398c78b8b6507d1a7564578cc"
 
 _BOUNDARY = b"mockforge2026lab"
 BOUNDARY = "mockforge2026lab"
@@ -104,5 +105,43 @@ def consumer_body(token: str = "mockforge-progress-key") -> bytes:
     return part
 
 
+def progress_urlencoded_body() -> bytes:
+    """Body-position variant body: the session-upload-progress marker as a
+    VALUE inside a small urlencoded body - a body position other than the
+    multipart field name the pinned multipart bodies use. Inert data only:
+    the marker's position, not memory pressure, is the point, so the body
+    stays small and never claims the advisory's trigger."""
+    body = b"progress=PHP_SESSION_UPLOAD_PROGRESS&lab=mockforge-php2shell-2026"
+    if hashlib.sha256(body).hexdigest() != PROGRESS_URLENCODED_BODY_SHA256:
+        raise RuntimeError(
+            "progress_urlencoded_body digest mismatch against the pinned review input"
+        )
+    return body
+
+
 def digest_of(body: bytes) -> str:
     return hashlib.sha256(body).hexdigest()
+
+
+_MULTIPART_CONTENT_TYPE = f"multipart/form-data; boundary={BOUNDARY}"
+
+# Reviewed, digest-pinned bodies a signature variant may reference by name
+# (`body_ref` in the pack's ``signature_variants``). Each entry carries the
+# builder, the pinned digest (re-asserted by the runner before sending, so a
+# run can never carry unreviewed input even if a builder is patched) and the
+# Content-Type the pinned bytes are parsed under. Anything not listed here is
+# refused by validate_data_driven_pack before any download.
+PINNED_BODIES = {
+    "oom_body": (oom_body, OOM_BODY_SHA256, _MULTIPART_CONTENT_TYPE),
+    "oom_body_with_progress": (
+        oom_body_with_progress,
+        OOM_BODY_WITH_PROGRESS_SHA256,
+        _MULTIPART_CONTENT_TYPE,
+    ),
+    "consumer_body": (consumer_body, CONSUMER_BODY_SHA256, _MULTIPART_CONTENT_TYPE),
+    "progress_urlencoded_body": (
+        progress_urlencoded_body,
+        PROGRESS_URLENCODED_BODY_SHA256,
+        "application/x-www-form-urlencoded",
+    ),
+}

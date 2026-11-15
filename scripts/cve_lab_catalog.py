@@ -12,6 +12,10 @@ has not completed its build-and-review carries an explicit unreviewed tag and
 silently pulling an unpinned image.
 """
 
+import hashlib
+
+import cve_lab_payloads as payloads
+
 # Reviewed lab application and configuration for the PHP2Shell 2026 packs,
 # shipped inside the pack and mounted read-only into the pinned official
 # image. The advisory's corruption happens before application code runs;
@@ -205,7 +209,7 @@ PACKS = {
         "verified": False,
         "catalog": {
             "schema_version": 1,
-            "pack_revision": 1,
+            "pack_revision": 2,
             "cve": "CVE-2026-109618",
             "title": "PHP2Shell 2026: PHP core OOM request-lifecycle corruption (mod_php)",
             "platform": "Linux, local Docker/Podman engine, amd64",
@@ -217,7 +221,7 @@ PACKS = {
                 "https://github.com/php/php-src/security/advisories/GHSA-w8hw-w9fx-j79w",
                 "https://www.php.net/releases/8.4/release-8.4.27.php",
             ],
-            "coverage": "One reviewed OOM-during-input-parse corruption case on mod_php and benign controls; not remote code execution, not FPM, not every trigger variant",
+            "coverage": "One reviewed OOM-during-input-parse corruption case on mod_php, benign controls, and the PHP_SESSION_UPLOAD_PROGRESS marker as URI, query, header and urlencoded-body signature variants; not remote code execution, not FPM, not every trigger variant",
             "origin_port": 18082,
             "listen_address_guidance": (
                 "The recorder defaults to 127.0.0.1:18082, which only accepts local "
@@ -273,6 +277,71 @@ PACKS = {
             "max_forwarded_body": 48 * 1024 * 1024,
             "timeout": 60,
         },
+        # Data-driven signature variants (issue #1588): additional must-be-
+        # blocked placements of the PHP_SESSION_UPLOAD_PROGRESS marker. The
+        # pinned multipart bodies carry it only as a multipart form-data
+        # field name; each variant below isolates one other position so a
+        # blocking rule must cover the pattern wherever it appears, not just
+        # the field name. Every variant runs in the direct baseline (must
+        # reach the origin; marked variants must also reproduce the reviewed
+        # crash) and through the LB (must be blocked), and the verdict is
+        # reported per variant. Bodies stay pinned via cve_lab_payloads.
+        "signature_variants": [
+            {
+                # (a) marker as a request-URI path segment beneath the
+                # vulnerable endpoint. Whether the reviewed Apache config
+                # routes path info to upload.php is not established, so this
+                # variant is marked as not reproducing directly: the direct
+                # baseline requires origin receipt only.
+                "id": "marker-in-uri",
+                "method": "POST",
+                "path": "/upload.php/PHP_SESSION_UPLOAD_PROGRESS?__mockforge_cve={token}",
+                "headers": {"X-Mockforge-Cve": "{token}"},
+                "body_ref": "oom_body",
+                "expect": "blocked",
+                "reproduces_directly": False,
+            },
+            {
+                # (b) marker as a query parameter. The reviewed trigger body
+                # and endpoint are otherwise identical to the baseline
+                # exploit, so the direct baseline asserts the reviewed crash.
+                "id": "marker-in-query",
+                "method": "POST",
+                "path": "/upload.php?PHP_SESSION_UPLOAD_PROGRESS=mockforge-lab&__mockforge_cve={token}",
+                "headers": {"X-Mockforge-Cve": "{token}"},
+                "body_ref": "oom_body",
+                "expect": "blocked",
+                "reproduces_directly": True,
+            },
+            {
+                # (c) marker in a request header (name and value, so a rule
+                # matching either position blocks it). Same reviewed trigger
+                # body and endpoint as the baseline exploit.
+                "id": "marker-in-header",
+                "method": "POST",
+                "path": "/upload.php?__mockforge_cve={token}",
+                "headers": {
+                    "X-Mockforge-Cve": "{token}",
+                    "X-PHP-Session-Upload-Progress": "PHP_SESSION_UPLOAD_PROGRESS",
+                },
+                "body_ref": "oom_body",
+                "expect": "blocked",
+                "reproduces_directly": True,
+            },
+            {
+                # (d) marker as a VALUE inside a small urlencoded body - a
+                # body position other than the multipart field name. The
+                # body is a new pinned, inert payload (no memory-pressure
+                # claim), so this variant is marked as not reproducing.
+                "id": "marker-in-body-value",
+                "method": "POST",
+                "path": "/upload.php?__mockforge_cve={token}",
+                "headers": {"X-Mockforge-Cve": "{token}"},
+                "body_ref": "progress_urlencoded_body",
+                "expect": "blocked",
+                "reproduces_directly": False,
+            },
+        ],
         "baseline_gate": "modphp-segfault",
         "classifier": "modphp-segfault",
         "baseline_exploit": "modphp-oom",
@@ -359,16 +428,122 @@ PACKS = {
     },
 }
 
+def validate_signature_variants(pack):
+    """Check the data-driven signature variants a pack declares.
+
+    Each variant is one more reviewed must-be-blocked request: data of the
+    form {id, method, path, headers, body_ref | body_template, expect:
+    "blocked"}. Bodies stay generated and digest-pinned (``body_ref`` names a
+    builder in ``cve_lab_payloads.PINNED_BODIES``; ``body_template`` must pin
+    its exact bytes with ``body_sha256``), so a run never carries unreviewed
+    input. A variant marked ``reproduces_directly`` claims the pack's
+    reviewed crash evidence, which only packs with a crash-evidence baseline
+    exploit can honor. Malformed variants are refused here, before any
+    download.
+    """
+    variants = pack.get("signature_variants")
+    if not variants:
+        return
+    seen_ids = set()
+    for variant in variants:
+        for key in ("id", "path", "expect"):
+            if key not in variant:
+                raise ValueError(f"signature variant is missing {key}: {variant}")
+        variant_id = variant["id"]
+        if not isinstance(variant_id, str) or not variant_id:
+            raise ValueError(
+                f"signature variant id must be a non-empty string: {variant}"
+            )
+        if variant_id in seen_ids:
+            raise ValueError(f"duplicate signature variant id: {variant_id}")
+        seen_ids.add(variant_id)
+        if variant["expect"] != "blocked":
+            raise ValueError(
+                f'signature variant {variant_id} must expect "blocked": '
+                f'{variant["expect"]!r}'
+            )
+        if not isinstance(variant["path"], str) or not variant["path"].startswith("/"):
+            raise ValueError(
+                f"signature variant {variant_id} path must be an origin path "
+                f"starting with /: {variant['path']!r}"
+            )
+        method = variant.get("method", "GET")
+        if (
+            not isinstance(method, str)
+            or not method
+            or method != method.strip()
+            or not all(character.isalpha() or character == "-" for character in method)
+        ):
+            raise ValueError(
+                f"signature variant {variant_id} method must be an HTTP "
+                f"method token: {method!r}"
+            )
+        headers = variant.get("headers", {})
+        if not isinstance(headers, dict) or any(
+            not isinstance(name, str) or not isinstance(value, str)
+            for name, value in headers.items()
+        ):
+            raise ValueError(
+                f"signature variant {variant_id} headers must be a string mapping"
+            )
+        if "body_ref" in variant and "body_template" in variant:
+            raise ValueError(
+                f"signature variant {variant_id} must declare body_ref or "
+                "body_template, not both"
+            )
+        if "body_template" in variant:
+            template = variant["body_template"]
+            if not isinstance(template, str):
+                raise ValueError(
+                    f"signature variant {variant_id} body_template must be a string"
+                )
+            if "{token}" in template:
+                raise ValueError(
+                    f"signature variant {variant_id} body_template must not "
+                    "embed the run token; its bytes must stay exactly the "
+                    "reviewed input"
+                )
+            if "body_sha256" not in variant:
+                raise ValueError(
+                    f"signature variant {variant_id} body_template requires "
+                    "a pinned body_sha256"
+                )
+            digest = hashlib.sha256(template.encode("utf-8")).hexdigest()
+            if variant["body_sha256"] != digest:
+                raise ValueError(
+                    f"signature variant {variant_id} body_sha256 does not "
+                    "match its body_template"
+                )
+        if "body_ref" in variant:
+            reference = variant["body_ref"]
+            if reference not in payloads.PINNED_BODIES:
+                raise ValueError(
+                    f"signature variant {variant_id} body_ref {reference!r} "
+                    "is not a reviewed, digest-pinned payload builder"
+                )
+        if variant.get("reproduces_directly") and "baseline_exploit" not in pack:
+            raise ValueError(
+                f"signature variant {variant_id} marks reproduces_directly "
+                "but the pack has no crash-evidence baseline exploit to "
+                "confirm it"
+            )
+
+
 def validate_data_driven_pack(pack):
-    """Check a pack that uses the generic data-driven evidence path.
+    """Check a pack that uses the generic data-driven evidence paths.
 
     A pack needs no classifier code when its outcome is a plain response
     status: it names ``data-driven`` for both ``baseline_gate`` and
-    ``classifier`` and declares everything else as data. This validator
-    enforces the shape so a wrongly declared pack fails loudly before any run
-    instead of producing unverifiable verdicts.
+    ``classifier`` and declares everything else as data. Packs that declare
+    ``signature_variants`` (additional must-be-blocked requests) are also
+    validated here regardless of their gate, so a wrongly declared pack
+    fails loudly before any run instead of producing unverifiable verdicts.
     """
-    if pack["baseline_gate"] != "data-driven" or pack["classifier"] != "data-driven":
+    variants = pack.get("signature_variants")
+    data_driven = (
+        pack["baseline_gate"] == "data-driven" and pack["classifier"] == "data-driven"
+    )
+    if not data_driven and not variants:
         raise ValueError(
             "validate_data_driven_pack requires the data-driven gate and classifier"
         )
@@ -394,6 +569,7 @@ def validate_data_driven_pack(pack):
         if case["id"] in seen_ids:
             raise ValueError(f"duplicate extra case id: {case['id']}")
         seen_ids.add(case["id"])
+    validate_signature_variants(pack)
 
 
 # Legacy single-pack exports; existing callers and tests import these names.
