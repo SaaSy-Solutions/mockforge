@@ -1353,7 +1353,13 @@ class TlsVerifyTests(unittest.TestCase):
             report = json.loads((output / "report.json").read_text())
             self.assertTrue(report["tls_verify"])
 
-    def test_probe_adds_insecure_only_when_opted_in(self):
+    def test_probe_never_passes_an_undefined_tls_flag_when_opted_in(self):
+        """The pinned Nuclei 3.11.1 defines no "-insecure" flag and does not
+        verify TLS certificates at all, so --skip-tls-verify must add no
+        runner flag: baseline and target probes keep the same valid flag set
+        with and without the opt-in."""
+        import cve_lab_exploits as exploits
+
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory)
             pack = catalog.PACKS[catalog.CVE]
@@ -1363,28 +1369,53 @@ class TlsVerifyTests(unittest.TestCase):
                     "response": "HTTP/1.1 200 OK\r\n",
                 }
             )
+            commands = {}
             with patch.object(nuclei, "owned_remove"), patch.object(
                 nuclei,
                 "command",
                 return_value=completed(stdout=f"{findings}\n"),
             ) as command:
-                nuclei.probe(
-                    "docker", "http://127.0.0.1:1", output, "baseline", "run1", pack
-                )
-                args = command.call_args.args[0]
-                self.assertNotIn("-insecure", args)
+                for label, call in (
+                    (
+                        "baseline-default",
+                        lambda: nuclei.probe(
+                            "docker", "http://127.0.0.1:1", output, "baseline", "run1", pack
+                        ),
+                    ),
+                    (
+                        "baseline-insecure",
+                        lambda: nuclei.probe(
+                            "docker",
+                            "http://127.0.0.1:1",
+                            output,
+                            "baseline",
+                            "run1",
+                            pack,
+                            insecure=True,
+                        ),
+                    ),
+                    (
+                        "target-default",
+                        lambda: exploits.nuclei_target(
+                            "docker", "http://127.0.0.1:1", output, "run1", pack
+                        ),
+                    ),
+                    (
+                        "target-insecure",
+                        lambda: exploits.nuclei_target(
+                            "docker", "http://127.0.0.1:1", output, "run1", pack, insecure=True
+                        ),
+                    ),
+                ):
+                    command.reset_mock()
+                    call()
+                    commands[label] = list(command.call_args.args[0])
 
-                command.reset_mock()
-                nuclei.probe(
-                    "docker",
-                    "http://127.0.0.1:1",
-                    output,
-                    "baseline",
-                    "run1",
-                    pack,
-                    insecure=True,
-                )
-                self.assertIn("-insecure", command.call_args.args[0])
+            for label, args in commands.items():
+                self.assertNotIn("-insecure", args, label)
+                self.assertNotIn("-insecure", " ".join(args), label)
+            self.assertEqual(commands["baseline-default"], commands["baseline-insecure"])
+            self.assertEqual(commands["target-default"], commands["target-insecure"])
 
     def test_probe_failure_writes_outputs_and_reports_stdout(self):
         with tempfile.TemporaryDirectory() as directory:
