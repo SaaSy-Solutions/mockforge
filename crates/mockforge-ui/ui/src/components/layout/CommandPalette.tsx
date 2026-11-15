@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import { useI18n } from '../../i18n/I18nProvider';
+import { isCloudMode } from '../../utils/cloudMode';
 import { useLogStore } from '../../stores/useLogStore';
 import { useServiceStore } from '../../stores/useServiceStore';
 import { useWorkspaceStore } from '../../stores/useWorkspaceStore';
@@ -73,12 +74,13 @@ export function CommandPalette({ open, onOpenChange, onRefresh, onToggleSidebar,
   const items = useMemo<PaletteItem[]>(() => {
     const close = () => onOpenChange(false);
     const q = query.trim();
-    const sections = getNavSections();
+    const cloud = isCloudMode();
+    const sections = getNavSections(cloud);
     const titleOf = (sectionId: string) => {
       const section = sections.find((s) => s.id === sectionId);
       return section?.titleKey ? t(section.titleKey) : undefined;
     };
-    const pages = [...sections.flatMap((s) => s.items), ...getHelpNavItems()].filter((item) => !item.localOnly);
+    const pages = [...sections.flatMap((s) => s.items), ...getHelpNavItems(cloud)].filter((item) => !item.localOnly);
     const goTo = (id: string) => () => {
       if (id === 'run-locally') {
         window.open('https://docs.mockforge.dev/getting-started/installation.html', '_blank', 'noopener,noreferrer');

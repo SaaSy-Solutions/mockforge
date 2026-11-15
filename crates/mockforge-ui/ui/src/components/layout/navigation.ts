@@ -467,7 +467,8 @@ export const isCloud = detectCloudMode();
 export const localOnlyRouteIds = new Set(
   [...navSections.flatMap((section) => section.items), ...unlistedNavItems]
     .filter((item) => !cloudNavItemIds.has(item.id))
-    .map((item) => item.id),
+    .map((item) => item.id)
+    .concat(['playground']),
 );
 
 function resolveItem(item: NavItem, sectionId: string, cloud: boolean): ResolvedNavItem {

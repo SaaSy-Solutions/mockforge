@@ -1,4 +1,4 @@
-import React, { Suspense } from 'react';
+import { Suspense } from 'react';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -73,7 +73,7 @@ describe('local-only routes', () => {
     const playground = renderPath('/playground');
     expect(await screen.findByRole('heading', { name: 'Requires local MockForge' })).toBeVisible();
     playground.unmount();
-    const incidents = renderPath('/incident-dashboard');
+    renderPath('/incident-dashboard');
     expect(await screen.findByRole('heading', { name: 'Requires local MockForge' })).toBeVisible();
   });
 

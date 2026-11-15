@@ -23,9 +23,9 @@ import { usePreferencesStore } from '../../stores/usePreferencesStore';
 import { useAppShortcuts } from '../../hooks/useKeyboardNavigation';
 import { useSkipLinks } from '../../hooks/useFocusManagement';
 import { useI18n } from '../../i18n/I18nProvider';
+import { isCloudMode } from '../../utils/cloudMode';
 import { GlobalConnectionStatus } from './ConnectionStatus';
 import { CommandPalette } from './CommandPalette';
-import { isCloud } from './navigation';
 import { WorkspaceSwitcher } from './WorkspaceSwitcher';
 import {
   findNavItem,
@@ -173,7 +173,7 @@ function SidebarContent({
 }: SidebarProps) {
   const { t } = useI18n();
   const isMac = useIsMac();
-  const helpItems = getHelpNavItems();
+  const helpItems = getHelpNavItems(isCloudMode());
 
   return (
     <div className="flex h-full flex-col">
@@ -290,7 +290,7 @@ function SidebarContent({
 
       {/* Footer */}
       <div className={cn('shrink-0 space-y-px border-t border-border py-2', collapsed ? 'px-2' : 'px-3')}>
-        {isCloud && (
+        {isCloudMode() && (
           <a
             href="https://docs.mockforge.dev/getting-started/installation.html"
             target="_blank"
@@ -339,8 +339,9 @@ export function AppShell({ children, onRefresh }: AppShellProps) {
   // First path segment, so nested routes (/hosted-mocks/:id) keep their parent highlighted.
   const activeId = location.pathname.split('/').filter(Boolean)[0] ?? 'dashboard';
 
-  const sections = useMemo(() => getNavSections(), []);
-  const current = findNavItem(activeId);
+  const cloud = isCloudMode();
+  const sections = useMemo(() => getNavSections(cloud), [cloud]);
+  const current = findNavItem(activeId, cloud);
   const currentSectionTitle = current?.section?.titleKey ? t(current.section.titleKey) : undefined;
   const currentLabel = current
     ? t(current.item.labelKey)

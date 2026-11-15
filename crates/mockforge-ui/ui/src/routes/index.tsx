@@ -139,13 +139,6 @@ const LearningHubPage = lazy(() =>
   })),
 );
 
-// User Management
-const UserManagementPage = lazy(() =>
-  import('../pages/UserManagementPage').then((m) => ({
-    default: m.UserManagementPage,
-  })),
-);
-
 // Notification Channels (cloud-only — incident dispatch destinations)
 const NotificationChannelsPage = lazy(() =>
   import('../pages/NotificationChannelsPage').then((m) => ({
