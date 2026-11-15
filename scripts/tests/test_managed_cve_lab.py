@@ -2042,6 +2042,7 @@ class SignatureVariantRunnerTests(unittest.TestCase):
         pack.pop("extra_cases")
         cve = pack["catalog"]["cve"]
         catalog.PACKS[cve] = pack
+        lab.PACKS[cve] = pack
 
         class FakeLab:
             def __enter__(self):
@@ -2053,10 +2054,14 @@ class SignatureVariantRunnerTests(unittest.TestCase):
         def fake_receiver(*_args, **_kwargs):
             @contextlib.contextmanager
             def records_context():
-                yield [
+                records = [
                     {"tokens": ["attack"], "status": 200},
-                    {"tokens": ["tv-marker-in-query"], "status": 200},
+                    *[
+                        {"tokens": [f"bv-{variant['id']}"], "status": 200}
+                        for variant in pack["signature_variants"]
+                    ],
                 ]
+                yield records
 
             return records_context()
 
@@ -2077,7 +2082,11 @@ class SignatureVariantRunnerTests(unittest.TestCase):
             ), patch.object(lab, "receiver", side_effect=fake_receiver), patch.object(
                 lab, "control", side_effect=fake_controls
             ), patch.object(
+                lab, "cleanup"
+            ), patch.object(
                 lab, "probe", return_value={"status": 200, "marker": True}
+            ), patch.object(
+                nuclei, "owned_remove"
             ), patch.dict(
                 lab.BASELINE_GATES, {"data-driven": lambda *_args: None}
             ), patch.dict(
@@ -2085,6 +2094,10 @@ class SignatureVariantRunnerTests(unittest.TestCase):
                 {"data-driven": lambda *_args, **_kwargs: (
                     "fail", "main signature reached the origin", []
                 )},
+            ), patch.dict(
+                lab.TARGET_EXPLOITS, {"nuclei": lambda *_args, **_kwargs: {
+                    "token": "attack", "status": 403
+                }}
             ), patch.object(
                 lab, "variant_baseline_steps", return_value=(
                     {
@@ -2125,6 +2138,7 @@ class SignatureVariantRunnerTests(unittest.TestCase):
                 report = json.loads((output / "report.json").read_text())
         finally:
             catalog.PACKS.pop(cve, None)
+            lab.PACKS.pop(cve, None)
 
         self.assertEqual(exit_code, 1)
         self.assertEqual(report["verdict"], "fail", report)
