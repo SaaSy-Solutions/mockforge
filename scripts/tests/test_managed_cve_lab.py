@@ -6,7 +6,10 @@ import hashlib
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
+import secrets
+import shutil
 import socket
 import subprocess
 import sys
@@ -1290,6 +1293,41 @@ class Php2Shell2026ExploitStepTests(unittest.TestCase):
         self.assertEqual(first_body, payloads.oom_body_with_progress())
         self.assertEqual(second_body, payloads.consumer_body())
 
+
+def pinned_runner_engine():
+    """A local engine that already holds the pack's pinned runner image, or None.
+
+    Decides with the same by-digest ``image inspect`` ``prepare`` performs and
+    NEVER pulls: a machine without the image skips instead of downloading.
+    Runs each inspect with the shared temp dir as cwd because rootless engines
+    cannot start from a cwd they cannot see (e.g. this host's /mnt/build).
+    """
+    image = catalog.PACKS[catalog.CVE]["catalog"]["runner_image"]
+    for candidate in ("docker", "podman"):
+        if shutil.which(candidate) is None:
+            continue
+        result = subprocess.run(
+            [candidate, "image", "inspect", image],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=tempfile.gettempdir(),
+        )
+        if result.returncode == 0:
+            return candidate
+    return None
+
+
+RUNNER_ENGINE = pinned_runner_engine()
+NO_RUNNER_IMAGE_SKIP = (
+    "no local container engine (docker/podman) already holds the pinned Nuclei "
+    "runner image; the test never pulls"
+)
+NO_CERT_TOOL_SKIP = (
+    "openssl is not on PATH, so no throwaway self-signed certificate can be minted"
+)
+
+
 class TlsVerifyTests(unittest.TestCase):
     """--skip-tls-verify is an explicit opt-in; the default path verifies."""
 
@@ -1355,7 +1393,13 @@ class TlsVerifyTests(unittest.TestCase):
             report = json.loads((output / "report.json").read_text())
             self.assertTrue(report["tls_verify"])
 
-    def test_probe_adds_insecure_only_when_opted_in(self):
+    def test_probe_never_passes_an_undefined_tls_flag_when_opted_in(self):
+        """The pinned Nuclei 3.11.1 defines no "-insecure" flag and does not
+        verify TLS certificates at all, so --skip-tls-verify must add no
+        runner flag: baseline and target probes keep the same valid flag set
+        with and without the opt-in."""
+        import cve_lab_exploits as exploits
+
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory)
             pack = catalog.PACKS[catalog.CVE]
@@ -1365,28 +1409,53 @@ class TlsVerifyTests(unittest.TestCase):
                     "response": "HTTP/1.1 200 OK\r\n",
                 }
             )
+            commands = {}
             with patch.object(nuclei, "owned_remove"), patch.object(
                 nuclei,
                 "command",
                 return_value=completed(stdout=f"{findings}\n"),
             ) as command:
-                nuclei.probe(
-                    "docker", "http://127.0.0.1:1", output, "baseline", "run1", pack
-                )
-                args = command.call_args.args[0]
-                self.assertNotIn("-insecure", args)
+                for label, call in (
+                    (
+                        "baseline-default",
+                        lambda: nuclei.probe(
+                            "docker", "http://127.0.0.1:1", output, "baseline", "run1", pack
+                        ),
+                    ),
+                    (
+                        "baseline-insecure",
+                        lambda: nuclei.probe(
+                            "docker",
+                            "http://127.0.0.1:1",
+                            output,
+                            "baseline",
+                            "run1",
+                            pack,
+                            insecure=True,
+                        ),
+                    ),
+                    (
+                        "target-default",
+                        lambda: exploits.nuclei_target(
+                            "docker", "http://127.0.0.1:1", output, "run1", pack
+                        ),
+                    ),
+                    (
+                        "target-insecure",
+                        lambda: exploits.nuclei_target(
+                            "docker", "http://127.0.0.1:1", output, "run1", pack, insecure=True
+                        ),
+                    ),
+                ):
+                    command.reset_mock()
+                    call()
+                    commands[label] = list(command.call_args.args[0])
 
-                command.reset_mock()
-                nuclei.probe(
-                    "docker",
-                    "http://127.0.0.1:1",
-                    output,
-                    "baseline",
-                    "run1",
-                    pack,
-                    insecure=True,
-                )
-                self.assertIn("-insecure", command.call_args.args[0])
+            for label, args in commands.items():
+                self.assertNotIn("-insecure", args, label)
+                self.assertNotIn("-insecure", " ".join(args), label)
+            self.assertEqual(commands["baseline-default"], commands["baseline-insecure"])
+            self.assertEqual(commands["target-default"], commands["target-insecure"])
 
     def test_probe_failure_writes_outputs_and_reports_stdout(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -1437,6 +1506,114 @@ class TlsVerifyTests(unittest.TestCase):
             self.assertTrue((output / "target.jsonl").exists())
             self.assertEqual((output / "target.jsonl").read_text(), finding)
             self.assertEqual((output / "target.log").read_text(), "debug output")
+
+    @unittest.skipUnless(RUNNER_ENGINE, NO_RUNNER_IMAGE_SKIP)
+    @unittest.skipUnless(shutil.which("openssl"), NO_CERT_TOOL_SKIP)
+    def test_real_pinned_runner_observes_self_signed_https_when_opted_in(self):
+        """Regression against the real pinned runner: ``probe()`` used to append
+        "-insecure" on --skip-tls-verify, a flag Nuclei 3.11.1 does not define,
+        so every opted-in probe died at flag parsing ("flag provided but not
+        defined: -insecure") before touching the network. The pinned image
+        never verifies certificates, so with the fix it must complete one
+        observation against a self-signed HTTPS target."""
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        import ssl
+
+        pack = catalog.PACKS[catalog.CVE]
+        marker = pack["probe"]["marker"]
+        seen = []
+
+        class Handler(BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.1"
+
+            def do_GET(self):
+                seen.append((self.command, self.path, dict(self.headers)))
+                body = f"{marker}\n".encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *_args):
+                pass
+
+        with (
+            tempfile.TemporaryDirectory() as certs,
+            tempfile.TemporaryDirectory() as directory,
+        ):
+            certificate = Path(certs) / "cert.pem"
+            private_key = Path(certs) / "key.pem"
+            subprocess.run(
+                [
+                    "openssl",
+                    "req",
+                    "-x509",
+                    "-newkey",
+                    "rsa:2048",
+                    "-sha256",
+                    "-days",
+                    "2",
+                    "-nodes",
+                    "-subj",
+                    "/CN=127.0.0.1",
+                    "-addext",
+                    "subjectAltName=IP:127.0.0.1",
+                    "-keyout",
+                    str(private_key),
+                    "-out",
+                    str(certificate),
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            tls.load_cert_chain(str(certificate), str(private_key))
+            server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+            server.socket = tls.wrap_socket(server.socket, server_side=True)
+            threading.Thread(target=server.serve_forever, daemon=True).start()
+            self.addCleanup(server.shutdown)
+            self.addCleanup(server.server_close)
+
+            output = Path(directory)
+            run_id = "tls" + secrets.token_hex(4)
+            token = f"{run_id}-baseline"
+            # The engine subprocess inherits this cwd, and rootless engines
+            # cannot start from a cwd they cannot see (this host's /mnt/build),
+            # so serve them the temp dir; the output dir is the container mount
+            # and must live there too.
+            previous_cwd = os.getcwd()
+            os.chdir(directory)
+            try:
+                observation = nuclei.probe(
+                    RUNNER_ENGINE,
+                    f"https://127.0.0.1:{server.server_address[1]}",
+                    output,
+                    "baseline",
+                    run_id,
+                    pack,
+                    insecure=True,
+                )
+            finally:
+                os.chdir(previous_cwd)
+
+            self.assertEqual(observation["token"], token)
+            self.assertEqual(observation["status"], 200)
+            self.assertTrue(observation["marker"])
+            self.assertRegex(observation["response_sha256"], r"^[0-9a-f]{64}$")
+            self.assertEqual(
+                [entry[0] for entry in seen],
+                ["GET"],
+                "the runner must make exactly one probe request over TLS",
+            )
+            request_path, request_headers = seen[0][1], seen[0][2]
+            self.assertEqual(request_path, f"/?__mockforge_cve={token}")
+            self.assertEqual(request_headers.get("X-Mockforge-Cve"), token)
+            self.assertEqual(
+                request_headers.get("x-middleware-subrequest"),
+                pack["probe"]["headers"]["x-middleware-subrequest"],
+            )
 
 
 class DataDrivenCaseTests(unittest.TestCase):
@@ -2659,6 +2836,227 @@ class Php2Shell2026SignatureVariantTests(unittest.TestCase):
         self.assertEqual(body, b"PHP_SESSION_UPLOAD_PROGRESS=123")
         self.assertNotIn(b'name="PHP_SESSION_UPLOAD_PROGRESS"', body)
         self.assertLess(len(body), 64 * 1024)
+
+
+class Php2Shell109619SignatureVariantTests(unittest.TestCase):
+    """The same-worker PHP2Shell pack (CVE-2026-109619) carries Srikanth's
+    field cases from issue #79 as reviewed ini_set/php_value/php_admin
+    marker placements, with pinned bodies."""
+
+    def setUp(self):
+        self.pack = catalog.PACKS["CVE-2026-109619"]
+
+    def test_variants_validate_and_expect_blocking(self):
+        from cve_lab_catalog import validate_data_driven_pack
+
+        validate_data_driven_pack(self.pack)
+        variants = self.pack["signature_variants"]
+        self.assertEqual(len(variants), 10)
+        for variant in variants:
+            self.assertEqual(variant["expect"], "blocked")
+            self.assertIn("reproduces_directly", variant)
+        self.assertEqual(self.pack["catalog"]["pack_revision"], 2)
+
+    def test_variants_cover_body_query_and_path_positions(self):
+        from urllib.parse import parse_qs, urlsplit
+
+        by_id = {
+            variant["id"]: variant for variant in self.pack["signature_variants"]
+        }
+        self.assertEqual(
+            set(by_id),
+            {
+                "ini-set-in-body",
+                "php-value-in-body",
+                "php-admin-in-body",
+                "ini-set-in-query",
+                "php-value-in-query",
+                "php-admin-in-query",
+                "ini-set-in-path",
+                "php-value-in-path",
+                "php-admin-in-path",
+                "ini-set-in-header",
+            },
+        )
+        # (a) body position: the marker IS the raw text/plain body (the
+        # exact source cases POST /test with the x-php: test header)
+        for marker, variant_id in (
+            (b"ini_set", "ini-set-in-body"),
+            (b"php_value", "php-value-in-body"),
+            (b"php_admin", "php-admin-in-body"),
+        ):
+            variant = by_id[variant_id]
+            self.assertEqual(variant["method"], "POST")
+            self.assertEqual(variant["path"].split("?")[0], "/test")
+            self.assertEqual(variant["headers"].get("X-PHP"), "test")
+            self.assertEqual(exploits._variant_body(variant), marker)
+            method, path, headers, body, _timeout = (
+                exploits._variant_request_spec(self.pack, variant, "tok")
+            )
+            self.assertEqual(method, "POST")
+            self.assertEqual(headers.get("Content-Type"), "text/plain")
+            self.assertEqual(headers.get("X-Mockforge-Cve"), "tok")
+        # (b) query position with the source cases' literal values and the
+        # swapped test: x-php header; bodyless, so a block can only come
+        # from the query
+        for marker, value, variant_id in (
+            ("ini_set", "1", "ini-set-in-query"),
+            ("php_value", "1", "php-value-in-query"),
+            ("php_admin", "true", "php-admin-in-query"),
+        ):
+            variant = by_id[variant_id]
+            self.assertEqual(variant["method"], "POST")
+            self.assertEqual(variant["path"].split("?")[0], "/testing")
+            query = parse_qs(urlsplit(variant["path"]).query)
+            self.assertEqual(query.get(marker), [value])
+            self.assertEqual(variant["headers"].get("Test"), "x-php")
+            self.assertEqual(variant["headers"].get("Content-Type"), "text/plain")
+            self.assertIsNone(exploits._variant_body(variant))
+        # (c) path position: /testing/<marker>/<tail>; bodyless, so a block
+        # can only come from the path
+        for marker, tail, variant_id in (
+            ("ini_set", "one", "ini-set-in-path"),
+            ("php_value", "two", "php-value-in-path"),
+            ("php_admin", "three", "php-admin-in-path"),
+        ):
+            variant = by_id[variant_id]
+            segments = variant["path"].split("?")[0].strip("/").split("/")
+            self.assertEqual(segments, ["testing", marker, tail])
+            self.assertEqual(variant["headers"].get("Test"), "x-php")
+            self.assertIsNone(exploits._variant_body(variant))
+        # (d) header position: the marker names and values a header, with
+        # no body, so a block can only come from the header
+        header_variant = by_id["ini-set-in-header"]
+        self.assertIn(
+            "ini_set", [value for value in header_variant["headers"].values()]
+        )
+        self.assertIn(
+            "ini-set",
+            " ".join(name.lower() for name in header_variant["headers"]),
+        )
+        self.assertIsNone(exploits._variant_body(header_variant))
+
+    def test_variant_bodies_are_registry_pinned(self):
+        import cve_lab_payloads as payloads
+
+        for variant in self.pack["signature_variants"]:
+            if "body_ref" not in variant:
+                continue
+            builder, expected_digest, content_type = payloads.PINNED_BODIES[
+                variant["body_ref"]
+            ]
+            body = exploits._variant_body(variant)
+            self.assertEqual(
+                hashlib.sha256(body).hexdigest(), expected_digest
+            )
+            self.assertEqual(content_type, "text/plain")
+        # the body-position variant carries its marker verbatim
+        body_variant = [
+            variant
+            for variant in self.pack["signature_variants"]
+            if variant["id"] == "ini-set-in-body"
+        ][0]
+        self.assertEqual(exploits._variant_body(body_variant), b"ini_set")
+
+    def test_marker_text_bodies_are_pinned(self):
+        import cve_lab_payloads as payloads
+
+        for builder, digest, expected in (
+            (payloads.ini_set_body, payloads.INI_SET_BODY_SHA256, b"ini_set"),
+            (payloads.php_value_body, payloads.PHP_VALUE_BODY_SHA256, b"php_value"),
+            (payloads.php_admin_body, payloads.PHP_ADMIN_BODY_SHA256, b"php_admin"),
+        ):
+            body = builder()
+            self.assertEqual(body, expected)
+            self.assertEqual(hashlib.sha256(body).hexdigest(), digest)
+            self.assertLess(len(body), 64 * 1024)
+
+    def test_field_case_variants_are_not_marked_as_reproducing(self):
+        # none of the source cases carries the oversized reviewed trigger
+        # body, so none is marked as reproducing directly: they are
+        # must-be-blocked signature probes
+        for variant in self.pack["signature_variants"]:
+            self.assertFalse(variant["reproduces_directly"], variant["id"])
+
+    def test_blocked_variants_pass_and_a_forwarded_variant_fails_named(self):
+        variant_ids = tuple(
+            variant["id"] for variant in self.pack["signature_variants"]
+        )
+        baseline_variants = {
+            variant_id: {"token": f"bv-{variant_id}", "status": 200}
+            for variant_id in variant_ids
+        }
+        target_variants = {
+            variant_id: {"token": f"tv-{variant_id}", "status": 403}
+            for variant_id in variant_ids
+        }
+        baseline_records = [
+            {"tokens": [outcome["token"]], "status": 200}
+            for outcome in baseline_variants.values()
+        ]
+        entries, all_ok, got_through, verdicts = evidence.signature_variant_evidence(
+            self.pack,
+            baseline_variants,
+            target_variants,
+            baseline_records,
+            [],
+            403,
+        )
+        # every variant blocked by the LB passes, and is reported per variant
+        self.assertTrue(all_ok)
+        self.assertEqual(got_through, [])
+        self.assertEqual(set(verdicts.values()), {"pass"})
+        names = [entry["check"] for entry in entries]
+        for variant_id in verdicts:
+            self.assertIn(
+                f"variant {variant_id} was blocked at the target", names
+            )
+        # a variant forwarded to the origin fails and is named
+        forwarded = "ini-set-in-body"
+        records = [{"tokens": [f"tv-{forwarded}"], "status": 200}]
+        entries, all_ok, got_through, verdicts = evidence.signature_variant_evidence(
+            self.pack,
+            baseline_variants,
+            target_variants,
+            baseline_records,
+            records,
+            403,
+        )
+        self.assertFalse(all_ok)
+        self.assertEqual(got_through, [forwarded])
+        self.assertEqual(verdicts[forwarded], "fail")
+        self.assertEqual(verdicts["php-value-in-query"], "pass")
+        blocked = [
+            entry
+            for entry in entries
+            if entry["check"] == f"variant {forwarded} was blocked at the target"
+        ][0]
+        self.assertIn("reached the origin with status 200", blocked["outcome"])
+        override, reason = evidence.variant_verdict(all_ok, got_through)
+        self.assertEqual(override, "fail")
+        self.assertIn(forwarded, reason)
+
+    def test_a_malformed_variant_is_refused_by_validation(self):
+        import copy
+
+        from cve_lab_catalog import validate_data_driven_pack
+
+        pack = copy.deepcopy(self.pack)
+        pack["signature_variants"][0]["expect"] = "forwarded"
+        with self.assertRaisesRegex(ValueError, 'must expect "blocked"'):
+            validate_data_driven_pack(pack)
+        pack["signature_variants"][0]["expect"] = "blocked"
+        pack["signature_variants"][1]["body_ref"] = "not_a_builder"
+        with self.assertRaisesRegex(ValueError, "reviewed, digest-pinned"):
+            validate_data_driven_pack(pack)
+        pack["signature_variants"][1]["body_ref"] = (
+            pack["signature_variants"][0]["body_ref"]
+        )
+        # a duplicated id is refused (the pack's own crash-evidence baseline
+        # exploit means reproduces_directly marks are not refused here)
+        pack["signature_variants"][1]["id"] = pack["signature_variants"][0]["id"]
+        with self.assertRaisesRegex(ValueError, "duplicate signature variant id"):
+            validate_data_driven_pack(pack)
 
 
 class ImageVerificationTests(unittest.TestCase):

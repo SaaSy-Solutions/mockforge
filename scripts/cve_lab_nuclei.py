@@ -41,6 +41,16 @@ http:
 
 
 def probe(engine, base, output, phase, run_id, pack, insecure=False):
+    """Run one Nuclei observation probe.
+
+    ``insecure`` mirrors the CLI's --skip-tls-verify opt-in: it governs the
+    Python control transport and is recorded in the report. The pinned Nuclei
+    3.11.1 runner defines no skip-TLS flag ("-insecure" was never one of its
+    flags, so passing it dies at startup with "flag provided but not defined")
+    and does not verify TLS certificates at all - InsecureSkipVerify is
+    unconditional in its HTTP client pool - so no extra runner flag is needed
+    or valid here.
+    """
     probe = pack["probe"]
     token = run_id + "-" + phase
     path = output / f"{phase}.yaml"
@@ -81,7 +91,8 @@ def probe(engine, base, output, phase, run_id, pack, insecure=False):
                 "1",
                 "-c",
                 "1",
-                *(["-insecure"] if insecure else []),
+                # No TLS flag: the pinned Nuclei 3.11.1 defines no skip-TLS
+                # flag and never verifies certificates (see docstring).
             ],
             timeout=90,
             check=False,
