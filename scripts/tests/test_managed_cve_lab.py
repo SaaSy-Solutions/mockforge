@@ -2,6 +2,7 @@
 
 import argparse
 import contextlib
+import hashlib
 import importlib.util
 import io
 import json
@@ -17,6 +18,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import cve_lab_catalog as catalog
 import cve_lab_engine as engine
+import cve_lab_exploits as exploits
 import cve_lab_nuclei as nuclei
 import cve_lab_evidence as evidence
 import cve_lab_transport as transport
@@ -1848,6 +1850,680 @@ class DataDrivenCaseTests(unittest.TestCase):
         self.assertEqual(report["verdict"], "inconclusive")
         self.assertEqual(report["pack"]["cve"], "CVE-0000-0001")
 
+
+def base_synthetic_pack():
+    """The DataDrivenCaseTests synthetic pack without needing an instance."""
+    return DataDrivenCaseTests("synthetic_pack").synthetic_pack()
+
+
+_MARKER_TEMPLATE = "progress=PHP_SESSION_UPLOAD_PROGRESS"
+_MARKER_TEMPLATE_SHA256 = hashlib.sha256(_MARKER_TEMPLATE.encode()).hexdigest()
+
+
+def synthetic_variants():
+    """Three data-only signature variants: two pinned via body_template and
+    one bodyless GET probe (the field cases' plain-GET shape)."""
+    return [
+        {
+            "id": "marker-in-query",
+            "method": "POST",
+            "path": "/attack?marker=PHP_SESSION_UPLOAD_PROGRESS&__mockforge_cve={token}",
+            "headers": {"X-Mockforge-Cve": "{token}"},
+            "body_template": _MARKER_TEMPLATE,
+            "body_sha256": _MARKER_TEMPLATE_SHA256,
+            "expect": "blocked",
+        },
+        {
+            "id": "marker-in-header",
+            "method": "POST",
+            "path": "/attack?__mockforge_cve={token}",
+            "headers": {
+                "X-Mockforge-Cve": "{token}",
+                "X-Progress": "PHP_SESSION_UPLOAD_PROGRESS",
+            },
+            "body_template": _MARKER_TEMPLATE,
+            "body_sha256": _MARKER_TEMPLATE_SHA256,
+            "expect": "blocked",
+        },
+        {
+            "id": "marker-in-query-get",
+            "method": "GET",
+            "path": "/attack?marker=PHP_SESSION_UPLOAD_PROGRESS&__mockforge_cve={token}",
+            "headers": {"X-Mockforge-Cve": "{token}"},
+            "expect": "blocked",
+        },
+    ]
+
+
+class SignatureVariantValidationTests(unittest.TestCase):
+    """Malformed signature variants are refused up front, before any
+    download; well-formed variants validate as pure pack data."""
+
+    def pack_with(self, variants):
+        pack = base_synthetic_pack()
+        pack["signature_variants"] = variants
+        return pack
+
+    def test_validator_accepts_declared_variants(self):
+        from cve_lab_catalog import validate_data_driven_pack
+
+        validate_data_driven_pack(self.pack_with(synthetic_variants()))
+
+    def broken_variant(self, **edits):
+        variant = {
+            "id": "broken",
+            "method": "POST",
+            "path": "/attack?__mockforge_cve={token}",
+            "headers": {"X-Mockforge-Cve": "{token}"},
+            "body_template": _MARKER_TEMPLATE,
+            "body_sha256": _MARKER_TEMPLATE_SHA256,
+            "expect": "blocked",
+        }
+        removals = edits.pop("remove", ())
+        variant.update(edits)
+        for key in removals:
+            variant.pop(key, None)
+        return variant
+
+    def test_validator_refuses_malformed_variants_up_front(self):
+        from cve_lab_catalog import validate_data_driven_pack
+
+        cases = {
+            "missing id": {"remove": ("id",)},
+            "missing path": {"remove": ("path",)},
+            "missing expect": {"remove": ("expect",)},
+            "expect not blocked": {"expect": "forwarded"},
+            "empty id": {"id": ""},
+            "path not an origin path": {"path": "http://example.test/attack"},
+            "method not a token": {"method": "post;/drop"},
+            "headers not a mapping": {"headers": ["not", "a", "mapping"]},
+            "header value not a string": {"headers": {"X-A": 7}},
+            "both body sources": {
+                "body_ref": "oom_body",
+                "body_template": _MARKER_TEMPLATE,
+            },
+            "template without a pin": {"remove": ("body_sha256",)},
+            "pin mismatch": {"body_sha256": "0" * 64},
+            "token inside the template": {
+                "body_template": "progress={token}",
+                "body_sha256": hashlib.sha256(b"progress={token}").hexdigest(),
+            },
+            "unknown body_ref": {
+                "body_ref": "not_a_builder",
+                "remove": ("body_template", "body_sha256"),
+            },
+            "reproduces without crash evidence": {"reproduces_directly": True},
+        }
+        for description, edits in cases.items():
+            with self.subTest(description=description):
+                pack = self.pack_with([self.broken_variant(**edits)])
+                with self.assertRaisesRegex(ValueError, "signature variant"):
+                    validate_data_driven_pack(pack)
+
+    def test_validator_refuses_duplicate_variant_ids(self):
+        from cve_lab_catalog import validate_data_driven_pack
+
+        variants = synthetic_variants()
+        variants[1]["id"] = variants[0]["id"]
+        with self.assertRaisesRegex(ValueError, "duplicate signature variant id"):
+            validate_data_driven_pack(self.pack_with(variants))
+
+    def test_run_refuses_malformed_variants_before_any_download(self):
+        pack = self.pack_with([self.broken_variant(expect="forwarded")])
+        pack["catalog"]["cve"] = "CVE-0000-0002"
+        catalog.PACKS[pack["catalog"]["cve"]] = pack
+        errors = io.StringIO()
+        try:
+            with tempfile.TemporaryDirectory() as directory, patch.object(
+                lab, "prepare"
+            ) as prepare, contextlib.redirect_stderr(errors):
+                output = Path(directory) / "out"
+                self.assertEqual(
+                    lab.main(
+                        [
+                            "run",
+                            pack["catalog"]["cve"],
+                            "--output-dir",
+                            str(output),
+                        ]
+                    ),
+                    1,
+                )
+        finally:
+            catalog.PACKS.pop(pack["catalog"]["cve"], None)
+        # refused up front: validation fails before any download is attempted
+        prepare.assert_not_called()
+        self.assertFalse((output / "report.json").exists())
+        self.assertIn('must expect "blocked"', errors.getvalue())
+
+    def test_a_new_pack_with_variants_runs_as_pure_data(self):
+        pack = self.pack_with(synthetic_variants())
+        pack["catalog"]["cve"] = "CVE-0000-0003"
+        catalog.PACKS[pack["catalog"]["cve"]] = pack
+        try:
+            with tempfile.TemporaryDirectory() as directory, patch.object(
+                lab, "prepare", side_effect=RuntimeError("no engine in unit test")
+            ), contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(
+                io.StringIO()
+            ):
+                output = Path(directory) / "out"
+                self.assertEqual(
+                    lab.main(
+                        [
+                            "run",
+                            pack["catalog"]["cve"],
+                            "--output-dir",
+                            str(output),
+                        ]
+                    ),
+                    1,
+                )
+                report = json.loads((output / "report.json").read_text())
+        finally:
+            catalog.PACKS.pop(pack["catalog"]["cve"], None)
+        # Validation passed and the run reached prepare (which failed only
+        # on the absent engine): the pack ran as data with no code change.
+        self.assertEqual(report["verdict"], "inconclusive")
+
+
+class SignatureVariantRunnerTests(unittest.TestCase):
+    """The variant runner sends exactly the reviewed request, with the
+    correlation token and the digest-pinned body, and never aborts on a
+    transport outcome that is itself evidence."""
+
+    def pack_with(self, variants, **pack_edits):
+        pack = base_synthetic_pack()
+        pack["signature_variants"] = variants
+        pack.update(pack_edits)
+        return pack
+
+    def captured_backend(self, status=200):
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+        seen = []
+
+        class Backend(BaseHTTPRequestHandler):
+            def _reply(self):
+                length = int(self.headers.get("Content-Length") or 0)
+                seen.append(
+                    (
+                        self.command,
+                        self.path,
+                        dict(self.headers),
+                        self.rfile.read(length),
+                    )
+                )
+                self.send_response(status)
+                self.send_header("Content-Length", "2")
+                self.end_headers()
+                self.wfile.write(b"ok")
+
+            do_GET = _reply
+            do_POST = _reply
+
+            def log_message(self, *_args):
+                pass
+
+        backend = ThreadingHTTPServer(("127.0.0.1", 0), Backend)
+        threading.Thread(target=backend.serve_forever, daemon=True).start()
+        self.addCleanup(backend.shutdown)
+        self.addCleanup(backend.server_close)
+        return backend, seen
+
+    def test_variant_baseline_steps_send_each_reviewed_request(self):
+        with tempfile.TemporaryDirectory() as directory:
+            backend, seen = self.captured_backend()
+            pack = self.pack_with(synthetic_variants())
+            outcomes, not_reproducing = exploits.variant_baseline_steps(
+                None,
+                f"http://127.0.0.1:{backend.server_address[1]}",
+                Path(directory),
+                "run1",
+                pack,
+            )
+            self.assertEqual(not_reproducing, [])
+            self.assertEqual(
+                set(outcomes),
+                {"marker-in-query", "marker-in-header", "marker-in-query-get"},
+            )
+            self.assertEqual(len(seen), 3)
+            for variant_id, outcome in outcomes.items():
+                matching = [
+                    (method, path, headers, body)
+                    for method, path, headers, body in seen
+                    if headers.get("X-Mockforge-Cve") == outcome["token"]
+                ]
+                self.assertEqual(len(matching), 1)
+                method, path, headers, body = matching[0]
+                self.assertIn(f"__mockforge_cve={outcome['token']}", path)
+                self.assertIn(f"-baseline-variant-{variant_id}", outcome["token"])
+                self.assertEqual(outcome["status"], 200)
+                if variant_id == "marker-in-query-get":
+                    # the field cases' plain-GET shape: GET, no body
+                    self.assertEqual(method, "GET")
+                    self.assertEqual(body, b"")
+                else:
+                    self.assertEqual(method, "POST")
+                    self.assertEqual(body, _MARKER_TEMPLATE.encode())
+            self.assertTrue((Path(directory) / "baseline-variants.json").exists())
+
+    def test_variant_baseline_steps_demand_the_reviewed_crash_when_marked(self):
+        variant = {
+            "id": "marked",
+            "method": "POST",
+            "path": "/attack?__mockforge_cve={token}",
+            "headers": {"X-Mockforge-Cve": "{token}"},
+            "body_template": _MARKER_TEMPLATE,
+            "body_sha256": _MARKER_TEMPLATE_SHA256,
+            "expect": "blocked",
+            "reproduces_directly": True,
+        }
+        pack = self.pack_with([variant], baseline_exploit="modphp-oom")
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(
+                exploits, "_marker_count", side_effect=[0, 0]
+            ):
+                outcomes, not_reproducing = exploits.variant_baseline_steps(
+                    None, "http://127.0.0.1:1", Path(directory), "run1", pack
+                )
+            self.assertEqual(not_reproducing, ["marked"])
+            self.assertFalse(outcomes["marked"]["segfault_confirmed"])
+            with patch.object(
+                exploits, "_marker_count", side_effect=[3, 4]
+            ):
+                outcomes, not_reproducing = exploits.variant_baseline_steps(
+                    None, "http://127.0.0.1:1", Path(directory), "run1", pack
+                )
+            self.assertEqual(not_reproducing, [])
+            self.assertTrue(outcomes["marked"]["segfault_confirmed"])
+
+    def test_variant_target_steps_send_through_the_target(self):
+        with tempfile.TemporaryDirectory() as directory:
+            backend, seen = self.captured_backend(status=403)
+            pack = self.pack_with(synthetic_variants())
+            outcomes = exploits.variant_target_steps(
+                f"http://127.0.0.1:{backend.server_address[1]}",
+                Path(directory),
+                "run1",
+                pack,
+            )
+            self.assertEqual(
+                set(outcomes),
+                {"marker-in-query", "marker-in-header", "marker-in-query-get"},
+            )
+            for outcome in outcomes.values():
+                self.assertIn("-target-variant-", outcome["token"])
+                self.assertEqual(outcome["status"], 403)
+            self.assertEqual(len(seen), 3)
+            self.assertTrue((Path(directory) / "target-variants.json").exists())
+
+    def test_variant_target_steps_use_https_for_https_targets(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+            exploits, "_request_tolerant", return_value={}
+        ) as tolerant:
+            exploits.variant_target_steps(
+                "https://127.0.0.1:8443",
+                Path(directory),
+                "run1",
+                self.pack_with(synthetic_variants()),
+            )
+        self.assertEqual(tolerant.call_args.kwargs.get("scheme"), "https")
+
+    def test_tampered_bodies_break_the_digest_check(self):
+        import cve_lab_payloads as payloads
+
+        variant = dict(synthetic_variants()[0])
+        variant["body_template"] = "tampered body"
+        with self.assertRaisesRegex(RuntimeError, "pinned review digest"):
+            exploits._variant_body(variant)
+
+        tampered_registry = {
+            "oom_body": (
+                lambda: b"tampered bytes",
+                payloads.OOM_BODY_SHA256,
+                "multipart/form-data; boundary=x",
+            )
+        }
+        with patch.dict(payloads.PINNED_BODIES, tampered_registry):
+            with self.assertRaisesRegex(RuntimeError, "pinned review digest"):
+                exploits._variant_body({"id": "x", "body_ref": "oom_body"})
+
+
+class SignatureVariantEvidenceTests(unittest.TestCase):
+    """Per-variant verdicts: blocked variants pass, a variant that reached
+    the origin fails the run and is named, and variant evidence can only
+    downgrade the main verdict."""
+
+    def pack(self):
+        pack = base_synthetic_pack()
+        pack["signature_variants"] = synthetic_variants()
+        return pack
+
+    def healthy_evidence(self, pack, target_records=()):
+        variant_ids = tuple(variant["id"] for variant in pack["signature_variants"])
+        baseline_variants = {
+            variant_id: {"token": f"bv-{variant_id}", "status": 200}
+            for variant_id in variant_ids
+        }
+        target_variants = {
+            variant_id: {"token": f"tv-{variant_id}", "status": 403}
+            for variant_id in variant_ids
+        }
+        baseline_records = [
+            {"tokens": [outcome["token"]], "status": 200}
+            for outcome in baseline_variants.values()
+        ]
+        return evidence.signature_variant_evidence(
+            pack,
+            baseline_variants,
+            target_variants,
+            baseline_records,
+            list(target_records),
+            403,
+        )
+
+    def test_blocked_variants_pass_and_are_reported_per_variant(self):
+        entries, all_ok, got_through, verdicts = self.healthy_evidence(self.pack())
+        self.assertTrue(all_ok)
+        self.assertEqual(got_through, [])
+        self.assertEqual(verdicts, {
+            "marker-in-query": "pass",
+            "marker-in-header": "pass",
+            "marker-in-query-get": "pass",
+        })
+        names = [entry["check"] for entry in entries]
+        for variant_id in verdicts:
+            self.assertIn(
+                f"variant {variant_id} was blocked at the target", names
+            )
+            self.assertIn(
+                f"variant {variant_id} reached the origin in the direct baseline",
+                names,
+            )
+        self.assertTrue(all(entry["outcome"] == "ok" for entry in entries))
+
+    def test_a_variant_forwarded_to_the_origin_fails_and_is_named(self):
+        records = [{"tokens": ["tv-marker-in-query"], "status": 200}]
+        entries, all_ok, got_through, verdicts = self.healthy_evidence(
+            self.pack(), target_records=records
+        )
+        self.assertFalse(all_ok)
+        self.assertEqual(got_through, ["marker-in-query"])
+        self.assertEqual(verdicts["marker-in-query"], "fail")
+        self.assertEqual(verdicts["marker-in-header"], "pass")
+        blocked = [
+            entry
+            for entry in entries
+            if entry["check"] == "variant marker-in-query was blocked at the target"
+        ][0]
+        self.assertIn("reached the origin with status 200", blocked["outcome"])
+        override, reason = evidence.variant_verdict(all_ok, got_through)
+        self.assertEqual(override, "fail")
+        self.assertIn("marker-in-query", reason)
+
+    def test_variant_evidence_is_inconclusive_on_transport_or_status_drift(self):
+        # a blocked variant answered with the wrong status: not a failure,
+        # but never a pass
+        pack = self.pack()
+
+        def evidence_with(target_variants, target_records):
+            baseline_variants = {
+                variant_id: {"token": f"bv-{variant_id}", "status": 200}
+                for variant_id in ("marker-in-query", "marker-in-header")
+            }
+            baseline_records = [
+                {"tokens": [outcome["token"]], "status": 200}
+                for outcome in baseline_variants.values()
+            ]
+            return evidence.signature_variant_evidence(
+                pack,
+                baseline_variants,
+                target_variants,
+                baseline_records,
+                target_records,
+                403,
+            )
+
+
+        wrong_status = {
+            "marker-in-query": {"token": "tv-marker-in-query", "status": 200},
+            "marker-in-header": {"token": "tv-marker-in-header", "status": 403},
+        }
+        _entries, all_ok, got_through, verdicts = evidence_with(wrong_status, [])
+        self.assertEqual(got_through, [])
+        self.assertEqual(verdicts["marker-in-query"], "inconclusive")
+        self.assertEqual(verdicts["marker-in-header"], "pass")
+        override, _reason = evidence.variant_verdict(all_ok, got_through)
+        self.assertEqual(override, "inconclusive")
+
+        transport_error = {
+            "marker-in-query": {
+                "token": "tv-marker-in-query",
+                "status": None,
+                "error": "connection refused",
+            },
+            "marker-in-header": {"token": "tv-marker-in-header", "status": 403},
+        }
+        entries, all_ok, got_through, verdicts = evidence_with(
+            transport_error, []
+        )
+        self.assertEqual(got_through, [])
+        self.assertEqual(verdicts["marker-in-query"], "inconclusive")
+        blocked = [
+            entry
+            for entry in entries
+            if entry["check"] == "variant marker-in-query was blocked at the target"
+        ][0]
+        self.assertIn("connection refused", blocked["outcome"])
+
+    def test_variant_evidence_marks_a_missing_direct_receipt(self):
+        pack = self.pack()
+        entries, all_ok, got_through, verdicts = evidence.signature_variant_evidence(
+            pack,
+            {"marker-in-query": {"token": "bv-marker-in-query", "error": "no route"}},
+            {"marker-in-query": {"token": "tv-marker-in-query", "status": 403}},
+            [],
+            [],
+            403,
+        )
+        self.assertFalse(all_ok)
+        self.assertEqual(got_through, [])
+        self.assertEqual(verdicts["marker-in-query"], "inconclusive")
+        direct = [
+            entry
+            for entry in entries
+            if "reached the origin in the direct baseline" in entry["check"]
+        ][0]
+        self.assertIn("no route", direct["outcome"])
+
+    def test_variant_verdict_never_upgrades_a_failed_run(self):
+        self.assertEqual(evidence.variant_verdict(True, []), (None, None))
+        override, _reason = evidence.variant_verdict(False, [])
+        self.assertEqual(override, "inconclusive")
+        override, reason = evidence.variant_verdict(False, ["zeta", "alpha"])
+        self.assertEqual(override, "fail")
+        self.assertEqual(reason, (
+            "signature variant(s) alpha, zeta reached the origin; "
+            "blocking assertion failed"
+        ))
+
+    def test_forwarded_variant_traffic_stays_correlated_for_the_classifier(self):
+        # The classifier must not mistake a forwarded variant for uncorrelated
+        # traffic: its token is expected, and the per-variant evidence (not
+        # the correlation check) turns the run into a named failure.
+        variant_token = "run1-target-variant-marker-in-query"
+        records = [
+            {"tokens": ["before"], "status": 200},
+            {"tokens": ["before-root"], "status": 200},
+            {"tokens": ["after"], "status": 200},
+            {"tokens": ["after-root"], "status": 200},
+            {"tokens": [variant_token], "status": 200},
+        ]
+        verdict, reason, _checks = evidence.CLASSIFIERS["modphp-segfault"](
+            catalog.PACKS["CVE-2026-109618"],
+            {"status": 200, "marker": True, "crash_confirmed": True},
+            {"token": "attack", "status": 403},
+            {"token": "before", "status": 200, "root_token": "before-root", "root_status": 200},
+            {"token": "after", "status": 200, "root_token": "after-root", "root_status": 200},
+            records,
+            403,
+            variant_tokens={variant_token},
+        )
+        self.assertEqual(verdict, "pass")
+        self.assertNotIn("uncorrelated", reason)
+
+        verdict, reason, _checks = evidence.CLASSIFIERS["modphp-segfault"](
+            catalog.PACKS["CVE-2026-109618"],
+            {"status": 200, "marker": True, "crash_confirmed": True},
+            {"token": "attack", "status": 403},
+            {"token": "before", "status": 200, "root_token": "before-root", "root_status": 200},
+            {"token": "after", "status": 200, "root_token": "after-root", "root_status": 200},
+            records,
+            403,
+        )
+        self.assertEqual(verdict, "inconclusive")
+        self.assertIn("uncorrelated", reason)
+
+
+class Php2Shell2026SignatureVariantTests(unittest.TestCase):
+    """The shipped PHP2Shell pack (CVE-2026-109618) carries Srikanth's field
+    cases from issue #79 as reviewed marker placements, with pinned bodies."""
+
+    def setUp(self):
+        self.pack = catalog.PACKS["CVE-2026-109618"]
+
+    def test_variants_validate_and_expect_blocking(self):
+        from cve_lab_catalog import validate_data_driven_pack
+
+        validate_data_driven_pack(self.pack)
+        variants = self.pack["signature_variants"]
+        self.assertEqual(len(variants), 5)
+        for variant in variants:
+            self.assertEqual(variant["expect"], "blocked")
+            self.assertIn("reproduces_directly", variant)
+        self.assertEqual(self.pack["catalog"]["pack_revision"], 2)
+
+    def test_variants_cover_uri_query_header_and_body_positions(self):
+        from urllib.parse import parse_qs, urlsplit
+
+        by_id = {
+            variant["id"]: variant for variant in self.pack["signature_variants"]
+        }
+        self.assertEqual(
+            set(by_id),
+            {
+                "marker-in-uri",
+                "marker-in-query",
+                "marker-in-query-get",
+                "marker-in-urlencoded-field",
+                "marker-in-header",
+            },
+        )
+        marker = "PHP_SESSION_UPLOAD_PROGRESS"
+        # (a) URI/path: the marker is the first path segment (the exact
+        # source case POST /PHP_SESSION_UPLOAD_PROGRESS/upload.php)
+        uri = by_id["marker-in-uri"]["path"]
+        self.assertEqual(uri.split("?")[0].split("/")[1], marker)
+        self.assertTrue(uri.split("?")[0].endswith("/upload.php"))
+        # (b) query parameter on a POST (the exact source case
+        # POST /upload.php?PHP_SESSION_UPLOAD_PROGRESS=123)
+        self.assertEqual(by_id["marker-in-query"]["method"], "POST")
+        query = parse_qs(urlsplit(by_id["marker-in-query"]["path"]).query)
+        self.assertIn(marker, query)
+        # (c) query parameter on a plain GET with no body (the exact source
+        # case GET /upload.php?PHP_SESSION_UPLOAD_PROGRESS=1)
+        get_variant = by_id["marker-in-query-get"]
+        self.assertEqual(get_variant["method"], "GET")
+        self.assertIn(marker, parse_qs(urlsplit(get_variant["path"]).query))
+        self.assertNotIn("body_ref", get_variant)
+        self.assertNotIn("body_template", get_variant)
+        self.assertIsNone(exploits._variant_body(get_variant))
+        # (d) urlencoded body FIELD NAME - a body position other than the
+        # multipart field name (the exact source case body
+        # PHP_SESSION_UPLOAD_PROGRESS=123)
+        body_variant = by_id["marker-in-urlencoded-field"]
+        body = exploits._variant_body(body_variant)
+        self.assertEqual(body, b"PHP_SESSION_UPLOAD_PROGRESS=123")
+        self.assertNotIn(b'name="PHP_SESSION_UPLOAD_PROGRESS"', body)
+        self.assertEqual(
+            body_variant["body_ref"], "progress_urlencoded_field_body"
+        )
+        # (e) request header: the marker names and values a header
+        header_variant = by_id["marker-in-header"]
+        self.assertIn(
+            marker, [value for value in header_variant["headers"].values()]
+        )
+        self.assertIn(
+            "php-session-upload-progress",
+            " ".join(name.lower() for name in header_variant["headers"]),
+        )
+
+    def test_trigger_position_variants_isolate_the_marker_to_one_position(self):
+        import cve_lab_payloads as payloads
+
+        by_id = {
+            variant["id"]: variant for variant in self.pack["signature_variants"]
+        }
+        # the URI/query/header variants all reuse the benign single-part
+        # upload body, which carries no marker, so a block must come from
+        # the new position; the GET variant carries no body at all
+        for variant_id in (
+            "marker-in-uri",
+            "marker-in-query",
+            "marker-in-header",
+        ):
+            variant = by_id[variant_id]
+            self.assertEqual(variant["body_ref"], "file_upload_body")
+            self.assertNotIn(
+                b"PHP_SESSION_UPLOAD_PROGRESS", payloads.file_upload_body()
+            )
+        self.assertNotIn(
+            b"PHP_SESSION_UPLOAD_PROGRESS", payloads.file_upload_body()
+        )
+
+    def test_variant_bodies_are_registry_pinned(self):
+        import cve_lab_payloads as payloads
+
+        for variant in self.pack["signature_variants"]:
+            if "body_ref" not in variant:
+                continue
+            builder, expected_digest, content_type = payloads.PINNED_BODIES[
+                variant["body_ref"]
+            ]
+            body = exploits._variant_body(variant)
+            self.assertEqual(
+                hashlib.sha256(body).hexdigest(), expected_digest
+            )
+            self.assertTrue(content_type)
+        # the URI-position variant reuses the field cases' benign upload
+        # body verbatim
+        uri_variant = [
+            variant
+            for variant in self.pack["signature_variants"]
+            if variant["id"] == "marker-in-uri"
+        ][0]
+        self.assertEqual(
+            exploits._variant_body(uri_variant), payloads.file_upload_body()
+        )
+
+    def test_field_case_variants_are_not_marked_as_reproducing(self):
+        # none of the source cases carries the oversized reviewed trigger
+        # body, so none is marked as reproducing directly: they are
+        # must-be-blocked signature probes
+        for variant in self.pack["signature_variants"]:
+            self.assertFalse(variant["reproduces_directly"], variant["id"])
+
+    def test_urlencoded_field_body_is_pinned_and_field_named(self):
+        import cve_lab_payloads as payloads
+
+        body = payloads.progress_urlencoded_field_body()
+        self.assertEqual(
+            hashlib.sha256(body).hexdigest(),
+            payloads.PROGRESS_URLENCODED_FIELD_BODY_SHA256,
+        )
+        self.assertEqual(body, b"PHP_SESSION_UPLOAD_PROGRESS=123")
+        self.assertNotIn(b'name="PHP_SESSION_UPLOAD_PROGRESS"', body)
+        self.assertLess(len(body), 64 * 1024)
 
 
 class ImageVerificationTests(unittest.TestCase):

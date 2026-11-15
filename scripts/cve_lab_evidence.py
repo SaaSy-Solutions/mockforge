@@ -140,14 +140,149 @@ def verify_data_driven_baseline(pack, baseline_control, baseline):
 BASELINE_GATES["data-driven"] = verify_data_driven_baseline
 
 
-def _classify_middleware_bypass(pack, baseline, target, before, after, records, block_status):
+def signature_variant_evidence(
+    pack, baseline_variants, target_variants, baseline_records, target_records, block_status
+):
+    """Per-variant verdict checks for a pack's data-driven signature variants.
+
+    Every variant declared in ``pack["signature_variants"]`` is judged on its
+    own, never averaged: the direct baseline must show the origin received
+    the variant (plus the reviewed crash reproduction for variants marked
+    ``reproduces_directly``), and the target phase must show the LB blocked
+    it - no origin observation for its token, answered with the configured
+    block status. A variant that reached the origin is named, and the run
+    fails; nothing else about the run can mask it. Returns
+    (check_entries, all_ok, got_through, per_variant_verdicts).
+    """
+    entries = []
+    all_ok = True
+    got_through = []
+    verdicts = {}
+
+    def record(check, ok, outcome="ok"):
+        entries.append({"check": check, "outcome": outcome})
+        return ok
+
+    for variant in pack.get("signature_variants", ()):
+        variant_id = variant["id"]
+        direct = (baseline_variants or {}).get(variant_id) or {}
+        target = (target_variants or {}).get(variant_id) or {}
+        variant_ok = True
+        direct_token = direct.get("token")
+        seen_direct = observations(baseline_records, direct_token) if direct_token else []
+        if seen_direct:
+            record(
+                f"variant {variant_id} reached the origin in the direct baseline",
+                True,
+            )
+        else:
+            detail = direct.get("error") or "no origin observation"
+            record(
+                f"variant {variant_id} reached the origin in the direct baseline",
+                False,
+                f"not satisfied ({detail})",
+            )
+            variant_ok = False
+        if variant.get("reproduces_directly"):
+            if direct.get("segfault_confirmed"):
+                record(
+                    f"variant {variant_id} reproduced the reviewed corruption "
+                    "in the direct baseline",
+                    True,
+                )
+            else:
+                record(
+                    f"variant {variant_id} reproduced the reviewed corruption "
+                    "in the direct baseline",
+                    False,
+                    "not satisfied, no new segmentation-fault marker after "
+                    "the variant request",
+                )
+                variant_ok = False
+        target_token = target.get("token")
+        seen_target = observations(target_records, target_token) if target_token else []
+        if seen_target:
+            detail = f"reached the origin with status {seen_target[0].get('status')}"
+            if seen_target[0].get("error"):
+                detail += f" ({seen_target[0]['error']})"
+            record(
+                f"variant {variant_id} was blocked at the target",
+                False,
+                f"not satisfied, {detail}",
+            )
+            variant_ok = False
+            got_through.append(variant_id)
+        elif target.get("status") is None:
+            detail = target.get("error") or "no usable response"
+            record(
+                f"variant {variant_id} was blocked at the target",
+                False,
+                f"not satisfied, {detail}",
+            )
+            variant_ok = False
+        else:
+            record(f"variant {variant_id} was blocked at the target", True)
+            if target.get("status") != block_status:
+                record(
+                    f"variant {variant_id} response matched the configured "
+                    f"block status ({block_status})",
+                    False,
+                    f"not satisfied, target status {target.get('status')}",
+                )
+                variant_ok = False
+            else:
+                record(
+                    f"variant {variant_id} response matched the configured "
+                    f"block status ({block_status})",
+                    True,
+                )
+        if variant_id in got_through:
+            verdicts[variant_id] = "fail"
+        elif variant_ok:
+            verdicts[variant_id] = "pass"
+        else:
+            verdicts[variant_id] = "inconclusive"
+        all_ok = all_ok and variant_ok
+    return entries, all_ok, got_through, verdicts
+
+
+def variant_verdict(all_ok, got_through):
+    """Downgrade-only verdict contribution from the signature variants.
+
+    A variant that got through fails the run and is named; a variant that
+    did not match its reviewed expectations leaves the run inconclusive;
+    healthy variants change nothing (return (None, None)). The main
+    signature's verdict can never be upgraded by variant evidence.
+    """
+    if got_through:
+        return (
+            "fail",
+            "signature variant(s) "
+            + ", ".join(sorted(got_through))
+            + " reached the origin; blocking assertion failed",
+        )
+    if not all_ok:
+        return (
+            "inconclusive",
+            "a signature variant did not match its reviewed expectations",
+        )
+    return None, None
+
+
+def _classify_middleware_bypass(
+    pack, baseline, target, before, after, records, block_status, variant_tokens=frozenset()
+):
     """Return (verdict, reason, checks) for one target run.
 
     The verdict semantics are unchanged: pass requires a reproduced direct
     baseline, healthy benign controls, fully correlated origin traffic and a
     blocked signature request; any origin hit for the signature request fails
     the run. `checks` records each assertion in evaluation order so reports
-    can show exactly which check produced the verdict.
+    can show exactly which check produced the verdict. `variant_tokens`
+    carries the correlation tokens of the pack's data-driven signature
+    variants so their traffic stays attributable to this run; the per-variant
+    blocking verdict is computed outside the classifier and can only
+    downgrade its outcome.
     """
     checks = []
 
@@ -199,6 +334,7 @@ def _classify_middleware_bypass(pack, baseline, target, before, after, records, 
         {target["token"]}
         | extras_tokens_before
         | extras_tokens_after
+        | set(variant_tokens)
         | {
             c[key] for c in (before, after) for key in ("token", "root_token")
         }
@@ -244,14 +380,18 @@ def classify(baseline, target, before, after, records, block_status):
 
 
 def classify_php_cgi_argument_injection(
-    pack, baseline, target, before, after, records, block_status
+    pack, baseline, target, before, after, records, block_status, variant_tokens=frozenset()
 ):
     """Return (verdict, reason, checks) for one PHP-CGI target run.
 
     Pass requires a reproduced direct baseline (the injected PHP executed),
     benign and ordinary controls that match the application's non-vulnerable
     behavior, fully correlated origin traffic, and a blocked exploit request;
-    any origin hit for the exploit request fails the run.
+    any origin hit for the exploit request fails the run. `variant_tokens`
+    carries the correlation tokens of the pack's data-driven signature
+    variants so their traffic stays attributable to this run; the per-variant
+    blocking verdict is computed outside the classifier and can only
+    downgrade its outcome.
     """
     checks = []
     controls = pack["controls"]
@@ -306,6 +446,7 @@ def classify_php_cgi_argument_injection(
         {target["token"]}
         | extras_tokens_before
         | extras_tokens_after
+        | set(variant_tokens)
         | {
             c[key] for c in (before, after) for key in ("token", "root_token")
         }
@@ -344,7 +485,7 @@ def classify_php_cgi_argument_injection(
 
 
 def classify_modphp_segfault(
-    pack, baseline, target, before, after, records, block_status
+    pack, baseline, target, before, after, records, block_status, variant_tokens=frozenset()
 ):
     """Return (verdict, reason, checks) for one mod_php target run.
 
@@ -356,6 +497,10 @@ def classify_modphp_segfault(
     after-control is evaluated only on the blocked path: when the exploit
     reaches the origin it crashes an Apache child, so a dead control after
     the exploit corroborates the failure instead of masking it.
+    `variant_tokens` carries the correlation tokens of the pack's data-driven
+    signature variants so their traffic stays attributable to this run; the
+    per-variant blocking verdict is computed outside the classifier and can
+    only downgrade its outcome.
     """
     checks = []
     controls = pack["controls"]
@@ -381,9 +526,13 @@ def classify_modphp_segfault(
         record("benign controls corroborate origin reachability", False)
         return "inconclusive", "benign controls did not corroborate origin reachability", checks
     record("benign controls corroborate origin reachability", True)
-    expected_tokens = {target["token"]} | {
-        c[key] for c in (before, after) for key in ("token", "root_token") if key in c
-    }
+    expected_tokens = (
+        {target["token"]}
+        | set(variant_tokens)
+        | {
+            c[key] for c in (before, after) for key in ("token", "root_token") if key in c
+        }
+    )
     if any(not expected_tokens.intersection(r["tokens"]) for r in records):
         record("every origin request correlates with this run", False)
         return (
@@ -441,7 +590,9 @@ def classify_modphp_segfault(
 
 
 
-def classify_data_driven(pack, baseline, target, before, after, records, block_status):
+def classify_data_driven(
+    pack, baseline, target, before, after, records, block_status, variant_tokens=frozenset()
+):
     """Return (verdict, reason, checks) using only pack-declared data.
 
     This is the generic evidence path for packs whose outcome is a plain
@@ -450,6 +601,10 @@ def classify_data_driven(pack, baseline, target, before, after, records, block_s
     is answered with the status the pack declares. A pack whose evidence
     model fits this shape needs no classifier code: it names
     ``data-driven`` for both its ``baseline_gate`` and ``classifier``.
+    `variant_tokens` carries the correlation tokens of the pack's data-driven
+    signature variants so their traffic stays attributable to this run; the
+    per-variant blocking verdict is computed outside the classifier and can
+    only downgrade its outcome.
     """
     checks = []
     controls = pack["controls"]
@@ -483,7 +638,7 @@ def classify_data_driven(pack, baseline, target, before, after, records, block_s
         for seen_case in (phase.get("extras") or {}).values():
             if seen_case.get("token"):
                 phase_tokens.add(seen_case["token"])
-    expected_tokens = {target["token"]} | extras_tokens | phase_tokens
+    expected_tokens = {target["token"]} | extras_tokens | phase_tokens | set(variant_tokens)
     if any(not expected_tokens.intersection(r["tokens"]) for r in records):
         record("every origin request correlates with this run", False)
         return (
