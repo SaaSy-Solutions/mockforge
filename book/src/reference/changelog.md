@@ -1,3 +1,22 @@
+## [0.3.246] - 2026-11-15
+
+### Security
+
+- **[Cloud]** The registry's showcase admin endpoints require a site administrator. (#1590)
+- **[DevX]** Update `quinn-proto` to 0.11.19 and `quinn-udp` to 0.5.16 for RUSTSEC-2026-0523, RUSTSEC-2026-0524 and RUSTSEC-2026-0538. (#1580)
+
+### Fixed
+
+- **[Reality]** `mockforge cve run --skip-tls-verify` against an HTTPS target no longer fails at the baseline with `flag provided but not defined: -insecure`. The pinned Nuclei 3.11.1 runner has no such flag and never verifies TLS certificates, so MockForge no longer passes one; `--skip-tls-verify` still governs MockForge's own control requests and is recorded in the report. A regression test runs the real pinned runner against a self-signed HTTPS server. (#1601, reported on #79)
+- **[Cloud]** The registry acknowledges Stripe webhooks that can never be acted on (no valid org, an unknown org, or an already-passed trial end) instead of answering a retryable 503 that Stripe would retry for days. (#1575)
+
+### Added
+
+- **[Reality]** CVE lab packs can declare more test cases as data (`extra_cases`), and must-be-blocked signature variants that run in the direct baseline and through the load balancer with a verdict per variant. (#1541, #1597)
+- **[Reality]** `mockforge cve list` surfaces each pack's digest-pinned images and whether this machine holds them; digest-pulled images do not appear in `docker images`. (#1542)
+- **[Reality]** PHP2Shell 2026 packs for CVE-2026-109618 and CVE-2026-109619, with signature variants for the `PHP_SESSION_UPLOAD_PROGRESS` placements reported on #79. Both packs are unverified (their trigger has not reproduced on a lab host yet), so they run only with `--include-unverified`. (#1524, #1597)
+- **[DevX]** CI reclaims oversized runner build targets, with a 25G default cap. (#1581, #1586)
+
 ## [0.3.245] - 2026-11-13
 
 0.3.244 was tagged but never published (its release build ran out of disk), so 0.3.245 ships its changes.
