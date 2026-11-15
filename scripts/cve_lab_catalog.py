@@ -221,7 +221,7 @@ PACKS = {
                 "https://github.com/php/php-src/security/advisories/GHSA-w8hw-w9fx-j79w",
                 "https://www.php.net/releases/8.4/release-8.4.27.php",
             ],
-            "coverage": "One reviewed OOM-during-input-parse corruption case on mod_php, benign controls, and the PHP_SESSION_UPLOAD_PROGRESS marker as URI, query, header and urlencoded-body signature variants; not remote code execution, not FPM, not every trigger variant",
+            "coverage": "One reviewed OOM-during-input-parse corruption case on mod_php, benign controls, and the PHP_SESSION_UPLOAD_PROGRESS marker as URI, query (POST and GET), header and urlencoded-field-name signature variants; not remote code execution, not FPM, not every trigger variant",
             "origin_port": 18082,
             "listen_address_guidance": (
                 "The recorder defaults to 127.0.0.1:18082, which only accepts local "
@@ -279,44 +279,65 @@ PACKS = {
         },
         # Data-driven signature variants (issue #1588): additional must-be-
         # blocked placements of the PHP_SESSION_UPLOAD_PROGRESS marker. The
-        # pinned multipart bodies carry it only as a multipart form-data
-        # field name; each variant below isolates one other position so a
-        # blocking rule must cover the pattern wherever it appears, not just
-        # the field name. Every variant runs in the direct baseline (must
-        # reach the origin; marked variants must also reproduce the reviewed
-        # crash) and through the LB (must be blocked), and the verdict is
-        # reported per variant. Bodies stay pinned via cve_lab_payloads.
+        # source cases are Srikanth's (srikr) field requests on issue #79
+        # (Nov 14, 2026), adapted to the pack's token convention; bodies are
+        # pinned builders in cve_lab_payloads, and none of them carries the
+        # oversized reviewed trigger, so no variant is marked as reproducing
+        # directly - they are must-be-blocked signature probes. The marker's
+        # multipart form-data field-name position stays the pack set's
+        # existing case (the pinned oom_body_with_progress producer and
+        # consumer_body consumer), so no variant duplicates it. Every variant
+        # runs in the direct baseline (must reach the origin) and through the
+        # LB (must be blocked), and the verdict is reported per variant.
         "signature_variants": [
             {
-                # (a) marker as a request-URI path segment beneath the
-                # vulnerable endpoint. Whether the reviewed Apache config
-                # routes path info to upload.php is not established, so this
-                # variant is marked as not reproducing directly: the direct
-                # baseline requires origin receipt only.
+                # (a) marker as the first request-URI path segment (the exact
+                # source case POST /PHP_SESSION_UPLOAD_PROGRESS/upload.php).
                 "id": "marker-in-uri",
                 "method": "POST",
-                "path": "/upload.php/PHP_SESSION_UPLOAD_PROGRESS?__mockforge_cve={token}",
+                "path": "/PHP_SESSION_UPLOAD_PROGRESS/upload.php?__mockforge_cve={token}",
                 "headers": {"X-Mockforge-Cve": "{token}"},
-                "body_ref": "oom_body",
+                "body_ref": "file_upload_body",
                 "expect": "blocked",
                 "reproduces_directly": False,
             },
             {
-                # (b) marker as a query parameter. The reviewed trigger body
-                # and endpoint are otherwise identical to the baseline
-                # exploit, so the direct baseline asserts the reviewed crash.
+                # (b) marker as a query parameter on a multipart POST (the
+                # exact source case POST /upload.php?PHP_SESSION_UPLOAD_PROGRESS=123).
                 "id": "marker-in-query",
                 "method": "POST",
-                "path": "/upload.php?PHP_SESSION_UPLOAD_PROGRESS=mockforge-lab&__mockforge_cve={token}",
+                "path": "/upload.php?PHP_SESSION_UPLOAD_PROGRESS=123&__mockforge_cve={token}",
                 "headers": {"X-Mockforge-Cve": "{token}"},
-                "body_ref": "oom_body",
+                "body_ref": "file_upload_body",
                 "expect": "blocked",
-                "reproduces_directly": True,
+                "reproduces_directly": False,
             },
             {
-                # (c) marker in a request header (name and value, so a rule
-                # matching either position blocks it). Same reviewed trigger
-                # body and endpoint as the baseline exploit.
+                # (c) marker as a query parameter on a plain GET with no body
+                # (the exact source case GET /upload.php?PHP_SESSION_UPLOAD_PROGRESS=1).
+                "id": "marker-in-query-get",
+                "method": "GET",
+                "path": "/upload.php?PHP_SESSION_UPLOAD_PROGRESS=1&__mockforge_cve={token}",
+                "headers": {"X-Mockforge-Cve": "{token}"},
+                "expect": "blocked",
+                "reproduces_directly": False,
+            },
+            {
+                # (d) marker as a urlencoded body FIELD NAME - a body position
+                # other than the multipart field name (the exact source case
+                # POST /upload.php with body PHP_SESSION_UPLOAD_PROGRESS=123).
+                "id": "marker-in-urlencoded-field",
+                "method": "POST",
+                "path": "/upload.php?__mockforge_cve={token}",
+                "headers": {"X-Mockforge-Cve": "{token}"},
+                "body_ref": "progress_urlencoded_field_body",
+                "expect": "blocked",
+                "reproduces_directly": False,
+            },
+            {
+                # (e) marker carried in a request header (name and value, so a
+                # rule matching either position blocks it) - the header
+                # complement to the field cases' marker-ish x-php/test headers.
                 "id": "marker-in-header",
                 "method": "POST",
                 "path": "/upload.php?__mockforge_cve={token}",
@@ -324,20 +345,7 @@ PACKS = {
                     "X-Mockforge-Cve": "{token}",
                     "X-PHP-Session-Upload-Progress": "PHP_SESSION_UPLOAD_PROGRESS",
                 },
-                "body_ref": "oom_body",
-                "expect": "blocked",
-                "reproduces_directly": True,
-            },
-            {
-                # (d) marker as a VALUE inside a small urlencoded body - a
-                # body position other than the multipart field name. The
-                # body is a new pinned, inert payload (no memory-pressure
-                # claim), so this variant is marked as not reproducing.
-                "id": "marker-in-body-value",
-                "method": "POST",
-                "path": "/upload.php?__mockforge_cve={token}",
-                "headers": {"X-Mockforge-Cve": "{token}"},
-                "body_ref": "progress_urlencoded_body",
+                "body_ref": "file_upload_body",
                 "expect": "blocked",
                 "reproduces_directly": False,
             },

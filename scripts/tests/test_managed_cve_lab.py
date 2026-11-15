@@ -1861,7 +1861,8 @@ _MARKER_TEMPLATE_SHA256 = hashlib.sha256(_MARKER_TEMPLATE.encode()).hexdigest()
 
 
 def synthetic_variants():
-    """Two data-only signature variants pinned via body_template."""
+    """Three data-only signature variants: two pinned via body_template and
+    one bodyless GET probe (the field cases' plain-GET shape)."""
     return [
         {
             "id": "marker-in-query",
@@ -1882,6 +1883,13 @@ def synthetic_variants():
             },
             "body_template": _MARKER_TEMPLATE,
             "body_sha256": _MARKER_TEMPLATE_SHA256,
+            "expect": "blocked",
+        },
+        {
+            "id": "marker-in-query-get",
+            "method": "GET",
+            "path": "/attack?marker=PHP_SESSION_UPLOAD_PROGRESS&__mockforge_cve={token}",
+            "headers": {"X-Mockforge-Cve": "{token}"},
             "expect": "blocked",
         },
     ]
@@ -2074,8 +2082,11 @@ class SignatureVariantRunnerTests(unittest.TestCase):
                 pack,
             )
             self.assertEqual(not_reproducing, [])
-            self.assertEqual(set(outcomes), {"marker-in-query", "marker-in-header"})
-            self.assertEqual(len(seen), 2)
+            self.assertEqual(
+                set(outcomes),
+                {"marker-in-query", "marker-in-header", "marker-in-query-get"},
+            )
+            self.assertEqual(len(seen), 3)
             for variant_id, outcome in outcomes.items():
                 matching = [
                     (method, path, headers, body)
@@ -2084,11 +2095,16 @@ class SignatureVariantRunnerTests(unittest.TestCase):
                 ]
                 self.assertEqual(len(matching), 1)
                 method, path, headers, body = matching[0]
-                self.assertEqual(method, "POST")
                 self.assertIn(f"__mockforge_cve={outcome['token']}", path)
                 self.assertIn(f"-baseline-variant-{variant_id}", outcome["token"])
-                self.assertEqual(body, _MARKER_TEMPLATE.encode())
                 self.assertEqual(outcome["status"], 200)
+                if variant_id == "marker-in-query-get":
+                    # the field cases' plain-GET shape: GET, no body
+                    self.assertEqual(method, "GET")
+                    self.assertEqual(body, b"")
+                else:
+                    self.assertEqual(method, "POST")
+                    self.assertEqual(body, _MARKER_TEMPLATE.encode())
             self.assertTrue((Path(directory) / "baseline-variants.json").exists())
 
     def test_variant_baseline_steps_demand_the_reviewed_crash_when_marked(self):
@@ -2131,11 +2147,14 @@ class SignatureVariantRunnerTests(unittest.TestCase):
                 "run1",
                 pack,
             )
-            self.assertEqual(set(outcomes), {"marker-in-query", "marker-in-header"})
+            self.assertEqual(
+                set(outcomes),
+                {"marker-in-query", "marker-in-header", "marker-in-query-get"},
+            )
             for outcome in outcomes.values():
                 self.assertIn("-target-variant-", outcome["token"])
                 self.assertEqual(outcome["status"], 403)
-            self.assertEqual(len(seen), 2)
+            self.assertEqual(len(seen), 3)
             self.assertTrue((Path(directory) / "target-variants.json").exists())
 
     def test_variant_target_steps_use_https_for_https_targets(self):
@@ -2181,13 +2200,14 @@ class SignatureVariantEvidenceTests(unittest.TestCase):
         return pack
 
     def healthy_evidence(self, pack, target_records=()):
+        variant_ids = tuple(variant["id"] for variant in pack["signature_variants"])
         baseline_variants = {
             variant_id: {"token": f"bv-{variant_id}", "status": 200}
-            for variant_id in ("marker-in-query", "marker-in-header")
+            for variant_id in variant_ids
         }
         target_variants = {
             variant_id: {"token": f"tv-{variant_id}", "status": 403}
-            for variant_id in ("marker-in-query", "marker-in-header")
+            for variant_id in variant_ids
         }
         baseline_records = [
             {"tokens": [outcome["token"]], "status": 200}
@@ -2209,6 +2229,7 @@ class SignatureVariantEvidenceTests(unittest.TestCase):
         self.assertEqual(verdicts, {
             "marker-in-query": "pass",
             "marker-in-header": "pass",
+            "marker-in-query-get": "pass",
         })
         names = [entry["check"] for entry in entries]
         for variant_id in verdicts:
@@ -2262,6 +2283,7 @@ class SignatureVariantEvidenceTests(unittest.TestCase):
                 target_records,
                 403,
             )
+
 
         wrong_status = {
             "marker-in-query": {"token": "tv-marker-in-query", "status": 200},
@@ -2364,8 +2386,8 @@ class SignatureVariantEvidenceTests(unittest.TestCase):
 
 
 class Php2Shell2026SignatureVariantTests(unittest.TestCase):
-    """The shipped PHP2Shell pack (CVE-2026-109618) carries the four
-    reviewed marker placements as data, with pinned bodies."""
+    """The shipped PHP2Shell pack (CVE-2026-109618) carries Srikanth's field
+    cases from issue #79 as reviewed marker placements, with pinned bodies."""
 
     def setUp(self):
         self.pack = catalog.PACKS["CVE-2026-109618"]
@@ -2375,7 +2397,7 @@ class Php2Shell2026SignatureVariantTests(unittest.TestCase):
 
         validate_data_driven_pack(self.pack)
         variants = self.pack["signature_variants"]
-        self.assertEqual(len(variants), 4)
+        self.assertEqual(len(variants), 5)
         for variant in variants:
             self.assertEqual(variant["expect"], "blocked")
             self.assertIn("reproduces_directly", variant)
@@ -2392,18 +2414,41 @@ class Php2Shell2026SignatureVariantTests(unittest.TestCase):
             {
                 "marker-in-uri",
                 "marker-in-query",
+                "marker-in-query-get",
+                "marker-in-urlencoded-field",
                 "marker-in-header",
-                "marker-in-body-value",
             },
         )
         marker = "PHP_SESSION_UPLOAD_PROGRESS"
-        # (a) URI/path: the marker is a path segment before the query
+        # (a) URI/path: the marker is the first path segment (the exact
+        # source case POST /PHP_SESSION_UPLOAD_PROGRESS/upload.php)
         uri = by_id["marker-in-uri"]["path"]
-        self.assertIn(f"/{marker}", uri.split("?")[0])
-        # (b) query parameter: the marker is a query key
+        self.assertEqual(uri.split("?")[0].split("/")[1], marker)
+        self.assertTrue(uri.split("?")[0].endswith("/upload.php"))
+        # (b) query parameter on a POST (the exact source case
+        # POST /upload.php?PHP_SESSION_UPLOAD_PROGRESS=123)
+        self.assertEqual(by_id["marker-in-query"]["method"], "POST")
         query = parse_qs(urlsplit(by_id["marker-in-query"]["path"]).query)
         self.assertIn(marker, query)
-        # (c) request header: the marker names and values a header
+        # (c) query parameter on a plain GET with no body (the exact source
+        # case GET /upload.php?PHP_SESSION_UPLOAD_PROGRESS=1)
+        get_variant = by_id["marker-in-query-get"]
+        self.assertEqual(get_variant["method"], "GET")
+        self.assertIn(marker, parse_qs(urlsplit(get_variant["path"]).query))
+        self.assertNotIn("body_ref", get_variant)
+        self.assertNotIn("body_template", get_variant)
+        self.assertIsNone(exploits._variant_body(get_variant))
+        # (d) urlencoded body FIELD NAME - a body position other than the
+        # multipart field name (the exact source case body
+        # PHP_SESSION_UPLOAD_PROGRESS=123)
+        body_variant = by_id["marker-in-urlencoded-field"]
+        body = exploits._variant_body(body_variant)
+        self.assertEqual(body, b"PHP_SESSION_UPLOAD_PROGRESS=123")
+        self.assertNotIn(b'name="PHP_SESSION_UPLOAD_PROGRESS"', body)
+        self.assertEqual(
+            body_variant["body_ref"], "progress_urlencoded_field_body"
+        )
+        # (e) request header: the marker names and values a header
         header_variant = by_id["marker-in-header"]
         self.assertIn(
             marker, [value for value in header_variant["headers"].values()]
@@ -2412,15 +2457,6 @@ class Php2Shell2026SignatureVariantTests(unittest.TestCase):
             "php-session-upload-progress",
             " ".join(name.lower() for name in header_variant["headers"]),
         )
-        # (d) body value: the urlencoded body carries the marker as a value,
-        # not as a multipart field name
-        body_variant = by_id["marker-in-body-value"]
-        body = exploits._variant_body(body_variant)
-        self.assertIn(marker.encode(), body)
-        self.assertNotIn(b'name="PHP_SESSION_UPLOAD_PROGRESS"', body)
-        self.assertEqual(
-            body_variant["body_ref"], "progress_urlencoded_body"
-        )
 
     def test_trigger_position_variants_isolate_the_marker_to_one_position(self):
         import cve_lab_payloads as payloads
@@ -2428,19 +2464,29 @@ class Php2Shell2026SignatureVariantTests(unittest.TestCase):
         by_id = {
             variant["id"]: variant for variant in self.pack["signature_variants"]
         }
-        # the URI/query/header variants all reuse the reviewed trigger body,
-        # which carries no marker, so a block must come from the new position
-        for variant_id in ("marker-in-uri", "marker-in-query", "marker-in-header"):
+        # the URI/query/header variants all reuse the benign single-part
+        # upload body, which carries no marker, so a block must come from
+        # the new position; the GET variant carries no body at all
+        for variant_id in (
+            "marker-in-uri",
+            "marker-in-query",
+            "marker-in-header",
+        ):
             variant = by_id[variant_id]
-            self.assertEqual(variant["body_ref"], "oom_body")
+            self.assertEqual(variant["body_ref"], "file_upload_body")
             self.assertNotIn(
-                b"PHP_SESSION_UPLOAD_PROGRESS", payloads.oom_body()
+                b"PHP_SESSION_UPLOAD_PROGRESS", payloads.file_upload_body()
             )
+        self.assertNotIn(
+            b"PHP_SESSION_UPLOAD_PROGRESS", payloads.file_upload_body()
+        )
 
     def test_variant_bodies_are_registry_pinned(self):
         import cve_lab_payloads as payloads
 
         for variant in self.pack["signature_variants"]:
+            if "body_ref" not in variant:
+                continue
             builder, expected_digest, content_type = payloads.PINNED_BODIES[
                 variant["body_ref"]
             ]
@@ -2449,34 +2495,33 @@ class Php2Shell2026SignatureVariantTests(unittest.TestCase):
                 hashlib.sha256(body).hexdigest(), expected_digest
             )
             self.assertTrue(content_type)
-        # the URI-position variant reuses the reviewed trigger body verbatim
+        # the URI-position variant reuses the field cases' benign upload
+        # body verbatim
         uri_variant = [
             variant
             for variant in self.pack["signature_variants"]
             if variant["id"] == "marker-in-uri"
         ][0]
-        self.assertEqual(exploits._variant_body(uri_variant), payloads.oom_body())
+        self.assertEqual(
+            exploits._variant_body(uri_variant), payloads.file_upload_body()
+        )
 
-    def test_reproducing_variants_are_marked_honestly(self):
-        by_id = {
-            variant["id"]: variant for variant in self.pack["signature_variants"]
-        }
-        # the reviewed trigger (oom_body on the exploit endpoint) is asserted
-        # only where the endpoint and body are unchanged
-        self.assertTrue(by_id["marker-in-query"]["reproduces_directly"])
-        self.assertTrue(by_id["marker-in-header"]["reproduces_directly"])
-        self.assertFalse(by_id["marker-in-uri"]["reproduces_directly"])
-        self.assertFalse(by_id["marker-in-body-value"]["reproduces_directly"])
+    def test_field_case_variants_are_not_marked_as_reproducing(self):
+        # none of the source cases carries the oversized reviewed trigger
+        # body, so none is marked as reproducing directly: they are
+        # must-be-blocked signature probes
+        for variant in self.pack["signature_variants"]:
+            self.assertFalse(variant["reproduces_directly"], variant["id"])
 
-    def test_urlencoded_variant_body_is_pinned_and_value_positioned(self):
+    def test_urlencoded_field_body_is_pinned_and_field_named(self):
         import cve_lab_payloads as payloads
 
-        body = payloads.progress_urlencoded_body()
+        body = payloads.progress_urlencoded_field_body()
         self.assertEqual(
             hashlib.sha256(body).hexdigest(),
-            payloads.PROGRESS_URLENCODED_BODY_SHA256,
+            payloads.PROGRESS_URLENCODED_FIELD_BODY_SHA256,
         )
-        self.assertIn(b"PHP_SESSION_UPLOAD_PROGRESS", body)
+        self.assertEqual(body, b"PHP_SESSION_UPLOAD_PROGRESS=123")
         self.assertNotIn(b'name="PHP_SESSION_UPLOAD_PROGRESS"', body)
         self.assertLess(len(body), 64 * 1024)
 
