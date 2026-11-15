@@ -222,18 +222,22 @@ class InputTests(unittest.TestCase):
             self.assertEqual(lab.main(["list"]), 0)
         packs = json.loads(output.getvalue())
         self.assertIn("CVE-2025-29927", packs)
-        for cve in ("CVE-2026-109618", "CVE-2026-109619"):
+        for cve in ("CVE-2026-109618", "CVE-2026-109619", "CVE-2026-111497"):
             self.assertNotIn(cve, packs)
 
-        for action in ("run", "prepare"):
+        for action, hidden in (
+            (action, hidden)
+            for action in ("run", "prepare")
+            for hidden in ("CVE-2026-109618", "CVE-2026-111497")
+        ):
             err = io.StringIO()
-            with self.subTest(action=action), patch.object(lab, "prepare") as prepare, patch.object(lab, "run") as run, contextlib.redirect_stderr(err):
-                args = [action, "CVE-2026-109618"]
+            with self.subTest(action=action, cve=hidden), patch.object(lab, "prepare") as prepare, patch.object(lab, "run") as run, contextlib.redirect_stderr(err):
+                args = [action, hidden]
                 if action == "run":
                     args += ["--output-dir", "unused-output"]
                 self.assertEqual(lab.main(args), 1)
                 self.assertIn(
-                    "CVE-2026-109618 is an unverified lab pack (its trigger has not reproduced on a lab host); pass --include-unverified to run it for development",
+                    f"{hidden} is an unverified lab pack (its trigger has not reproduced on a lab host); pass --include-unverified to run it for development",
                     err.getvalue(),
                 )
                 prepare.assert_not_called()
