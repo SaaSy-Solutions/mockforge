@@ -10,6 +10,7 @@ import {
   PanelLeftOpen,
   RefreshCw,
   Search,
+  Server,
   X,
 } from 'lucide-react';
 import { cn } from '../../utils/cn';
@@ -24,6 +25,7 @@ import { useSkipLinks } from '../../hooks/useFocusManagement';
 import { useI18n } from '../../i18n/I18nProvider';
 import { GlobalConnectionStatus } from './ConnectionStatus';
 import { CommandPalette } from './CommandPalette';
+import { isCloud } from './navigation';
 import { WorkspaceSwitcher } from './WorkspaceSwitcher';
 import {
   findNavItem,
@@ -177,7 +179,11 @@ function SidebarContent({
     <div className="flex h-full flex-col">
       {/* Brand row */}
       <div className={cn('flex h-14 shrink-0 items-center gap-2', collapsed ? 'justify-center px-2' : 'px-4')}>
-        <Link to="/dashboard" onClick={onNavigate} className="flex items-center gap-2 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring">
+        <Link
+          to="/dashboard"
+          onClick={onNavigate}
+          className="flex items-center gap-2 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
           <Logo variant="icon" size="sm" />
           {!collapsed && (
             <span className="text-[15px] font-semibold tracking-tight text-foreground">{t('app.brand')}</span>
@@ -244,7 +250,10 @@ function SidebarContent({
           const containsActive = section.items.some((i) => i.id === activeId);
           const listId = `nav-section-${section.id}`;
           return (
-            <div key={section.id} className={cn(index > 0 && (collapsed ? 'mt-2 border-t border-border pt-2' : 'mt-3'))}>
+            <div
+              key={section.id}
+              className={cn(index > 0 && (collapsed ? 'mt-2 border-t border-border pt-2' : 'mt-3'))}
+            >
               {titled && !collapsed && (
                 <button
                   type="button"
@@ -254,9 +263,7 @@ function SidebarContent({
                   className="group flex h-7 w-full items-center gap-1 rounded-md px-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/80 outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <span className="flex-1 text-left">{t(section.titleKey!)}</span>
-                  {!isOpen && containsActive && (
-                    <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-primary" />
-                  )}
+                  {!isOpen && containsActive && <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-primary" />}
                   <ChevronRight
                     className={cn('h-3.5 w-3.5 transition-transform duration-150', isOpen && 'rotate-90')}
                     aria-hidden
@@ -265,11 +272,6 @@ function SidebarContent({
               )}
               {isOpen && (
                 <div id={listId} className="space-y-px">
-                  {section.id === 'local-only' && !collapsed && (
-                    <p className="px-2.5 pb-1 text-[11px] leading-snug text-muted-foreground">
-                      {t('nav.localOnly.hint')}
-                    </p>
-                  )}
                   {section.items.map((item) => (
                     <NavLinkItem
                       key={item.id}
@@ -288,6 +290,17 @@ function SidebarContent({
 
       {/* Footer */}
       <div className={cn('shrink-0 space-y-px border-t border-border py-2', collapsed ? 'px-2' : 'px-3')}>
+        {isCloud && (
+          <a
+            href="https://docs.mockforge.dev/getting-started/installation.html"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex h-8 w-full items-center gap-2.5 rounded-md px-2.5 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
+          >
+            <Server className="h-4 w-4 shrink-0" aria-hidden />
+            {!collapsed && <span className="truncate">{t('nav.runLocally')}</span>}
+          </a>
+        )}
         {helpItems.map((item) => (
           <NavLinkItem
             key={item.id}
@@ -483,15 +496,17 @@ export function AppShell({ children, onRefresh }: AppShellProps) {
             >
               <Search className="h-4 w-4" />
             </button>
-            {onRefresh && <button
-              type="button"
-              className={iconButton}
-              onClick={onRefresh}
-              aria-label={t('app.refresh')}
-              title={t('app.refresh')}
-            >
-              <RefreshCw className="h-4 w-4" />
-            </button>}
+            {onRefresh && (
+              <button
+                type="button"
+                className={iconButton}
+                onClick={onRefresh}
+                aria-label={t('app.refresh')}
+                title={t('app.refresh')}
+              >
+                <RefreshCw className="h-4 w-4" />
+              </button>
+            )}
             <SimpleThemeToggle className={iconButton} />
             <button
               type="button"

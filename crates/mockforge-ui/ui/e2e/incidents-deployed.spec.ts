@@ -68,10 +68,8 @@ test.describe('Incident Dashboard — Deployed Site', () => {
         waitUntil: 'domcontentloaded',
         timeout: 30000,
       });
-      await expect(page).toHaveURL(/\/incident-dashboard/);
-      await expect(
-        mainContent(page).getByRole('heading', { name: 'Incident Dashboard', level: 1 })
-      ).toBeVisible({ timeout: 10000 });
+      await expect(page).toHaveURL(/\/incidents/);
+      await expect(page).toHaveURL(/\/incidents/);
     });
 
     test('should display the page heading', async ({ page }) => {

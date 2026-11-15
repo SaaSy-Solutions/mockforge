@@ -278,7 +278,7 @@ test.describe('Community Pages — Deployed Site', () => {
 test.describe('Plugins & User Management — Deployed Site', () => {
   const pages = [
     { path: 'plugins', breadcrumb: 'Plugins', heading: /Plugins/i },
-    { path: 'user-management', breadcrumb: 'User Management', heading: /User Management/i },
+    { path: 'organization', breadcrumb: 'Organization', heading: /Organization/i },
   ];
 
   for (const { path, breadcrumb, heading } of pages) {

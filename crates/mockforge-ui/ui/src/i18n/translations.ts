@@ -132,6 +132,7 @@ const en: Dictionary = {
   'nav.settings': 'Settings',
   'nav.localOnly.section': 'Local only',
   'nav.localOnly.hint': 'These pages need a self-hosted MockForge instance.',
+  'nav.runLocally': 'Run locally',
   'tab.contracts': 'Contracts',
   'tab.testRuns': 'Test Runs',
   'tab.savedFlows': 'Saved Flows',
@@ -176,8 +177,7 @@ const en: Dictionary = {
     'Manage plugins attached to your hosted-mock deployments. Each attachment has its own permission grants and runtime config.',
   'page.cloudPlugins.browseRegistry': 'Browse Registry',
   'page.mockai.title': 'MockAI',
-  'page.mockai.description':
-    'AI-powered mock API intelligence for realistic, context-aware responses',
+  'page.mockai.description': 'AI-powered mock API intelligence for realistic, context-aware responses',
   'page.mockai.quickActions': 'Quick Actions',
   'page.mockai.features': 'Features',
 };
@@ -233,6 +233,7 @@ const es: Dictionary = {
   'nav.settings': 'Ajustes',
   'nav.localOnly.section': 'Solo local',
   'nav.localOnly.hint': 'Estas paginas requieren una instancia local de MockForge.',
+  'nav.runLocally': 'Ejecutar localmente',
   'tab.contracts': 'Contratos',
   'tab.testRuns': 'Ejecuciones de pruebas',
   'tab.savedFlows': 'Flujos guardados',
