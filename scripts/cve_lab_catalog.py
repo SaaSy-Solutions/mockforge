@@ -187,6 +187,9 @@ PACKS = {
         "classifier": "cgi-argument-injection",
     },
     "CVE-2026-111497": {
+        # PR #1523 showed the crash only with native Node builds on macOS; the pinned
+        # container image has not run on a lab host, so this pack stays hidden until it does.
+        "verified": False,
         "catalog": {
             "schema_version": 1,
             "pack_revision": 1,
