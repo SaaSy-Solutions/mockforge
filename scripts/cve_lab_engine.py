@@ -90,6 +90,44 @@ def prepare(engine, pack):
         command([engine, "image", "inspect", image])
 
 
+def image_status(engine, image):
+    """Whether the exact image reference exists in the local engine.
+
+    The check is the same by-digest inspect ``prepare`` performs - never a
+    parse of ``docker images`` output, which does not list digest-pulled
+    images the way tagged ones appear.
+    """
+    if "@sha256:" not in image:
+        # A tag (a pack still pending review) is not a pinned image: a local
+        # image with that tag proves nothing, and prepare refuses it anyway.
+        return "unpinned"
+    result = command([engine, "image", "inspect", image], check=False)
+    return "present" if result.returncode == 0 else "missing"
+
+
+def verify_images(engine, pack):
+    """Report each pack-pinned image with its local presence status.
+
+    Returns one entry per pinned image (the application and the runner) in
+    catalog order, so a run report or a dedicated check can attest exactly
+    which digest-pinned images this machine holds.
+    """
+    catalog = pack["catalog"]
+    return [
+        {
+            "role": "application",
+            "image": catalog["application_image"],
+            "status": image_status(engine, catalog["application_image"]),
+        },
+        {
+            "role": "runner",
+            "image": catalog["runner_image"],
+            "status": image_status(engine, catalog["runner_image"]),
+        },
+    ]
+
+
+
 def container_running(engine, run_id):
     """Whether this run's application container is still alive.
 
@@ -103,6 +141,23 @@ def container_running(engine, run_id):
     if result.returncode:
         return False
     return result.stdout.strip().lower() == "true"
+
+
+
+def container_log(engine, run_id, tail=400):
+    """The application container's recent log output, mid-run.
+
+    Evidence packs whose exploit outcome lives in the application log (an
+    Apache prefork child segmentation fault, for example) compare marker
+    counts before and after the exploit request.
+    """
+    result = command(
+        [engine, "logs", "--tail", str(tail), "mockforge-cve-" + run_id],
+        check=False,
+    )
+    if result.returncode:
+        return ""
+    return result.stdout + result.stderr
 
 
 def owned_remove(engine, name, run_id):
