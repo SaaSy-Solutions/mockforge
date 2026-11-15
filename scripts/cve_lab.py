@@ -266,8 +266,9 @@ def run(args):
                         override, override_reason = evidence.variant_verdict(
                             variants_ok, got_through
                         )
-                        if override:
-                            verdict, reason = override, override_reason
+                        verdict, reason = evidence.merge_variant_verdict(
+                            verdict, reason, override, override_reason
+                        )
                         report["signature_variants"] = {
                             variant_id: {
                                 "direct": report.get("baseline_variants", {}).get(

@@ -2347,6 +2347,30 @@ class SignatureVariantEvidenceTests(unittest.TestCase):
             "blocking assertion failed"
         ))
 
+    def test_variant_evidence_never_softens_a_failed_main_signature(self):
+        # A forwarded main signature plus one wrong-status variant stays fail
+        # with the classifier's reason; it must not become inconclusive.
+        override, override_reason = evidence.variant_verdict(False, [])
+        self.assertEqual(
+            evidence.merge_variant_verdict(
+                "fail", "main signature reached the origin", override, override_reason
+            ),
+            ("fail", "main signature reached the origin"),
+        )
+        self.assertEqual(
+            evidence.merge_variant_verdict("pass", "blocked", override, override_reason),
+            ("inconclusive", override_reason),
+        )
+        failed, failed_reason = evidence.variant_verdict(False, ["alpha"])
+        self.assertEqual(
+            evidence.merge_variant_verdict("inconclusive", "x", failed, failed_reason),
+            ("fail", failed_reason),
+        )
+        self.assertEqual(
+            evidence.merge_variant_verdict("pass", "blocked", None, None),
+            ("pass", "blocked"),
+        )
+
     def test_forwarded_variant_traffic_stays_correlated_for_the_classifier(self):
         # The classifier must not mistake a forwarded variant for uncorrelated
         # traffic: its token is expected, and the per-variant evidence (not
