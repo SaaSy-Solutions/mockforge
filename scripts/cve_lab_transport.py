@@ -156,13 +156,18 @@ def receiver(port, address, backend, signature_header=None, max_body=None):
             return sock, addr
 
         def process_request(self, request_socket, client_address):
+            # Peek for the h2c preface on a worker thread: the peek can wait
+            # on a slow or silent client and must not stall the accept loop.
+            threading.Thread(target=self._dispatch,
+                args=(request_socket, client_address), daemon=True).start()
+
+        def _dispatch(self, request_socket, client_address):
             if http2.looks_like_http2(request_socket):
-                threading.Thread(target=http2.serve_connection,
-                    args=(request_socket, h2_forward, h2_record, limit, signature_header),
-                    daemon=True).start()
+                http2.serve_connection(
+                    request_socket, h2_forward, h2_record, limit, signature_header)
                 return
             request_socket.settimeout(5)
-            super().process_request(request_socket, client_address)
+            self.process_request_thread(request_socket, client_address)
 
     server = Server((address, port), Handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
