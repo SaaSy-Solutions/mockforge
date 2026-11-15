@@ -6,7 +6,10 @@ import hashlib
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
+import secrets
+import shutil
 import socket
 import subprocess
 import sys
@@ -1290,6 +1293,41 @@ class Php2Shell2026ExploitStepTests(unittest.TestCase):
         self.assertEqual(first_body, payloads.oom_body_with_progress())
         self.assertEqual(second_body, payloads.consumer_body())
 
+
+def pinned_runner_engine():
+    """A local engine that already holds the pack's pinned runner image, or None.
+
+    Decides with the same by-digest ``image inspect`` ``prepare`` performs and
+    NEVER pulls: a machine without the image skips instead of downloading.
+    Runs each inspect with the shared temp dir as cwd because rootless engines
+    cannot start from a cwd they cannot see (e.g. this host's /mnt/build).
+    """
+    image = catalog.PACKS[catalog.CVE]["catalog"]["runner_image"]
+    for candidate in ("docker", "podman"):
+        if shutil.which(candidate) is None:
+            continue
+        result = subprocess.run(
+            [candidate, "image", "inspect", image],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=tempfile.gettempdir(),
+        )
+        if result.returncode == 0:
+            return candidate
+    return None
+
+
+RUNNER_ENGINE = pinned_runner_engine()
+NO_RUNNER_IMAGE_SKIP = (
+    "no local container engine (docker/podman) already holds the pinned Nuclei "
+    "runner image; the test never pulls"
+)
+NO_CERT_TOOL_SKIP = (
+    "openssl is not on PATH, so no throwaway self-signed certificate can be minted"
+)
+
+
 class TlsVerifyTests(unittest.TestCase):
     """--skip-tls-verify is an explicit opt-in; the default path verifies."""
 
@@ -1468,6 +1506,114 @@ class TlsVerifyTests(unittest.TestCase):
             self.assertTrue((output / "target.jsonl").exists())
             self.assertEqual((output / "target.jsonl").read_text(), finding)
             self.assertEqual((output / "target.log").read_text(), "debug output")
+
+    @unittest.skipUnless(RUNNER_ENGINE, NO_RUNNER_IMAGE_SKIP)
+    @unittest.skipUnless(shutil.which("openssl"), NO_CERT_TOOL_SKIP)
+    def test_real_pinned_runner_observes_self_signed_https_when_opted_in(self):
+        """Regression against the real pinned runner: ``probe()`` used to append
+        "-insecure" on --skip-tls-verify, a flag Nuclei 3.11.1 does not define,
+        so every opted-in probe died at flag parsing ("flag provided but not
+        defined: -insecure") before touching the network. The pinned image
+        never verifies certificates, so with the fix it must complete one
+        observation against a self-signed HTTPS target."""
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        import ssl
+
+        pack = catalog.PACKS[catalog.CVE]
+        marker = pack["probe"]["marker"]
+        seen = []
+
+        class Handler(BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.1"
+
+            def do_GET(self):
+                seen.append((self.command, self.path, dict(self.headers)))
+                body = f"{marker}\n".encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *_args):
+                pass
+
+        with (
+            tempfile.TemporaryDirectory() as certs,
+            tempfile.TemporaryDirectory() as directory,
+        ):
+            certificate = Path(certs) / "cert.pem"
+            private_key = Path(certs) / "key.pem"
+            subprocess.run(
+                [
+                    "openssl",
+                    "req",
+                    "-x509",
+                    "-newkey",
+                    "rsa:2048",
+                    "-sha256",
+                    "-days",
+                    "2",
+                    "-nodes",
+                    "-subj",
+                    "/CN=127.0.0.1",
+                    "-addext",
+                    "subjectAltName=IP:127.0.0.1",
+                    "-keyout",
+                    str(private_key),
+                    "-out",
+                    str(certificate),
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            tls.load_cert_chain(str(certificate), str(private_key))
+            server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+            server.socket = tls.wrap_socket(server.socket, server_side=True)
+            threading.Thread(target=server.serve_forever, daemon=True).start()
+            self.addCleanup(server.shutdown)
+            self.addCleanup(server.server_close)
+
+            output = Path(directory)
+            run_id = "tls" + secrets.token_hex(4)
+            token = f"{run_id}-baseline"
+            # The engine subprocess inherits this cwd, and rootless engines
+            # cannot start from a cwd they cannot see (this host's /mnt/build),
+            # so serve them the temp dir; the output dir is the container mount
+            # and must live there too.
+            previous_cwd = os.getcwd()
+            os.chdir(directory)
+            try:
+                observation = nuclei.probe(
+                    RUNNER_ENGINE,
+                    f"https://127.0.0.1:{server.server_address[1]}",
+                    output,
+                    "baseline",
+                    run_id,
+                    pack,
+                    insecure=True,
+                )
+            finally:
+                os.chdir(previous_cwd)
+
+            self.assertEqual(observation["token"], token)
+            self.assertEqual(observation["status"], 200)
+            self.assertTrue(observation["marker"])
+            self.assertRegex(observation["response_sha256"], r"^[0-9a-f]{64}$")
+            self.assertEqual(
+                [entry[0] for entry in seen],
+                ["GET"],
+                "the runner must make exactly one probe request over TLS",
+            )
+            request_path, request_headers = seen[0][1], seen[0][2]
+            self.assertEqual(request_path, f"/?__mockforge_cve={token}")
+            self.assertEqual(request_headers.get("X-Mockforge-Cve"), token)
+            self.assertEqual(
+                request_headers.get("x-middleware-subrequest"),
+                pack["probe"]["headers"]["x-middleware-subrequest"],
+            )
 
 
 class DataDrivenCaseTests(unittest.TestCase):
