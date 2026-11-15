@@ -2526,6 +2526,227 @@ class Php2Shell2026SignatureVariantTests(unittest.TestCase):
         self.assertLess(len(body), 64 * 1024)
 
 
+class Php2Shell109619SignatureVariantTests(unittest.TestCase):
+    """The same-worker PHP2Shell pack (CVE-2026-109619) carries Srikanth's
+    field cases from issue #79 as reviewed ini_set/php_value/php_admin
+    marker placements, with pinned bodies."""
+
+    def setUp(self):
+        self.pack = catalog.PACKS["CVE-2026-109619"]
+
+    def test_variants_validate_and_expect_blocking(self):
+        from cve_lab_catalog import validate_data_driven_pack
+
+        validate_data_driven_pack(self.pack)
+        variants = self.pack["signature_variants"]
+        self.assertEqual(len(variants), 10)
+        for variant in variants:
+            self.assertEqual(variant["expect"], "blocked")
+            self.assertIn("reproduces_directly", variant)
+        self.assertEqual(self.pack["catalog"]["pack_revision"], 2)
+
+    def test_variants_cover_body_query_and_path_positions(self):
+        from urllib.parse import parse_qs, urlsplit
+
+        by_id = {
+            variant["id"]: variant for variant in self.pack["signature_variants"]
+        }
+        self.assertEqual(
+            set(by_id),
+            {
+                "ini-set-in-body",
+                "php-value-in-body",
+                "php-admin-in-body",
+                "ini-set-in-query",
+                "php-value-in-query",
+                "php-admin-in-query",
+                "ini-set-in-path",
+                "php-value-in-path",
+                "php-admin-in-path",
+                "ini-set-in-header",
+            },
+        )
+        # (a) body position: the marker IS the raw text/plain body (the
+        # exact source cases POST /test with the x-php: test header)
+        for marker, variant_id in (
+            (b"ini_set", "ini-set-in-body"),
+            (b"php_value", "php-value-in-body"),
+            (b"php_admin", "php-admin-in-body"),
+        ):
+            variant = by_id[variant_id]
+            self.assertEqual(variant["method"], "POST")
+            self.assertEqual(variant["path"].split("?")[0], "/test")
+            self.assertEqual(variant["headers"].get("X-PHP"), "test")
+            self.assertEqual(exploits._variant_body(variant), marker)
+            method, path, headers, body, _timeout = (
+                exploits._variant_request_spec(self.pack, variant, "tok")
+            )
+            self.assertEqual(method, "POST")
+            self.assertEqual(headers.get("Content-Type"), "text/plain")
+            self.assertEqual(headers.get("X-Mockforge-Cve"), "tok")
+        # (b) query position with the source cases' literal values and the
+        # swapped test: x-php header; bodyless, so a block can only come
+        # from the query
+        for marker, value, variant_id in (
+            ("ini_set", "1", "ini-set-in-query"),
+            ("php_value", "1", "php-value-in-query"),
+            ("php_admin", "true", "php-admin-in-query"),
+        ):
+            variant = by_id[variant_id]
+            self.assertEqual(variant["method"], "POST")
+            self.assertEqual(variant["path"].split("?")[0], "/testing")
+            query = parse_qs(urlsplit(variant["path"]).query)
+            self.assertEqual(query.get(marker), [value])
+            self.assertEqual(variant["headers"].get("Test"), "x-php")
+            self.assertEqual(variant["headers"].get("Content-Type"), "text/plain")
+            self.assertIsNone(exploits._variant_body(variant))
+        # (c) path position: /testing/<marker>/<tail>; bodyless, so a block
+        # can only come from the path
+        for marker, tail, variant_id in (
+            ("ini_set", "one", "ini-set-in-path"),
+            ("php_value", "two", "php-value-in-path"),
+            ("php_admin", "three", "php-admin-in-path"),
+        ):
+            variant = by_id[variant_id]
+            segments = variant["path"].split("?")[0].strip("/").split("/")
+            self.assertEqual(segments, ["testing", marker, tail])
+            self.assertEqual(variant["headers"].get("Test"), "x-php")
+            self.assertIsNone(exploits._variant_body(variant))
+        # (d) header position: the marker names and values a header, with
+        # no body, so a block can only come from the header
+        header_variant = by_id["ini-set-in-header"]
+        self.assertIn(
+            "ini_set", [value for value in header_variant["headers"].values()]
+        )
+        self.assertIn(
+            "ini-set",
+            " ".join(name.lower() for name in header_variant["headers"]),
+        )
+        self.assertIsNone(exploits._variant_body(header_variant))
+
+    def test_variant_bodies_are_registry_pinned(self):
+        import cve_lab_payloads as payloads
+
+        for variant in self.pack["signature_variants"]:
+            if "body_ref" not in variant:
+                continue
+            builder, expected_digest, content_type = payloads.PINNED_BODIES[
+                variant["body_ref"]
+            ]
+            body = exploits._variant_body(variant)
+            self.assertEqual(
+                hashlib.sha256(body).hexdigest(), expected_digest
+            )
+            self.assertEqual(content_type, "text/plain")
+        # the body-position variant carries its marker verbatim
+        body_variant = [
+            variant
+            for variant in self.pack["signature_variants"]
+            if variant["id"] == "ini-set-in-body"
+        ][0]
+        self.assertEqual(exploits._variant_body(body_variant), b"ini_set")
+
+    def test_marker_text_bodies_are_pinned(self):
+        import cve_lab_payloads as payloads
+
+        for builder, digest, expected in (
+            (payloads.ini_set_body, payloads.INI_SET_BODY_SHA256, b"ini_set"),
+            (payloads.php_value_body, payloads.PHP_VALUE_BODY_SHA256, b"php_value"),
+            (payloads.php_admin_body, payloads.PHP_ADMIN_BODY_SHA256, b"php_admin"),
+        ):
+            body = builder()
+            self.assertEqual(body, expected)
+            self.assertEqual(hashlib.sha256(body).hexdigest(), digest)
+            self.assertLess(len(body), 64 * 1024)
+
+    def test_field_case_variants_are_not_marked_as_reproducing(self):
+        # none of the source cases carries the oversized reviewed trigger
+        # body, so none is marked as reproducing directly: they are
+        # must-be-blocked signature probes
+        for variant in self.pack["signature_variants"]:
+            self.assertFalse(variant["reproduces_directly"], variant["id"])
+
+    def test_blocked_variants_pass_and_a_forwarded_variant_fails_named(self):
+        variant_ids = tuple(
+            variant["id"] for variant in self.pack["signature_variants"]
+        )
+        baseline_variants = {
+            variant_id: {"token": f"bv-{variant_id}", "status": 200}
+            for variant_id in variant_ids
+        }
+        target_variants = {
+            variant_id: {"token": f"tv-{variant_id}", "status": 403}
+            for variant_id in variant_ids
+        }
+        baseline_records = [
+            {"tokens": [outcome["token"]], "status": 200}
+            for outcome in baseline_variants.values()
+        ]
+        entries, all_ok, got_through, verdicts = evidence.signature_variant_evidence(
+            self.pack,
+            baseline_variants,
+            target_variants,
+            baseline_records,
+            [],
+            403,
+        )
+        # every variant blocked by the LB passes, and is reported per variant
+        self.assertTrue(all_ok)
+        self.assertEqual(got_through, [])
+        self.assertEqual(set(verdicts.values()), {"pass"})
+        names = [entry["check"] for entry in entries]
+        for variant_id in verdicts:
+            self.assertIn(
+                f"variant {variant_id} was blocked at the target", names
+            )
+        # a variant forwarded to the origin fails and is named
+        forwarded = "ini-set-in-body"
+        records = [{"tokens": [f"tv-{forwarded}"], "status": 200}]
+        entries, all_ok, got_through, verdicts = evidence.signature_variant_evidence(
+            self.pack,
+            baseline_variants,
+            target_variants,
+            baseline_records,
+            records,
+            403,
+        )
+        self.assertFalse(all_ok)
+        self.assertEqual(got_through, [forwarded])
+        self.assertEqual(verdicts[forwarded], "fail")
+        self.assertEqual(verdicts["php-value-in-query"], "pass")
+        blocked = [
+            entry
+            for entry in entries
+            if entry["check"] == f"variant {forwarded} was blocked at the target"
+        ][0]
+        self.assertIn("reached the origin with status 200", blocked["outcome"])
+        override, reason = evidence.variant_verdict(all_ok, got_through)
+        self.assertEqual(override, "fail")
+        self.assertIn(forwarded, reason)
+
+    def test_a_malformed_variant_is_refused_by_validation(self):
+        import copy
+
+        from cve_lab_catalog import validate_data_driven_pack
+
+        pack = copy.deepcopy(self.pack)
+        pack["signature_variants"][0]["expect"] = "forwarded"
+        with self.assertRaisesRegex(ValueError, 'must expect "blocked"'):
+            validate_data_driven_pack(pack)
+        pack["signature_variants"][0]["expect"] = "blocked"
+        pack["signature_variants"][1]["body_ref"] = "not_a_builder"
+        with self.assertRaisesRegex(ValueError, "reviewed, digest-pinned"):
+            validate_data_driven_pack(pack)
+        pack["signature_variants"][1]["body_ref"] = (
+            pack["signature_variants"][0]["body_ref"]
+        )
+        # a duplicated id is refused (the pack's own crash-evidence baseline
+        # exploit means reproduces_directly marks are not refused here)
+        pack["signature_variants"][1]["id"] = pack["signature_variants"][0]["id"]
+        with self.assertRaisesRegex(ValueError, "duplicate signature variant id"):
+            validate_data_driven_pack(pack)
+
+
 class ImageVerificationTests(unittest.TestCase):
     """Pinned-image presence is reported from catalog data via by-digest
     engine inspects - never by parsing `docker images` output."""
