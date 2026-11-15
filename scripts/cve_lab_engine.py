@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 import time
+import uuid
 import http.client
 from contextlib import contextmanager
 from cve_lab_catalog import LABEL
@@ -17,6 +18,8 @@ import re
 
 ALLOWED_APP_CAPABILITIES = frozenset(("SETUID", "SETGID", "CHOWN"))
 
+GUIDE_URL = "https://docs.mockforge.dev/user-guide/managed-cve-labs.html"
+
 
 def command(args, timeout=120, check=True):
     result = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
@@ -25,7 +28,7 @@ def command(args, timeout=120, check=True):
     return result
 
 
-def doctor(engine):
+def doctor(engine, packs=None):
     if sys.version_info < (3, 11):
         raise RuntimeError("Install Python 3.11 or newer")
     if platform.system() != "Linux" or platform.machine() not in ("x86_64", "amd64"):
@@ -65,12 +68,45 @@ def doctor(engine):
             host = contexts[0]["Endpoints"]["docker"]["Host"]
             if not host.startswith("unix://"):
                 raise RuntimeError("Remote container engines are unsupported")
-    return {
+    report = {
         "python": platform.python_version(),
         "engine": engine,
         "server": version.stdout.strip(),
         "platform": platform.machine(),
     }
+    if packs:
+        # Per-pack pinned image presence (by-digest inspects, never a parse
+        # of `docker images`) and the host-network probe: both diagnostics
+        # are gathered locally, without downloading anything.
+        report["images"] = {
+            cve: verify_images(engine, pack) for cve, pack in packs.items()
+        }
+        report["host_network"] = host_network_report(engine, report["images"])
+    return report
+
+
+def host_network_report(engine, images):
+    """Probe whether --network=host containers share this machine's network.
+
+    The probe needs the pinned runner image already present locally (doctor
+    never downloads), so without it the check reports unknown: ``prepare``
+    or the next run probes again once the image is in place.
+    """
+    runners = [
+        entry["image"]
+        for entries in images.values()
+        for entry in entries
+        if entry["role"] == "runner" and entry["status"] == "present"
+    ]
+    if not runners:
+        return {
+            "shared": None,
+            "reason": (
+                "the pinned runner image is not present locally; the check "
+                "runs after prepare or at the start of a run"
+            ),
+        }
+    return host_network_probe(engine, runners[0])
 
 
 def prepare(engine, pack):
@@ -128,6 +164,81 @@ def verify_images(engine, pack):
             "status": image_status(engine, catalog["runner_image"]),
         },
     ]
+
+
+def host_netns():
+    """The network namespace of this process, where the recorder listens."""
+    return os.readlink("/proc/self/ns/net")
+
+
+def host_network_probe(engine, image):
+    """Whether a --network=host container shares this machine's network.
+
+    Compares readlink /proc/self/ns/net on this host with the same command
+    inside a --network=host container of the pinned runner image. Engines
+    whose daemon runs in another network namespace (a snap, a VM, an LXD
+    container, a systemd unit with private networking) hand such containers
+    a "host" network where this machine's listeners do not exist, so the
+    scanner could never reach the recorder and the run would only fail
+    inside Nuclei with no reason.
+    """
+    host = host_netns()
+    probe_id = uuid.uuid4().hex
+    name = "mockforge-cve-netns-" + probe_id
+    try:
+        result = command(
+            [
+                engine,
+                "run",
+                "--rm",
+                "--name",
+                name,
+                "--label",
+                f"{LABEL}={probe_id}",
+                "--network=host",
+                # Never pull: the image is verified present by the caller
+                # (prepare or the doctor image listing) first.
+                "--pull=never",
+                "--cap-drop=ALL",
+                "--security-opt=no-new-privileges",
+                "--memory=64m",
+                "--pids-limit=16",
+                # The runner image's entrypoint is Nuclei; readlink needs no
+                # capabilities and exists on the image's busybox base.
+                "--entrypoint",
+                "/bin/readlink",
+                image,
+                "/proc/self/ns/net",
+            ],
+            timeout=60,
+            check=False,
+        )
+        if result.returncode:
+            raise RuntimeError(
+                "Cannot probe the engine's host network namespace: "
+                f"{result.stderr[-1000:]}"
+            )
+        container = result.stdout.strip()
+        return {
+            "host": host,
+            "container": container,
+            "shared": host == container,
+        }
+    finally:
+        owned_remove(engine, name, probe_id)
+
+
+def host_network_refusal(recorder, probe):
+    """The plain refusal for an engine whose --network=host containers get
+    another network namespace from this machine's: the scanner could never
+    reach the recorder, so no run can produce evidence."""
+    return (
+        "containers started with --network=host on this engine don't share "
+        "this machine's network, so the scanner can't reach the recorder at "
+        f"{recorder} (host network namespace {probe['host']}, --network=host "
+        f"container namespace {probe['container']}); see the managed CVE labs "
+        f"guide: {GUIDE_URL}"
+    )
 
 
 def owned_remove(engine, name, run_id):

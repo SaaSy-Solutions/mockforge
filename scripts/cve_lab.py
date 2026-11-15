@@ -12,7 +12,15 @@ import sys
 import time
 import uuid
 from cve_lab_catalog import CATALOG, CVE, PACKS, validate_data_driven_pack
-from cve_lab_engine import doctor, prepare, lab, cleanup, verify_images
+from cve_lab_engine import (
+    cleanup,
+    doctor,
+    host_network_probe,
+    host_network_refusal,
+    lab,
+    prepare,
+    verify_images,
+)
 from cve_lab_transport import target_url, receiver, control, unverified_context
 from cve_lab_nuclei import probe
 import cve_lab_evidence as evidence
@@ -127,6 +135,21 @@ def run(args):
             # The reviewed lab application ships inside the pack and is
             # mounted read-only into the pinned image by lab().
             (output / name).write_text(content)
+        # The scanner container runs with --network=host and reaches the
+        # recorder listening in this process's network namespace. An engine
+        # whose "host" network is another namespace (snap, VM, LXD, a systemd
+        # unit with private networking) would only fail later inside Nuclei
+        # with no reason, so probe for that first and refuse plainly.
+        host_network = host_network_probe(
+            args.engine, pack["catalog"]["runner_image"]
+        )
+        report["host_network"] = host_network
+        if not host_network["shared"]:
+            raise RuntimeError(
+                host_network_refusal(
+                    f"{args.listen_address}:{args.origin_port}", host_network
+                )
+            )
         with lab(args.engine, run_id, output, pack) as backend:
             with receiver(
                 args.origin_port,
@@ -318,7 +341,17 @@ def main(argv=None):
                 raise ValueError(f"{args.cve} {UNVERIFIED_MESSAGE}")
             require_verified(args.cve, args.include_unverified)
         if args.action == "doctor":
-            print(json.dumps(doctor(args.engine), indent=2))
+            report = doctor(args.engine, {cve: PACKS[cve] for cve in valid_cves})
+            print(json.dumps(report, indent=2))
+            host_network = report.get("host_network") or {}
+            if host_network.get("shared") is False:
+                print(
+                    host_network_refusal(
+                        f"127.0.0.1:{CATALOG['origin_port']}", host_network
+                    ),
+                    file=sys.stderr,
+                )
+                return 1
         elif args.action == "list":
             cves = verified_cves(args.include_unverified)
             print(json.dumps({cve: PACKS[cve]["catalog"] for cve in cves}, indent=2))

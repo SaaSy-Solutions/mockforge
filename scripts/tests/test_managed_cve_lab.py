@@ -12,6 +12,7 @@ import sys
 import tempfile
 import threading
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -34,6 +35,24 @@ def completed(stdout="", returncode=0):
 
 def completed_output(stdout="", stderr="", returncode=0):
     return subprocess.CompletedProcess([], returncode, stdout, stderr)
+
+
+@contextlib.contextmanager
+def linux_doctor_host():
+    """doctor's platform gate refuses non-Linux hosts; stub the platform and
+    engine-lookup checks so doctor tests stay OS-free and engine-free."""
+    with patch.object(
+        engine,
+        "platform",
+        SimpleNamespace(
+            system=lambda: "Linux",
+            machine=lambda: "amd64",
+            python_version=lambda: "3.11.9",
+        ),
+    ), patch.object(
+        engine, "shutil", SimpleNamespace(which=lambda name: "/usr/bin/" + name)
+    ):
+        yield
 
 
 class LifecycleTests(unittest.TestCase):
@@ -2043,6 +2062,270 @@ class ImageVerificationTests(unittest.TestCase):
             )
             report = json.loads((output / "report.json").read_text())
         self.assertEqual(report["image_verification"], entries)
+
+
+class HostNetworkTests(unittest.TestCase):
+    """A --network=host container must share this machine's network, or the
+    run is refused up front with a plain reason - never a Nuclei failure."""
+
+    def engine_stub(self, images_present=(), probe_ns="net:[4026532806]"):
+        """A doctor-shaped docker CLI: doctor's local checks, by-digest
+        image inspects for the listed references, the namespace probe run,
+        and absent owned containers (so owned_remove is a no-op)."""
+
+        def stub(args, **_kwargs):
+            if args[1] == "version":
+                return completed("29.1.3\n")
+            if args[1] == "info":
+                return completed(json.dumps({"ServerVersion": "29.1.3"}))
+            if args[1] == "context":
+                return completed(
+                    json.dumps(
+                        [
+                            {
+                                "Endpoints": {
+                                    "docker": {"Host": "unix:///var/run/docker.sock"}
+                                }
+                            }
+                        ]
+                    )
+                )
+            if args[:3] == ["docker", "image", "inspect"]:
+                return completed() if args[3] in images_present else completed(returncode=1)
+            if args[:2] == ["docker", "run"]:
+                return completed(probe_ns + "\n")
+            if args[:2] == ["docker", "ps"]:
+                return completed("")
+            return completed(returncode=1)
+
+        return stub
+
+    def test_probe_compares_host_and_container_namespaces(self):
+        with patch.object(
+            engine, "host_netns", return_value="net:[4026532806]"
+        ), patch.object(
+            engine, "command", side_effect=self.engine_stub()
+        ) as command:
+            probe = engine.host_network_probe("docker", "runner@sha256:abc")
+        self.assertTrue(probe["shared"])
+        self.assertEqual(probe["host"], "net:[4026532806]")
+        self.assertEqual(probe["container"], "net:[4026532806]")
+        runs = [call.args[0] for call in command.call_args_list if call.args[0][1] == "run"]
+        self.assertEqual(len(runs), 1)
+        self.assertIn("--network=host", runs[0])
+        # A doctor probe must never download, and the runner image's
+        # entrypoint is Nuclei, so the namespace read overrides it.
+        self.assertIn("--pull=never", runs[0])
+        self.assertEqual(runs[0][runs[0].index("--entrypoint") + 1], "/bin/readlink")
+        self.assertIn("runner@sha256:abc", runs[0])
+
+    def test_probe_reports_a_mismatched_container_namespace(self):
+        with patch.object(
+            engine, "host_netns", return_value="net:[4026532806]"
+        ), patch.object(
+            engine, "command", side_effect=self.engine_stub(probe_ns="net:[4026532857]")
+        ):
+            probe = engine.host_network_probe("docker", "runner@sha256:abc")
+        self.assertFalse(probe["shared"])
+
+    def test_probe_failure_is_reported_not_a_scanner_failure(self):
+        base = self.engine_stub()
+
+        def stub(args, **_kwargs):
+            if args[1] == "run":
+                return completed_output(
+                    stderr="Cannot connect to the Docker daemon", returncode=1
+                )
+            return base(args, **_kwargs)
+
+        with patch.object(
+            engine, "host_netns", return_value="net:[4026532806]"
+        ), patch.object(engine, "command", side_effect=stub):
+            with self.assertRaisesRegex(
+                RuntimeError, "Cannot probe the engine's host network namespace"
+            ):
+                engine.host_network_probe("docker", "runner@sha256:abc")
+
+    def test_refusal_names_the_recorder_and_doc_guidance(self):
+        message = engine.host_network_refusal(
+            "192.168.2.10:18082",
+            {"host": "net:[4026532806]", "container": "net:[4026532857]"},
+        )
+        self.assertIn(
+            "containers started with --network=host on this engine don't share "
+            "this machine's network, so the scanner can't reach the recorder at "
+            "192.168.2.10:18082",
+            message,
+        )
+        self.assertIn("net:[4026532806]", message)
+        self.assertIn("net:[4026532857]", message)
+        self.assertIn("docs.mockforge.dev/user-guide/managed-cve-labs", message)
+
+    def test_run_refuses_a_mismatched_host_network_and_never_runs_nuclei(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as directory, linux_doctor_host(), patch.object(
+            engine, "host_netns", return_value="net:[4026532806]"
+        ), patch.object(
+            engine, "command", side_effect=self.engine_stub(probe_ns="net:[4026532857]")
+        ), patch.object(
+            lab, "probe"
+        ) as nuclei_probe, contextlib.redirect_stdout(
+            stdout
+        ), contextlib.redirect_stderr(
+            io.StringIO()
+        ):
+            output = Path(directory) / "out"
+            self.assertEqual(
+                lab.main(["run", lab.CVE, "--output-dir", str(output)]), 1
+            )
+            report = json.loads((output / "report.json").read_text())
+        nuclei_probe.assert_not_called()
+        self.assertEqual(report["verdict"], "inconclusive")
+        self.assertIn(
+            "containers started with --network=host on this engine don't share "
+            "this machine's network",
+            report["reason"],
+        )
+        self.assertIn(
+            "the scanner can't reach the recorder at 127.0.0.1:18082",
+            report["reason"],
+        )
+        self.assertIn("docs.mockforge.dev", report["reason"])
+        self.assertFalse(report["host_network"]["shared"])
+        self.assertEqual(report["host_network"]["host"], "net:[4026532806]")
+        self.assertEqual(report["host_network"]["container"], "net:[4026532857]")
+        self.assertNotIn("Nuclei exited", report["reason"])
+
+    def test_run_records_a_shared_network_probe_and_continues(self):
+        entries = [
+            {"role": "application", "image": "app@sha256:a", "status": "present"},
+            {"role": "runner", "image": "runner@sha256:b", "status": "present"},
+        ]
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+            lab, "prepare"
+        ), patch.object(
+            lab, "verify_images", return_value=entries
+        ), patch.object(
+            lab,
+            "host_network_probe",
+            return_value={"host": "net:[1]", "container": "net:[1]", "shared": True},
+        ), patch.object(
+            lab, "lab", side_effect=RuntimeError("mocked engine failure")
+        ), contextlib.redirect_stdout(
+            io.StringIO()
+        ), contextlib.redirect_stderr(
+            io.StringIO()
+        ):
+            output = Path(directory) / "out"
+            self.assertEqual(
+                lab.main(["run", lab.CVE, "--output-dir", str(output)]), 1
+            )
+            report = json.loads((output / "report.json").read_text())
+        self.assertTrue(report["host_network"]["shared"])
+        # The run proceeded past the probe; the failure is the mocked one.
+        self.assertEqual(report["reason"], "mocked engine failure")
+
+    def test_doctor_reports_pinned_images_and_a_shared_host_network(self):
+        pack = catalog.PACKS["CVE-2025-29927"]
+        stdout = io.StringIO()
+        with linux_doctor_host(), patch.object(
+            engine, "host_netns", return_value="net:[4026532806]"
+        ), patch.object(
+            engine,
+            "command",
+            side_effect=self.engine_stub(
+                images_present=(
+                    pack["catalog"]["application_image"],
+                    pack["catalog"]["runner_image"],
+                )
+            ),
+        ), contextlib.redirect_stdout(stdout):
+            self.assertEqual(lab.main(["doctor"]), 0)
+        report = json.loads(stdout.getvalue())
+        self.assertEqual(
+            report["images"]["CVE-2025-29927"],
+            [
+                {
+                    "role": "application",
+                    "image": pack["catalog"]["application_image"],
+                    "status": "present",
+                },
+                {
+                    "role": "runner",
+                    "image": pack["catalog"]["runner_image"],
+                    "status": "present",
+                },
+            ],
+        )
+        self.assertTrue(report["host_network"]["shared"])
+        self.assertEqual(report["host_network"]["host"], "net:[4026532806]")
+
+    def test_doctor_reports_missing_digests_and_skips_the_probe(self):
+        pack = catalog.PACKS["CVE-2025-29927"]
+        stdout = io.StringIO()
+        with linux_doctor_host(), patch.object(engine, "host_netns") as host_netns, patch.object(
+            engine,
+            "command",
+            side_effect=self.engine_stub(
+                images_present=(pack["catalog"]["application_image"],)
+            ),
+        ) as command, contextlib.redirect_stdout(stdout):
+            self.assertEqual(lab.main(["doctor"]), 0)
+        report = json.loads(stdout.getvalue())
+        listing = report["images"]["CVE-2025-29927"]
+        self.assertEqual(listing[0]["status"], "present")
+        self.assertEqual(listing[1]["status"], "missing")
+        # Without the runner image locally, doctor cannot probe and must not
+        # try (doctor never downloads): the check reports unknown instead.
+        self.assertIsNone(report["host_network"]["shared"])
+        self.assertIn("not present locally", report["host_network"]["reason"])
+        host_netns.assert_not_called()
+        self.assertEqual(
+            [call.args[0][1] for call in command.call_args_list if call.args[0][1] == "run"],
+            [],
+        )
+
+    def test_doctor_fails_with_the_plain_refusal_on_a_namespace_mismatch(self):
+        pack = catalog.PACKS["CVE-2025-29927"]
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with linux_doctor_host(), patch.object(
+            engine, "host_netns", return_value="net:[4026532806]"
+        ), patch.object(
+            engine,
+            "command",
+            side_effect=self.engine_stub(
+                images_present=(
+                    pack["catalog"]["application_image"],
+                    pack["catalog"]["runner_image"],
+                ),
+                probe_ns="net:[4026532857]",
+            ),
+        ), contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            self.assertEqual(lab.main(["doctor"]), 1)
+        report = json.loads(stdout.getvalue())
+        self.assertFalse(report["host_network"]["shared"])
+        self.assertIn(
+            "containers started with --network=host on this engine don't share "
+            "this machine's network",
+            stderr.getvalue(),
+        )
+        self.assertIn("127.0.0.1:18082", stderr.getvalue())
+        self.assertIn("docs.mockforge.dev", stderr.getvalue())
+
+    def test_doctor_without_packs_adds_no_images_or_probe(self):
+        with linux_doctor_host(), patch.object(engine, "host_netns") as host_netns, patch.object(
+            engine, "command", side_effect=self.engine_stub()
+        ) as command:
+            report = engine.doctor("docker")
+        self.assertEqual(report["engine"], "docker")
+        self.assertNotIn("images", report)
+        self.assertNotIn("host_network", report)
+        host_netns.assert_not_called()
+        self.assertEqual(
+            [call.args[0][1] for call in command.call_args_list],
+            ["version", "info", "context"],
+        )
 
 
 if __name__ == "__main__":
