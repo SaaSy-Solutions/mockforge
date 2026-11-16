@@ -85,15 +85,15 @@ jobs:
           python3 - >> "$GITHUB_ENV" <<'EOF'
           import socket
           held = []
-          for name in ("HTTP", "WS", "GRPC", "ADMIN", "METRICS"):
+          for name in ("HTTP", "ADMIN", "METRICS"):
               s = socket.socket()
               s.bind(("", 0))
               held.append(s)
               print(f"MF_{name}_PORT={s.getsockname()[1]}")
           EOF
           . <(grep '^MF_' "$GITHUB_ENV" | sed 's/^/export /')
-          ./target/release/mockforge serve --spec examples/user-management-api.json --no-rate-limit \
-            --http-port "$MF_HTTP_PORT" --ws-port "$MF_WS_PORT" --grpc-port "$MF_GRPC_PORT" \
+          "${CARGO_TARGET_DIR:-target}/release/mockforge" serve --spec examples/user-management-api.json --no-rate-limit \
+            --http-port "$MF_HTTP_PORT" \
             --admin --admin-port "$MF_ADMIN_PORT" --metrics-port "$MF_METRICS_PORT" \
             > mockforge-server.log 2>&1 &
           pid=$!
@@ -163,15 +163,15 @@ jobs:
           python3 - >> "$GITHUB_ENV" <<'EOF'
           import socket
           held = []
-          for name in ("HTTP", "WS", "GRPC", "ADMIN", "METRICS"):
+          for name in ("HTTP", "ADMIN", "METRICS"):
               s = socket.socket()
               s.bind(("", 0))
               held.append(s)
               print(f"MF_{name}_PORT={s.getsockname()[1]}")
           EOF
           . <(grep '^MF_' "$GITHUB_ENV" | sed 's/^/export /')
-          ./target/release/mockforge serve --spec examples/user-management-api.json --no-rate-limit \
-            --http-port "$MF_HTTP_PORT" --ws-port "$MF_WS_PORT" --grpc-port "$MF_GRPC_PORT" \
+          "${CARGO_TARGET_DIR:-target}/release/mockforge" serve --spec examples/user-management-api.json --no-rate-limit \
+            --http-port "$MF_HTTP_PORT" \
             --admin --admin-port "$MF_ADMIN_PORT" --metrics-port "$MF_METRICS_PORT" \
             > mockforge-server.log 2>&1 &
           pid=$!
