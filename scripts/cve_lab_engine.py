@@ -15,6 +15,9 @@ from cve_lab_transport import request
 import re
 
 
+ALLOWED_APP_CAPABILITIES = frozenset(("SETUID", "SETGID", "CHOWN"))
+
+
 def command(args, timeout=120, check=True):
     result = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
     if check and result.returncode:
@@ -90,6 +93,76 @@ def prepare(engine, pack):
         command([engine, "image", "inspect", image])
 
 
+def image_status(engine, image):
+    """Whether the exact image reference exists in the local engine.
+
+    The check is the same by-digest inspect ``prepare`` performs - never a
+    parse of ``docker images`` output, which does not list digest-pulled
+    images the way tagged ones appear.
+    """
+    if "@sha256:" not in image:
+        # A tag (a pack still pending review) is not a pinned image: a local
+        # image with that tag proves nothing, and prepare refuses it anyway.
+        return "unpinned"
+    result = command([engine, "image", "inspect", image], check=False)
+    return "present" if result.returncode == 0 else "missing"
+
+
+def verify_images(engine, pack):
+    """Report each pack-pinned image with its local presence status.
+
+    Returns one entry per pinned image (the application and the runner) in
+    catalog order, so a run report or a dedicated check can attest exactly
+    which digest-pinned images this machine holds.
+    """
+    catalog = pack["catalog"]
+    return [
+        {
+            "role": "application",
+            "image": catalog["application_image"],
+            "status": image_status(engine, catalog["application_image"]),
+        },
+        {
+            "role": "runner",
+            "image": catalog["runner_image"],
+            "status": image_status(engine, catalog["runner_image"]),
+        },
+    ]
+
+
+
+def container_running(engine, run_id):
+    """Whether this run's application container is still alive.
+
+    Crash-evidence packs use this to distinguish a reviewed exploit outcome
+    from a healthy application.
+    """
+    result = command(
+        [engine, "inspect", "mockforge-cve-" + run_id, "--format", "{{.State.Running}}"],
+        check=False,
+    )
+    if result.returncode:
+        return False
+    return result.stdout.strip().lower() == "true"
+
+
+
+def container_log(engine, run_id, tail=400):
+    """The application container's recent log output, mid-run.
+
+    Evidence packs whose exploit outcome lives in the application log (an
+    Apache prefork child segmentation fault, for example) compare marker
+    counts before and after the exploit request.
+    """
+    result = command(
+        [engine, "logs", "--tail", str(tail), "mockforge-cve-" + run_id],
+        check=False,
+    )
+    if result.returncode:
+        return ""
+    return result.stdout + result.stderr
+
+
 def owned_remove(engine, name, run_id):
     result = command([engine, "inspect", name], check=False)
     if result.returncode:
@@ -108,6 +181,13 @@ def owned_remove(engine, name, run_id):
 @contextmanager
 def lab(engine, run_id, output, pack):
     app = pack["app"]
+    cap_add = app.get("cap_add", ())
+    if not isinstance(cap_add, (list, tuple)) or any(
+        capability not in ALLOWED_APP_CAPABILITIES for capability in cap_add
+    ):
+        raise RuntimeError(
+            "app.cap_add entries must be from the allowlist: SETUID, SETGID, CHOWN"
+        )
     name = "mockforge-cve-" + run_id
     try:
         run_args = [
@@ -125,11 +205,24 @@ def lab(engine, run_id, output, pack):
             "-p",
             f"127.0.0.1::{app['port']}",
         ]
+        run_args.extend(f"--cap-add={capability}" for capability in cap_add)
         for key, value in app["env"].items():
             run_args.extend(["-e", f"{key}={value}"])
+        for mount in app.get("mounts", ()):
+            host = mount["host"].replace("{output}", str(output))
+            run_args.extend(["-v", f"{host}:{mount['container']}:ro"])
+        if app.get("workdir"):
+            run_args.extend(["-w", app["workdir"]])
         run_args.append(pack["catalog"]["application_image"])
+        run_args.extend(app.get("command", ()))
         command(run_args)
         ports = command([engine, "port", name, app["port"]]).stdout.strip().splitlines()
+        if not ports:
+            raise RuntimeError(
+                "Application did not expose "
+                + app["port"]
+                + "; it failed to start (see application.log)"
+            )
         backend = "http://" + ports[0]
         deadline = time.monotonic() + 90
         while time.monotonic() < deadline:

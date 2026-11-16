@@ -3,7 +3,7 @@
 Each entry in PACKS couples a reviewed vulnerable application with the
 request that reproduces the vulnerability and the observations the evidence
 classifier expects. Packs are data: landing a new pack means adding a reviewed
-entry here plus the matching baseline gate and classifier, not new runner code.
+entry here plus the matching baseline gate, classifier and exploit steps, not generalized runner code.
 
 Every ``application_image`` and ``runner_image`` must be pinned by digest;
 ``prepare`` refuses references without ``@sha256:``. A pack whose lab image
@@ -13,6 +13,75 @@ silently pulling an unpinned image.
 """
 
 LABEL = "io.mockforge.cve.run"
+
+import hashlib
+
+import cve_lab_payloads as payloads
+
+# Reviewed lab application and configuration for the PHP2Shell 2026 packs,
+# shipped inside the pack and mounted read-only into the pinned official
+# image. The advisory's corruption happens before application code runs;
+# these files give healthy requests a deterministic answer and make the
+# worker identity observable. lab.ini deliberately sets memory_limit BELOW
+# post_max_size: the advisory's OOM-during-input-parse trigger class is then
+# reachable with the pack's bounded request bodies, whereas on the default
+# ordering post_max_size would reject the body before memory pressure is
+# reachable. This is a reviewed lab configuration, not a production
+# recommendation.
+PHP2SHELL_2026_FILES = {
+    "index.php": (
+        "<?php\n"
+        "// MockForge PHP2Shell 2026 managed lab application (reviewed).\n"
+        "header('X-Worker-Pid: ' . getmypid());\n"
+        "echo \"mockforge-php2shell-2026\\n\";\n"
+    ),
+    "health.php": (
+        "<?php\n"
+        "// MockForge PHP2Shell 2026 managed lab application (reviewed).\n"
+        "header('X-Worker-Pid: ' . getmypid());\n"
+        "echo \"mockforge-php2shell-2026\\n\";\n"
+    ),
+    "upload.php": (
+        "<?php\n"
+        "// MockForge PHP2Shell 2026 managed lab application (reviewed).\n"
+        "// Multipart parsing already happened before this runs; a corrupted\n"
+        "// parse never reaches this file.\n"
+        "header('X-Worker-Pid: ' . getmypid());\n"
+        "echo \"upload processed\\n\";\n"
+    ),
+    "lab.ini": (
+        "; Reviewed lab configuration for the PHP2Shell 2026 packs.\n"
+        "memory_limit=16M\n"
+        "post_max_size=48M\n"
+        "upload_max_filesize=48M\n"
+        "max_file_uploads=64\n"
+        "log_errors=On\n"
+    ),
+    ".htaccess": (
+        "# Reviewed lab configuration: exercises the pre-startup php_value\n"
+        "# directive path the advisory names as a mod_php consumer route.\n"
+        "php_value memory_limit 16M\n"
+    ),
+    # The lab harness starts every container with --cap-drop=ALL, which removes
+    # CAP_NET_BIND_SERVICE, so Apache cannot bind the privileged default port 80.
+    # Serve on an unprivileged port (8080) instead of weakening the harness.
+    "ports.conf": (
+        "# Reviewed lab configuration: bind the unprivileged port 8080 because the\n"
+        "# lab harness runs with --cap-drop=ALL (no CAP_NET_BIND_SERVICE for :80).\n"
+        "Listen 8080\n"
+    ),
+    "000-default.conf": (
+        "# Reviewed lab configuration: serve the mod_php app on the unprivileged\n"
+        "# port 8080 that ports.conf binds under --cap-drop=ALL.\n"
+        "<VirtualHost *:8080>\n"
+        "    DocumentRoot /var/www/html\n"
+        "    <Directory /var/www/html>\n"
+        "        AllowOverride All\n"
+        "        Require all granted\n"
+        "    </Directory>\n"
+        "</VirtualHost>\n"
+    ),
+}
 
 PACKS = {
     "CVE-2025-29927": {
@@ -131,7 +200,633 @@ PACKS = {
         "baseline_gate": "cgi-argument-injection",
         "classifier": "cgi-argument-injection",
     },
+    "CVE-2026-111497": {
+        # PR #1523 showed the crash only with native Node builds on macOS; the pinned
+        # container image has not run on a lab host, so this pack stays hidden until it does.
+        "verified": False,
+        "catalog": {
+            "schema_version": 1,
+            "pack_revision": 1,
+            "cve": "CVE-2026-111497",
+            "title": "Node.js Brotli decoder out-of-bounds write (Node2Shell)",
+            "platform": "Linux, local Docker/Podman engine, amd64",
+            "application_version": "Node.js 22.23.3 (official image) with the reviewed lab application",
+            "application_image": "docker.io/library/node@sha256:69a5713e7f4997e96d579aafd78734810e0dac0dd5ee4621d72c27a2891a4088",
+            "runner_version": "Nuclei 3.11.1",
+            "runner_image": "docker.io/projectdiscovery/nuclei@sha256:582d5546902e67052097cb2d07296c642d50a1afc5e44623cb038845df9a32eb",
+            "references": [
+                "https://github.com/advisories/GHSA-9v8h-qqgm-4m35",
+                "https://nodejs.org/en/blog/vulnerability/october-2026-security-releases",
+            ],
+            "coverage": "One reviewed decoder-crash case and benign controls; not remote code execution or every exposure surface",
+            "origin_port": 18082,
+            "listen_address_guidance": (
+                "The recorder defaults to 127.0.0.1:18082, which only accepts local "
+                "connections. Testing an LB/WAAP on another machine requires "
+                "--listen-address <an isolated lab interface IP>; keep that interface "
+                "restricted to the test network because the recorder forwards to the "
+                "vulnerable application."
+            ),
+        },
+        # The pinned runner observes a plain healthy request; the exploit
+        # request itself rides the raw prior-knowledge HTTP/2 client, because
+        # the pack's attack surface is HTTP/2 ("HTTP2Shell") and its expected
+        # outcome is a crash, not an HTTP response a template can match.
+        "probe": {
+            "template_id": "mockforge-node-111497-observation",
+            "template_name": "MockForge Node Brotli controlled lab observation",
+            "method": "GET",
+            "path": "/health?__mockforge_cve={token}",
+            "headers": {
+                "X-Mockforge-Cve": "{token}",
+            },
+            "body": None,
+            "signature_header": None,
+            # Body marker proving the application was healthy and observable.
+            "marker": "mockforge-node2shell-lab",
+        },
+        "app": {
+            "port": "3000/tcp",
+            "env": {},
+            "readiness": {"path": "/health", "status": 200},
+            "workdir": "/app",
+            "command": ["node", "/app/server.js"],
+            "mounts": [{"host": "{output}/server.js", "container": "/app/server.js"}],
+        },
+        # The reviewed lab application, mounted read-only into the pinned
+        # official image. It serves an HTTP endpoint that decompresses request
+        # bodies with the bundled Brotli decoder - the exposure surface the
+        # advisory names - plus static healthy routes for the controls. The
+        # decoder bug is transport-independent; the exploit request rides
+        # HTTP/2 as far as the LB/WAAP and the recorder, which forwards the
+        # standard hop to this application over HTTP/1.1. The app masks
+        # nothing: no restarts, no crash handling beyond reporting a clean
+        # decode error on a patched runtime.
+        "application_script": """'use strict';
+// MockForge CVE-2026-111497 managed lab application (reviewed).
+const http = require('node:http');
+const zlib = require('node:zlib');
+
+// The reviewed trigger is consumed in two phases (streaming write, then a
+// short final input), matching how a streaming consumer feeds the decoder:
+// trigger (23068690 bytes) + 3 trailing zero bytes.
+const PHASE_ONE_BYTES = 23068693;
+
+http.createServer((req, res) => {
+  const chunks = [];
+  req.on('data', (chunk) => chunks.push(chunk));
+  req.on('end', () => {
+    const body = Buffer.concat(chunks);
+    if (req.method === 'POST' && req.url.startsWith('/decode')) {
+      const decoder = zlib.createBrotliDecompress();
+      decoder.on('error', (error) => {
+        if (!res.headersSent) {
+          res.writeHead(422, { 'content-type': 'text/plain' });
+          res.end(`invalid brotli: ${error.code || error.message}\\n`);
+        }
+      });
+      const second = body.length > PHASE_ONE_BYTES ? body.subarray(PHASE_ONE_BYTES) : Buffer.alloc(0);
+      const first = body.length > PHASE_ONE_BYTES ? body.subarray(0, PHASE_ONE_BYTES) : body;
+      decoder.on('data', () => {});
+      decoder.write(first, () => {
+        if (second.length) {
+          decoder.end(second, () => {
+            if (!res.headersSent) {
+              res.writeHead(200, { 'content-type': 'text/plain' });
+              res.end('decoded\\n');
+            }
+          });
+        } else {
+          decoder.end(() => {
+            if (!res.headersSent) {
+              res.writeHead(200, { 'content-type': 'text/plain' });
+              res.end('decoded\\n');
+            }
+          });
+        }
+      });
+      return;
+    }
+    res.writeHead(200, { 'content-type': 'text/plain' });
+    res.end('mockforge-node2shell-lab\\n');
+  });
+}).listen(3000, '0.0.0.0');
+""",
+        "controls": {
+            "benign_path": "/health?__mockforge_cve={token}",
+            "benign_status": 200,
+            "ordinary_path": "/?__mockforge_cve={token}",
+            "ordinary_status": 200,
+        },
+        "exploit": {
+            "method": "POST",
+            "path": "/decode?__mockforge_cve={token}",
+            "headers": {
+                "X-Mockforge-Cve": "{token}",
+                "Content-Type": "application/brotli",
+            },
+            "max_forwarded_body": 48 * 1024 * 1024,
+            "timeout": 60,
+        },
+        "baseline_gate": "decoder-crash",
+        "classifier": "decoder-crash",
+        "baseline_exploit": "http2-crash",
+        "target_exploit": "http2-crash",
+    },
+    "CVE-2026-109618": {
+        # Reviewer evidence on PR #1524: trigger returned "200 upload processed"
+        # with no crash marker on Docker 29.1.4 / PHP 8.4.26 / Apache 2.4.69 at
+        # 418c289e, so this pack remains hidden until it reproduces on a lab host.
+        "verified": False,
+        "catalog": {
+            "schema_version": 1,
+            "pack_revision": 2,
+            "cve": "CVE-2026-109618",
+            "title": "PHP2Shell 2026: PHP core OOM request-lifecycle corruption (mod_php)",
+            "platform": "Linux, local Docker/Podman engine, amd64",
+            "application_version": "PHP 8.4.26 (official image), Apache with mod_php, reviewed lab configuration",
+            "application_image": "docker.io/library/php@sha256:60111400ff77bdc44fa79b4f072afe49a42abba71e0846ad496be4761dc9c11a",
+            "runner_version": "Nuclei 3.11.1",
+            "runner_image": "docker.io/projectdiscovery/nuclei@sha256:582d5546902e67052097cb2d07296c642d50a1afc5e44623cb038845df9a32eb",
+            "references": [
+                "https://github.com/php/php-src/security/advisories/GHSA-w8hw-w9fx-j79w",
+                "https://www.php.net/releases/8.4/release-8.4.27.php",
+            ],
+            "coverage": "One reviewed OOM-during-input-parse corruption case on mod_php, benign controls, and the PHP_SESSION_UPLOAD_PROGRESS marker as URI, query (POST and GET), header and urlencoded-field-name signature variants; not remote code execution, not FPM, not every trigger variant",
+            "origin_port": 18082,
+            "listen_address_guidance": (
+                "The recorder defaults to 127.0.0.1:18082, which only accepts local "
+                "connections. Testing an LB/WAAP on another machine requires "
+                "--listen-address <an isolated lab interface IP>; keep that interface "
+                "restricted to the test network because the recorder forwards to the "
+                "vulnerable application."
+            ),
+            "verification_status": "pending-lab-host-verification",
+        },
+        "probe": {
+            "template_id": "mockforge-php2026-618-observation",
+            "template_name": "MockForge PHP2Shell 2026 controlled lab observation",
+            "method": "GET",
+            "path": "/health.php?__mockforge_cve={token}",
+            "headers": {
+                "X-Mockforge-Cve": "{token}",
+            },
+            "body": None,
+            "signature_header": None,
+            # Body marker proving the application was healthy and observable.
+            "marker": "mockforge-php2shell-2026",
+        },
+        "app": {
+            "port": "8080/tcp",
+            "cap_add": ["SETUID", "SETGID"],
+            "env": {},
+            "readiness": {"path": "/health.php", "status": 200},
+            "workdir": "/var/www/html",
+            "mounts": [
+                {"host": "{output}/index.php", "container": "/var/www/html/index.php"},
+                {"host": "{output}/health.php", "container": "/var/www/html/health.php"},
+                {"host": "{output}/upload.php", "container": "/var/www/html/upload.php"},
+                {"host": "{output}/lab.ini", "container": "/usr/local/etc/php/conf.d/zz-mockforge-lab.ini"},
+                {"host": "{output}/.htaccess", "container": "/var/www/html/.htaccess"},
+                {"host": "{output}/ports.conf", "container": "/etc/apache2/ports.conf"},
+                {"host": "{output}/000-default.conf", "container": "/etc/apache2/sites-enabled/000-default.conf"},
+            ],
+        },
+        "application_files": PHP2SHELL_2026_FILES,
+        "controls": {
+            "benign_path": "/health.php?__mockforge_cve={token}",
+            "benign_status": 200,
+            "ordinary_path": "/?__mockforge_cve={token}",
+            "ordinary_status": 200,
+        },
+        "exploit": {
+            "method": "POST",
+            "path": "/upload.php?__mockforge_cve={token}",
+            "headers": {
+                "X-Mockforge-Cve": "{token}",
+            },
+            "max_forwarded_body": 48 * 1024 * 1024,
+            "timeout": 60,
+        },
+        # Data-driven signature variants (issue #1588): additional must-be-
+        # blocked placements of the PHP_SESSION_UPLOAD_PROGRESS marker. The
+        # source cases are Srikanth's (srikr) field requests on issue #79
+        # (Nov 14, 2026), adapted to the pack's token convention; bodies are
+        # pinned builders in cve_lab_payloads, and none of them carries the
+        # oversized reviewed trigger, so no variant is marked as reproducing
+        # directly - they are must-be-blocked signature probes. The marker's
+        # multipart form-data field-name position stays the pack set's
+        # existing case (the pinned oom_body_with_progress producer and
+        # consumer_body consumer), so no variant duplicates it. Every variant
+        # runs in the direct baseline (must reach the origin) and through the
+        # LB (must be blocked), and the verdict is reported per variant.
+        "signature_variants": [
+            {
+                # (a) marker as the first request-URI path segment (the exact
+                # source case POST /PHP_SESSION_UPLOAD_PROGRESS/upload.php).
+                "id": "marker-in-uri",
+                "method": "POST",
+                "path": "/PHP_SESSION_UPLOAD_PROGRESS/upload.php?__mockforge_cve={token}",
+                "headers": {"X-Mockforge-Cve": "{token}"},
+                "body_ref": "file_upload_body",
+                "expect": "blocked",
+                "reproduces_directly": False,
+            },
+            {
+                # (b) marker as a query parameter on a multipart POST (the
+                # exact source case POST /upload.php?PHP_SESSION_UPLOAD_PROGRESS=123).
+                "id": "marker-in-query",
+                "method": "POST",
+                "path": "/upload.php?PHP_SESSION_UPLOAD_PROGRESS=123&__mockforge_cve={token}",
+                "headers": {"X-Mockforge-Cve": "{token}"},
+                "body_ref": "file_upload_body",
+                "expect": "blocked",
+                "reproduces_directly": False,
+            },
+            {
+                # (c) marker as a query parameter on a plain GET with no body
+                # (the exact source case GET /upload.php?PHP_SESSION_UPLOAD_PROGRESS=1).
+                "id": "marker-in-query-get",
+                "method": "GET",
+                "path": "/upload.php?PHP_SESSION_UPLOAD_PROGRESS=1&__mockforge_cve={token}",
+                "headers": {"X-Mockforge-Cve": "{token}"},
+                "expect": "blocked",
+                "reproduces_directly": False,
+            },
+            {
+                # (d) marker as a urlencoded body FIELD NAME - a body position
+                # other than the multipart field name (the exact source case
+                # POST /upload.php with body PHP_SESSION_UPLOAD_PROGRESS=123).
+                "id": "marker-in-urlencoded-field",
+                "method": "POST",
+                "path": "/upload.php?__mockforge_cve={token}",
+                "headers": {"X-Mockforge-Cve": "{token}"},
+                "body_ref": "progress_urlencoded_field_body",
+                "expect": "blocked",
+                "reproduces_directly": False,
+            },
+            {
+                # (e) marker carried in a request header (name and value, so a
+                # rule matching either position blocks it) - the header
+                # complement to the field cases' marker-ish x-php/test headers.
+                "id": "marker-in-header",
+                "method": "POST",
+                "path": "/upload.php?__mockforge_cve={token}",
+                "headers": {
+                    "X-Mockforge-Cve": "{token}",
+                    "X-PHP-Session-Upload-Progress": "PHP_SESSION_UPLOAD_PROGRESS",
+                },
+                "body_ref": "file_upload_body",
+                "expect": "blocked",
+                "reproduces_directly": False,
+            },
+        ],
+        "baseline_gate": "modphp-segfault",
+        "classifier": "modphp-segfault",
+        "baseline_exploit": "modphp-oom",
+        "target_exploit": "modphp-oom",
+    },
+    "CVE-2026-109619": {
+        # Reviewer evidence on PR #1524: trigger did not reproduce on Docker
+        # 29.1.4 / PHP 8.4.26 / Apache 2.4.69 at 418c289e; see PR #1524.
+        "verified": False,
+        "catalog": {
+            "schema_version": 1,
+            "pack_revision": 2,
+            "cve": "CVE-2026-109619",
+            "title": "PHP2Shell 2026: PHP core same-worker use-after-free (mod_php)",
+            "platform": "Linux, local Docker/Podman engine, amd64",
+            "application_version": "PHP 8.4.26 (official image), Apache with mod_php, reviewed lab configuration",
+            "application_image": "docker.io/library/php@sha256:60111400ff77bdc44fa79b4f072afe49a42abba71e0846ad496be4761dc9c11a",
+            "runner_version": "Nuclei 3.11.1",
+            "runner_image": "docker.io/projectdiscovery/nuclei@sha256:582d5546902e67052097cb2d07296c642d50a1afc5e44623cb038845df9a32eb",
+            "references": [
+                "https://github.com/php/php-src/security/advisories/GHSA-6wmf-4rv5-p3rp",
+                "https://www.php.net/releases/8.4/release-8.4.27.php",
+            ],
+            "coverage": "One reviewed producer-then-consumer same-worker case on mod_php and benign controls; not remote code execution, not FPM, not every consumer path",
+            "origin_port": 18082,
+            "listen_address_guidance": (
+                "The recorder defaults to 127.0.0.1:18082, which only accepts local "
+                "connections. Testing an LB/WAAP on another machine requires "
+                "--listen-address <an isolated lab interface IP>; keep that interface "
+                "restricted to the test network because the recorder forwards to the "
+                "vulnerable application."
+            ),
+            "verification_status": "pending-lab-host-verification",
+        },
+        "probe": {
+            "template_id": "mockforge-php2026-619-observation",
+            "template_name": "MockForge PHP2Shell 2026 controlled lab observation",
+            "method": "GET",
+            "path": "/health.php?__mockforge_cve={token}",
+            "headers": {
+                "X-Mockforge-Cve": "{token}",
+            },
+            "body": None,
+            "signature_header": None,
+            # Body marker proving the application was healthy and observable.
+            "marker": "mockforge-php2shell-2026",
+        },
+        "app": {
+            "port": "8080/tcp",
+            "cap_add": ["SETUID", "SETGID"],
+            "env": {},
+            "readiness": {"path": "/health.php", "status": 200},
+            "workdir": "/var/www/html",
+            "mounts": [
+                {"host": "{output}/index.php", "container": "/var/www/html/index.php"},
+                {"host": "{output}/health.php", "container": "/var/www/html/health.php"},
+                {"host": "{output}/upload.php", "container": "/var/www/html/upload.php"},
+                {"host": "{output}/lab.ini", "container": "/usr/local/etc/php/conf.d/zz-mockforge-lab.ini"},
+                {"host": "{output}/.htaccess", "container": "/var/www/html/.htaccess"},
+                {"host": "{output}/ports.conf", "container": "/etc/apache2/ports.conf"},
+                {"host": "{output}/000-default.conf", "container": "/etc/apache2/sites-enabled/000-default.conf"},
+            ],
+        },
+        "application_files": PHP2SHELL_2026_FILES,
+        "controls": {
+            "benign_path": "/health.php?__mockforge_cve={token}",
+            "benign_status": 200,
+            "ordinary_path": "/?__mockforge_cve={token}",
+            "ordinary_status": 200,
+        },
+        "exploit": {
+            "method": "POST",
+            "path": "/upload.php?__mockforge_cve={token}",
+            "headers": {
+                "X-Mockforge-Cve": "{token}",
+            },
+            "max_forwarded_body": 48 * 1024 * 1024,
+            "timeout": 60,
+        },
+        # Data-driven signature variants (issue #1588 follow-up): additional
+        # must-be-blocked placements of the ini_set/php_value/php_admin
+        # markers. The source cases are Srikanth's (srikr) field requests on
+        # issue #79 (Nov 14, 2026), adapted to the pack's token convention:
+        # each marker as the raw text/plain request body (POST /test), as a
+        # query parameter (POST /testing?<marker>=...), and as a request-URI
+        # path segment (POST /testing/<marker>/...), with the x-php/test
+        # header swap the field cases carry. Bodies are pinned builders in
+        # cve_lab_payloads, and none of them carries the oversized reviewed
+        # trigger, so no variant is marked as reproducing directly - they
+        # are must-be-blocked signature probes. The reviewed producer and
+        # consumer cases stay untouched, and no variant duplicates them.
+        # Every variant runs in the direct baseline (must reach the origin)
+        # and through the LB (must be blocked), and the verdict is reported
+        # per variant.
+        "signature_variants": [
+            {
+                # (a) marker as the raw text/plain request body - the exact
+                # source cases POST /test with body ini_set/php_value/
+                # php_admin (Content-Type comes from the pinned builder).
+                "id": "ini-set-in-body",
+                "method": "POST",
+                "path": "/test?__mockforge_cve={token}",
+                "headers": {"X-PHP": "test"},
+                "body_ref": "ini_set_body",
+                "expect": "blocked",
+                "reproduces_directly": False,
+            },
+            {
+                "id": "php-value-in-body",
+                "method": "POST",
+                "path": "/test?__mockforge_cve={token}",
+                "headers": {"X-PHP": "test"},
+                "body_ref": "php_value_body",
+                "expect": "blocked",
+                "reproduces_directly": False,
+            },
+            {
+                "id": "php-admin-in-body",
+                "method": "POST",
+                "path": "/test?__mockforge_cve={token}",
+                "headers": {"X-PHP": "test"},
+                "body_ref": "php_admin_body",
+                "expect": "blocked",
+                "reproduces_directly": False,
+            },
+            {
+                # (b) marker as a query parameter - the exact source cases
+                # POST /testing?ini_set=1 (php_value=1, php_admin=true) with
+                # the swapped test/x-php header; bodyless probes, so a block
+                # can only come from the query position.
+                "id": "ini-set-in-query",
+                "method": "POST",
+                "path": "/testing?ini_set=1&__mockforge_cve={token}",
+                "headers": {"Test": "x-php", "Content-Type": "text/plain"},
+                "expect": "blocked",
+                "reproduces_directly": False,
+            },
+            {
+                "id": "php-value-in-query",
+                "method": "POST",
+                "path": "/testing?php_value=1&__mockforge_cve={token}",
+                "headers": {"Test": "x-php", "Content-Type": "text/plain"},
+                "expect": "blocked",
+                "reproduces_directly": False,
+            },
+            {
+                "id": "php-admin-in-query",
+                "method": "POST",
+                "path": "/testing?php_admin=true&__mockforge_cve={token}",
+                "headers": {"Test": "x-php", "Content-Type": "text/plain"},
+                "expect": "blocked",
+                "reproduces_directly": False,
+            },
+            {
+                # (c) marker as a request-URI path segment - the exact source
+                # cases POST /testing/ini_set/one (php_value/two,
+                # php_admin/three); bodyless probes, so a block can only come
+                # from the path position.
+                "id": "ini-set-in-path",
+                "method": "POST",
+                "path": "/testing/ini_set/one?__mockforge_cve={token}",
+                "headers": {"Test": "x-php", "Content-Type": "text/plain"},
+                "expect": "blocked",
+                "reproduces_directly": False,
+            },
+            {
+                "id": "php-value-in-path",
+                "method": "POST",
+                "path": "/testing/php_value/two?__mockforge_cve={token}",
+                "headers": {"Test": "x-php", "Content-Type": "text/plain"},
+                "expect": "blocked",
+                "reproduces_directly": False,
+            },
+            {
+                "id": "php-admin-in-path",
+                "method": "POST",
+                "path": "/testing/php_admin/three?__mockforge_cve={token}",
+                "headers": {"Test": "x-php", "Content-Type": "text/plain"},
+                "expect": "blocked",
+                "reproduces_directly": False,
+            },
+            {
+                # (d) marker carried in a request header (name and value, so
+                # a rule matching either position blocks it), with no body -
+                # the header complement, mirroring the 109618 set's header
+                # placement.
+                "id": "ini-set-in-header",
+                "method": "POST",
+                "path": "/test?__mockforge_cve={token}",
+                "headers": {
+                    "X-Ini-Set": "ini_set",
+                },
+                "expect": "blocked",
+                "reproduces_directly": False,
+            },
+        ],
+        "baseline_gate": "modphp-segfault",
+        "classifier": "modphp-segfault",
+        "baseline_exploit": "modphp-worker-sequence",
+        "target_exploit": "modphp-worker-sequence",
+    }
 }
+
+def validate_signature_variants(pack):
+    """Check the data-driven signature variants a pack declares.
+
+    Each variant is one more reviewed must-be-blocked request: data of the
+    form {id, method, path, headers, body_ref | body_template, expect:
+    "blocked"}. Bodies stay generated and digest-pinned (``body_ref`` names a
+    builder in ``cve_lab_payloads.PINNED_BODIES``; ``body_template`` must pin
+    its exact bytes with ``body_sha256``), so a run never carries unreviewed
+    input. A variant marked ``reproduces_directly`` claims the pack's
+    reviewed crash evidence, which only packs with a crash-evidence baseline
+    exploit can honor. Malformed variants are refused here, before any
+    download.
+    """
+    variants = pack.get("signature_variants")
+    if not variants:
+        return
+    seen_ids = set()
+    for variant in variants:
+        for key in ("id", "path", "expect"):
+            if key not in variant:
+                raise ValueError(f"signature variant is missing {key}: {variant}")
+        variant_id = variant["id"]
+        if not isinstance(variant_id, str) or not variant_id:
+            raise ValueError(
+                f"signature variant id must be a non-empty string: {variant}"
+            )
+        if variant_id in seen_ids:
+            raise ValueError(f"duplicate signature variant id: {variant_id}")
+        seen_ids.add(variant_id)
+        if variant["expect"] != "blocked":
+            raise ValueError(
+                f'signature variant {variant_id} must expect "blocked": '
+                f'{variant["expect"]!r}'
+            )
+        if not isinstance(variant["path"], str) or not variant["path"].startswith("/"):
+            raise ValueError(
+                f"signature variant {variant_id} path must be an origin path "
+                f"starting with /: {variant['path']!r}"
+            )
+        method = variant.get("method", "GET")
+        if (
+            not isinstance(method, str)
+            or not method
+            or method != method.strip()
+            or not all(character.isalpha() or character == "-" for character in method)
+        ):
+            raise ValueError(
+                f"signature variant {variant_id} method must be an HTTP "
+                f"method token: {method!r}"
+            )
+        headers = variant.get("headers", {})
+        if not isinstance(headers, dict) or any(
+            not isinstance(name, str) or not isinstance(value, str)
+            for name, value in headers.items()
+        ):
+            raise ValueError(
+                f"signature variant {variant_id} headers must be a string mapping"
+            )
+        if "body_ref" in variant and "body_template" in variant:
+            raise ValueError(
+                f"signature variant {variant_id} must declare body_ref or "
+                "body_template, not both"
+            )
+        if "body_template" in variant:
+            template = variant["body_template"]
+            if not isinstance(template, str):
+                raise ValueError(
+                    f"signature variant {variant_id} body_template must be a string"
+                )
+            if "{token}" in template:
+                raise ValueError(
+                    f"signature variant {variant_id} body_template must not "
+                    "embed the run token; its bytes must stay exactly the "
+                    "reviewed input"
+                )
+            if "body_sha256" not in variant:
+                raise ValueError(
+                    f"signature variant {variant_id} body_template requires "
+                    "a pinned body_sha256"
+                )
+            digest = hashlib.sha256(template.encode("utf-8")).hexdigest()
+            if variant["body_sha256"] != digest:
+                raise ValueError(
+                    f"signature variant {variant_id} body_sha256 does not "
+                    "match its body_template"
+                )
+        if "body_ref" in variant:
+            reference = variant["body_ref"]
+            if reference not in payloads.PINNED_BODIES:
+                raise ValueError(
+                    f"signature variant {variant_id} body_ref {reference!r} "
+                    "is not a reviewed, digest-pinned payload builder"
+                )
+        if variant.get("reproduces_directly") and "baseline_exploit" not in pack:
+            raise ValueError(
+                f"signature variant {variant_id} marks reproduces_directly "
+                "but the pack has no crash-evidence baseline exploit to "
+                "confirm it"
+            )
+
+
+def validate_data_driven_pack(pack):
+    """Check a pack that uses the generic data-driven evidence paths.
+
+    A pack needs no classifier code when its outcome is a plain response
+    status: it names ``data-driven`` for both ``baseline_gate`` and
+    ``classifier`` and declares everything else as data. Packs that declare
+    ``signature_variants`` (additional must-be-blocked requests) are also
+    validated here regardless of their gate, so a wrongly declared pack
+    fails loudly before any run instead of producing unverifiable verdicts.
+    """
+    variants = pack.get("signature_variants")
+    data_driven = (
+        pack["baseline_gate"] == "data-driven" and pack["classifier"] == "data-driven"
+    )
+    if not data_driven and not variants:
+        raise ValueError(
+            "validate_data_driven_pack requires the data-driven gate and classifier"
+        )
+    for key in ("catalog", "probe", "app", "controls"):
+        if key not in pack:
+            raise ValueError(f"data-driven pack is missing {key}")
+    for image in (pack["catalog"]["application_image"], pack["catalog"]["runner_image"]):
+        if "@sha256:" not in image:
+            raise ValueError(f"{image} is not pinned by digest")
+    controls = pack["controls"]
+    for key in ("benign_path", "benign_status", "ordinary_path", "ordinary_status"):
+        if key not in controls:
+            raise ValueError(f"data-driven pack controls are missing {key}")
+    probe = pack["probe"]
+    for key in ("template_id", "template_name", "method", "path", "marker"):
+        if key not in probe:
+            raise ValueError(f"data-driven pack probe is missing {key}")
+    seen_ids = set()
+    for case in pack.get("extra_cases", ()):
+        for key in ("id", "path", "expect_status"):
+            if key not in case:
+                raise ValueError(f"extra case is missing {key}: {case}")
+        if case["id"] in seen_ids:
+            raise ValueError(f"duplicate extra case id: {case['id']}")
+        seen_ids.add(case["id"])
+    validate_signature_variants(pack)
+
 
 # Legacy single-pack exports; existing callers and tests import these names.
 CVE = "CVE-2025-29927"
