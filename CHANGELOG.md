@@ -1,3 +1,66 @@
+## [0.3.246] - 2026-11-15
+
+### Security
+
+- **[Cloud]** The registry's showcase admin endpoints require a site administrator. (#1590)
+- **[DevX]** Update `quinn-proto` to 0.11.19 and `quinn-udp` to 0.5.16 for RUSTSEC-2026-0523, RUSTSEC-2026-0524 and RUSTSEC-2026-0538. (#1580)
+
+### Fixed
+
+- **[Reality]** `mockforge cve run --skip-tls-verify` against an HTTPS target no longer fails at the baseline with `flag provided but not defined: -insecure`. The pinned Nuclei 3.11.1 runner has no such flag and never verifies TLS certificates, so MockForge no longer passes one; `--skip-tls-verify` still governs MockForge's own control requests and is recorded in the report. A regression test runs the real pinned runner against a self-signed HTTPS server. (#1601, reported on #79)
+- **[Cloud]** The registry acknowledges Stripe webhooks that can never be acted on (no valid org, an unknown org, or an already-passed trial end) instead of answering a retryable 503 that Stripe would retry for days. (#1575)
+
+### Added
+
+- **[Reality]** CVE lab packs can declare more test cases as data (`extra_cases`), and must-be-blocked signature variants that run in the direct baseline and through the load balancer with a verdict per variant. (#1541, #1597)
+- **[Reality]** `mockforge cve list` surfaces each pack's digest-pinned images and whether this machine holds them; digest-pulled images do not appear in `docker images`. (#1542)
+- **[Reality]** PHP2Shell 2026 packs for CVE-2026-109618 and CVE-2026-109619, with signature variants for the `PHP_SESSION_UPLOAD_PROGRESS` placements reported on #79. Both packs are unverified (their trigger has not reproduced on a lab host yet), so they run only with `--include-unverified`. (#1524, #1597)
+- **[DevX]** CI reclaims oversized runner build targets, with a 25G default cap. (#1581, #1586)
+
+## [0.3.245] - 2026-11-13
+
+0.3.244 was tagged but never published (its release build ran out of disk), so 0.3.245 ships its changes.
+
+### Fixed
+
+- **[Contracts]** Generated mock responses honour the schema's constraints: string `enum`, `format` and length limits; integer and number `enum`, bounds (including exclusive bounds) and `multipleOf`; and boolean `enum`. This applies inside objects, arrays, `$ref` and `allOf`/`oneOf`/`anyOf`. Constrained ids no longer get the `_001` suffix. Unconstrained values are unchanged. (#1558)
+- **[Reality]** When a CVE lab's Nuclei step fails, the report and the printed reason now show the failing phase, the container's exit code and the end of its output, instead of an empty `docker command failed:`. (#1529)
+- **[DevX]** Releases no longer rebuild the workspace from scratch for the `cargo install` smoke test, and trim the runner's release build directory afterwards, so a release stops filling the shared CI disk. (#1570)
+- **[DevX]** CI fixes: the CLI tools bundle is regenerated, the example configuration image workflow uses the standard runner selection, and two unneeded qualifications in `mockforge-proxy` tests are removed.
+
+## [0.3.243] - 2026-11-12
+
+### Fixed
+
+- **[DevX]** The release check for bundled tools reads `mockforge cve list` as one entry per pack, keyed by CVE id. v0.3.242 was tagged but never published because this check still expected the single-pack shape.
+
+### Added
+
+- **[DevX]** A reproducible comparison benchmark of MockForge, WireMock, Prism and Mockoon (`benchmarks/compare/`), with its methodology in the book. Results will be published after a rerun. (#1512)
+
+v0.3.243 also carries everything listed for 0.3.242 below, which was never published to crates.io.
+
+## [0.3.242] - 2026-11-11
+
+### Security
+
+- **[DevX]** Update `openssl` to 0.10.82 (`openssl-sys` 0.9.118) for eight RustSec advisories, including buffer overflows in AES key wrap and digest finalization. RUSTSEC-2026-0459 (`libsqlite3-sys`) is deferred to the sqlx 0.9 upgrade (#1552); mockforge only opens its own SQLite stores.
+
+### Added
+
+- **[Reality]** CVE lab pack for CVE-2024-4577 (PHP-CGI argument injection through the Windows best-fit code page), alongside the Next.js pack. (#1522)
+
+### Fixed
+
+- **[DevX]** UI builds that change nothing no longer regenerate watched assets. (#1488)
+- **[DevX]** The UI restart helper builds cleanly with `clippy -D warnings` on non-Linux targets. (#1517)
+
+### Changed
+
+- **[DevX]** Copyright holder, crate authors and publisher are now MockForge LLC (licenses unchanged). (#1528)
+- **[Reality]** The CVE labs guide covers offline behavior, the plain-HTTP recorder, plain-language checks and the test cases each pack runs. (#1530)
+- **[DevX]** Removed dead code and orphaned end-to-end test files, and brought the docs' crate list in line with the workspace's 63 crates. (#1505, #1513, #1518)
+
 ## [0.3.241] - 2026-11-07
 
 ### Added

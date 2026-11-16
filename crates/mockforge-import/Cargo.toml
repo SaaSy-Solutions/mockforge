@@ -4,6 +4,7 @@ name = "mockforge-import"
 description = "Import and code generation utilities for MockForge — OpenAPI, Postman, cURL, HAR, Insomnia"
 version.workspace = true
 edition.workspace = true
+authors.workspace = true
 license.workspace = true
 repository.workspace = true
 readme = "../../README.md"

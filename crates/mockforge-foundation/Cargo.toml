@@ -4,6 +4,7 @@ name = "mockforge-foundation"
 description = "Foundation types shared across the MockForge workspace (Error, Result, EncryptionError)"
 version.workspace = true
 edition.workspace = true
+authors.workspace = true
 license.workspace = true
 repository.workspace = true
 readme = "../../README.md"

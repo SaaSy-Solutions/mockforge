@@ -55,4 +55,6 @@ ignore = [
     "RUSTSEC-2026-0370",
     "RUSTSEC-2026-0371",
     "RUSTSEC-2026-0372",
+    # libsqlite3-sys via sqlx 0.8; low exposure, see root audit.toml (#1552).
+    "RUSTSEC-2026-0459",
 ]

@@ -1,4 +1,4 @@
-This Data Processing Agreement ("DPA") forms part of the [Terms of Service](/legal/terms) between the customer ("Customer", controller) and **SaaSy Solutions LLC** ("Processor", "we") and applies whenever we process Customer Personal Data in providing MockForge Cloud. If this DPA conflicts with the Terms, this DPA controls for data-protection matters.
+This Data Processing Agreement ("DPA") forms part of the [Terms of Service](/legal/terms) between the customer ("Customer", controller) and **MockForge LLC** ("Processor", "we") and applies whenever we process Customer Personal Data in providing MockForge Cloud. If this DPA conflicts with the Terms, this DPA controls for data-protection matters.
 
 ## 1. Definitions
 
@@ -44,7 +44,7 @@ Taking into account the nature of the processing, we will help Customer respond 
 
 ## 9. International transfers
 
-We process Customer Personal Data in the United States. For transfers of personal data from the EEA, UK or Switzerland, the parties agree to the EU Standard Contractual Clauses (Module 2, controller to processor; Module 3 where Customer is itself a processor) and the UK Addendum, which are incorporated by reference, with Customer as data exporter and SaaSy Solutions LLC as data importer.
+We process Customer Personal Data in the United States. For transfers of personal data from the EEA, UK or Switzerland, the parties agree to the EU Standard Contractual Clauses (Module 2, controller to processor; Module 3 where Customer is itself a processor) and the UK Addendum, which are incorporated by reference, with Customer as data exporter and MockForge LLC as data importer.
 
 ## 10. Return and deletion
 

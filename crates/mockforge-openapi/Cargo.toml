@@ -4,6 +4,7 @@ name = "mockforge-openapi"
 description = "OpenAPI 3.x / Swagger 2.0 spec loading, parsing, schema validation, and response selection for MockForge"
 version.workspace = true
 edition.workspace = true
+authors.workspace = true
 license.workspace = true
 repository.workspace = true
 readme = "../../README.md"

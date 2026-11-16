@@ -423,4 +423,4 @@ Want to implement a new protocol? See:
 - 📖 [Documentation](https://docs.mockforge.dev)
 - 💬 [GitHub Discussions](https://github.com/SaaSy-Solutions/mockforge/discussions)
 - 🐛 [Report Issues](https://github.com/SaaSy-Solutions/mockforge/issues)
-- 📧 [Contact](mailto:talksaas@saasysolutionsllc.com)
+- 📧 [Contact](mailto:support@mockforge.dev)
