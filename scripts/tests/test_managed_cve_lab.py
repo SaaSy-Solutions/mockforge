@@ -2214,6 +2214,117 @@ class SignatureVariantRunnerTests(unittest.TestCase):
         pack.update(pack_edits)
         return pack
 
+    def test_run_keeps_main_signature_failure_with_inconclusive_variant(self):
+        pack = self.pack_with(synthetic_variants())
+        pack.pop("extra_cases")
+        cve = pack["catalog"]["cve"]
+        catalog.PACKS[cve] = pack
+        lab.PACKS[cve] = pack
+
+        class FakeLab:
+            def __enter__(self):
+                return "http://127.0.0.1:18082"
+
+            def __exit__(self, *_args):
+                return False
+
+        def fake_receiver(*_args, **_kwargs):
+            @contextlib.contextmanager
+            def records_context():
+                records = [
+                    {"tokens": ["attack"], "status": 200},
+                    *[
+                        {"tokens": [f"bv-{variant['id']}"], "status": 200}
+                        for variant in pack["signature_variants"]
+                    ],
+                ]
+                yield records
+
+            return records_context()
+
+        def fake_controls(_pack, _target, _run_id, phase, **_kwargs):
+            return {
+                "token": phase,
+                "status": 200,
+                "root_token": f"{phase}-root",
+                "root_status": 200,
+                "body_sha256": "same-control-body",
+            }
+
+        try:
+            with tempfile.TemporaryDirectory() as directory, patch.object(
+                lab, "prepare"
+            ), patch.object(lab, "verify_images", return_value=[]), patch.object(
+                lab, "lab", return_value=FakeLab()
+            ), patch.object(lab, "receiver", side_effect=fake_receiver), patch.object(
+                lab, "control", side_effect=fake_controls
+            ), patch.object(
+                lab, "cleanup"
+            ), patch.object(
+                lab, "probe", return_value={"status": 200, "marker": True}
+            ), patch.object(
+                nuclei, "owned_remove"
+            ), patch.dict(
+                lab.BASELINE_GATES, {"data-driven": lambda *_args: None}
+            ), patch.dict(
+                lab.CLASSIFIERS,
+                {"data-driven": lambda *_args, **_kwargs: (
+                    "fail", "main signature reached the origin", []
+                )},
+            ), patch.dict(
+                lab.TARGET_EXPLOITS, {"nuclei": lambda *_args, **_kwargs: {
+                    "token": "attack", "status": 403
+                }}
+            ), patch.object(
+                lab, "variant_baseline_steps", return_value=(
+                    {
+                        variant["id"]: {
+                            "token": f"bv-{variant['id']}", "status": 200
+                        }
+                        for variant in pack["signature_variants"]
+                    },
+                    [],
+                )
+            ), patch.object(
+                lab, "variant_target_steps", return_value={
+                    "marker-in-query": {
+                        "token": "tv-marker-in-query", "status": 200
+                    },
+                    "marker-in-header": {
+                        "token": "tv-marker-in-header", "status": 403
+                    },
+                    "marker-in-query-get": {
+                        "token": "tv-marker-in-query-get", "status": 403
+                    },
+                }
+            ), contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(
+                io.StringIO()
+            ):
+                output = Path(directory) / "out"
+                exit_code = lab.main(
+                    [
+                        "--include-unverified",
+                        "run",
+                        cve,
+                        "--target",
+                        "http://127.0.0.1:8080",
+                        "--output-dir",
+                        str(output),
+                    ]
+                )
+                report = json.loads((output / "report.json").read_text())
+        finally:
+            catalog.PACKS.pop(cve, None)
+            lab.PACKS.pop(cve, None)
+
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(report["verdict"], "fail", report)
+        self.assertEqual(report["reason"], "main signature reached the origin")
+        self.assertEqual(
+            report["signature_variants"]["marker-in-query"]["verdict"],
+            "inconclusive",
+        )
+
     def captured_backend(self, status=200):
         from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -2523,6 +2634,30 @@ class SignatureVariantEvidenceTests(unittest.TestCase):
             "signature variant(s) alpha, zeta reached the origin; "
             "blocking assertion failed"
         ))
+
+    def test_variant_evidence_never_softens_a_failed_main_signature(self):
+        # A forwarded main signature plus one wrong-status variant stays fail
+        # with the classifier's reason; it must not become inconclusive.
+        override, override_reason = evidence.variant_verdict(False, [])
+        self.assertEqual(
+            evidence.merge_variant_verdict(
+                "fail", "main signature reached the origin", override, override_reason
+            ),
+            ("fail", "main signature reached the origin"),
+        )
+        self.assertEqual(
+            evidence.merge_variant_verdict("pass", "blocked", override, override_reason),
+            ("inconclusive", override_reason),
+        )
+        failed, failed_reason = evidence.variant_verdict(False, ["alpha"])
+        self.assertEqual(
+            evidence.merge_variant_verdict("inconclusive", "x", failed, failed_reason),
+            ("fail", failed_reason),
+        )
+        self.assertEqual(
+            evidence.merge_variant_verdict("pass", "blocked", None, None),
+            ("pass", "blocked"),
+        )
 
     def test_forwarded_variant_traffic_stays_correlated_for_the_classifier(self):
         # The classifier must not mistake a forwarded variant for uncorrelated
