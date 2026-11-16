@@ -374,6 +374,21 @@ def variant_verdict(all_ok, got_through):
     return None, None
 
 
+VERDICT_SEVERITY = {"pass": 0, "inconclusive": 1, "fail": 2}
+
+
+def merge_variant_verdict(verdict, reason, override, override_reason):
+    """Apply variant evidence only when it is worse than the current verdict.
+
+    ``fail`` outranks ``inconclusive`` outranks ``pass``, so a flaky variant
+    can never turn a main-signature ``fail`` into ``inconclusive`` and hide
+    the bypass; the classifier's reason is kept when it already ranks worse.
+    """
+    if override and VERDICT_SEVERITY.get(override, 0) > VERDICT_SEVERITY.get(verdict, 0):
+        return override, override_reason
+    return verdict, reason
+
+
 def _classify_middleware_bypass(
     pack, baseline, target, before, after, records, block_status, variant_tokens=frozenset()
 ):

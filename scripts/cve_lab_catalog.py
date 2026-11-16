@@ -492,7 +492,7 @@ http.createServer((req, res) => {
         "verified": False,
         "catalog": {
             "schema_version": 1,
-            "pack_revision": 1,
+            "pack_revision": 2,
             "cve": "CVE-2026-109619",
             "title": "PHP2Shell 2026: PHP core same-worker use-after-free (mod_php)",
             "platform": "Linux, local Docker/Podman engine, amd64",
@@ -560,6 +560,123 @@ http.createServer((req, res) => {
             "max_forwarded_body": 48 * 1024 * 1024,
             "timeout": 60,
         },
+        # Data-driven signature variants (issue #1588 follow-up): additional
+        # must-be-blocked placements of the ini_set/php_value/php_admin
+        # markers. The source cases are Srikanth's (srikr) field requests on
+        # issue #79 (Nov 14, 2026), adapted to the pack's token convention:
+        # each marker as the raw text/plain request body (POST /test), as a
+        # query parameter (POST /testing?<marker>=...), and as a request-URI
+        # path segment (POST /testing/<marker>/...), with the x-php/test
+        # header swap the field cases carry. Bodies are pinned builders in
+        # cve_lab_payloads, and none of them carries the oversized reviewed
+        # trigger, so no variant is marked as reproducing directly - they
+        # are must-be-blocked signature probes. The reviewed producer and
+        # consumer cases stay untouched, and no variant duplicates them.
+        # Every variant runs in the direct baseline (must reach the origin)
+        # and through the LB (must be blocked), and the verdict is reported
+        # per variant.
+        "signature_variants": [
+            {
+                # (a) marker as the raw text/plain request body - the exact
+                # source cases POST /test with body ini_set/php_value/
+                # php_admin (Content-Type comes from the pinned builder).
+                "id": "ini-set-in-body",
+                "method": "POST",
+                "path": "/test?__mockforge_cve={token}",
+                "headers": {"X-PHP": "test"},
+                "body_ref": "ini_set_body",
+                "expect": "blocked",
+                "reproduces_directly": False,
+            },
+            {
+                "id": "php-value-in-body",
+                "method": "POST",
+                "path": "/test?__mockforge_cve={token}",
+                "headers": {"X-PHP": "test"},
+                "body_ref": "php_value_body",
+                "expect": "blocked",
+                "reproduces_directly": False,
+            },
+            {
+                "id": "php-admin-in-body",
+                "method": "POST",
+                "path": "/test?__mockforge_cve={token}",
+                "headers": {"X-PHP": "test"},
+                "body_ref": "php_admin_body",
+                "expect": "blocked",
+                "reproduces_directly": False,
+            },
+            {
+                # (b) marker as a query parameter - the exact source cases
+                # POST /testing?ini_set=1 (php_value=1, php_admin=true) with
+                # the swapped test/x-php header; bodyless probes, so a block
+                # can only come from the query position.
+                "id": "ini-set-in-query",
+                "method": "POST",
+                "path": "/testing?ini_set=1&__mockforge_cve={token}",
+                "headers": {"Test": "x-php", "Content-Type": "text/plain"},
+                "expect": "blocked",
+                "reproduces_directly": False,
+            },
+            {
+                "id": "php-value-in-query",
+                "method": "POST",
+                "path": "/testing?php_value=1&__mockforge_cve={token}",
+                "headers": {"Test": "x-php", "Content-Type": "text/plain"},
+                "expect": "blocked",
+                "reproduces_directly": False,
+            },
+            {
+                "id": "php-admin-in-query",
+                "method": "POST",
+                "path": "/testing?php_admin=true&__mockforge_cve={token}",
+                "headers": {"Test": "x-php", "Content-Type": "text/plain"},
+                "expect": "blocked",
+                "reproduces_directly": False,
+            },
+            {
+                # (c) marker as a request-URI path segment - the exact source
+                # cases POST /testing/ini_set/one (php_value/two,
+                # php_admin/three); bodyless probes, so a block can only come
+                # from the path position.
+                "id": "ini-set-in-path",
+                "method": "POST",
+                "path": "/testing/ini_set/one?__mockforge_cve={token}",
+                "headers": {"Test": "x-php", "Content-Type": "text/plain"},
+                "expect": "blocked",
+                "reproduces_directly": False,
+            },
+            {
+                "id": "php-value-in-path",
+                "method": "POST",
+                "path": "/testing/php_value/two?__mockforge_cve={token}",
+                "headers": {"Test": "x-php", "Content-Type": "text/plain"},
+                "expect": "blocked",
+                "reproduces_directly": False,
+            },
+            {
+                "id": "php-admin-in-path",
+                "method": "POST",
+                "path": "/testing/php_admin/three?__mockforge_cve={token}",
+                "headers": {"Test": "x-php", "Content-Type": "text/plain"},
+                "expect": "blocked",
+                "reproduces_directly": False,
+            },
+            {
+                # (d) marker carried in a request header (name and value, so
+                # a rule matching either position blocks it), with no body -
+                # the header complement, mirroring the 109618 set's header
+                # placement.
+                "id": "ini-set-in-header",
+                "method": "POST",
+                "path": "/test?__mockforge_cve={token}",
+                "headers": {
+                    "X-Ini-Set": "ini_set",
+                },
+                "expect": "blocked",
+                "reproduces_directly": False,
+            },
+        ],
         "baseline_gate": "modphp-segfault",
         "classifier": "modphp-segfault",
         "baseline_exploit": "modphp-worker-sequence",

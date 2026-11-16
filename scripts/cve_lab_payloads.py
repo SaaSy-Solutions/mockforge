@@ -134,6 +134,9 @@ OOM_BODY_WITH_PROGRESS_SHA256 = "f3e1c679297bf7bc8c8df378ac95dc25657dd5c2d22506c
 CONSUMER_BODY_SHA256 = "b76da585a6490b758ffa370ea5dbc9174e0fc02fdca948136a9a928784767d11"
 FILE_UPLOAD_BODY_SHA256 = "b21285199292133098d421ed45518317a1f1273f83c99c29454b9b2ef553631e"
 PROGRESS_URLENCODED_FIELD_BODY_SHA256 = "ea9231d3efecd59c3a636abb2380cc03700e9be497b14ad0f50f7a2109600dae"
+INI_SET_BODY_SHA256 = "542cf2c889fc7c719768fb3d38054197ed51848d63d23e608338954058533fec"
+PHP_VALUE_BODY_SHA256 = "880a1adebf106efc99e00abbd5cff4e1cfb1625c78737c61a163e9d88358477d"
+PHP_ADMIN_BODY_SHA256 = "3194bdce84add143cc2548fa21cb89116a8ec89bf16327a8b22cb7d84182f3b7"
 
 _BOUNDARY = b"mockforge2026lab"
 BOUNDARY = "mockforge2026lab"
@@ -247,6 +250,44 @@ def progress_urlencoded_field_body() -> bytes:
     return body
 
 
+def ini_set_body() -> bytes:
+    """Signature-variant body: the ini_set marker as the raw text/plain
+    request body - the exact body-position case the source curls send
+    (POST /test). Inert data only: the marker's position, not memory
+    pressure, is the point, so the body never claims the advisory's
+    trigger."""
+    body = b"ini_set"
+    if hashlib.sha256(body).hexdigest() != INI_SET_BODY_SHA256:
+        raise RuntimeError(
+            "ini_set_body digest mismatch against the pinned review input"
+        )
+    return body
+
+
+def php_value_body() -> bytes:
+    """Signature-variant body: the php_value marker as the raw text/plain
+    request body - the exact body-position case the source curls send
+    (POST /test). Inert data only."""
+    body = b"php_value"
+    if hashlib.sha256(body).hexdigest() != PHP_VALUE_BODY_SHA256:
+        raise RuntimeError(
+            "php_value_body digest mismatch against the pinned review input"
+        )
+    return body
+
+
+def php_admin_body() -> bytes:
+    """Signature-variant body: the php_admin marker as the raw text/plain
+    request body - the exact body-position case the source curls send
+    (POST /test). Inert data only."""
+    body = b"php_admin"
+    if hashlib.sha256(body).hexdigest() != PHP_ADMIN_BODY_SHA256:
+        raise RuntimeError(
+            "php_admin_body digest mismatch against the pinned review input"
+        )
+    return body
+
+
 def digest_of(body: bytes) -> str:
     return hashlib.sha256(body).hexdigest()
 
@@ -273,4 +314,7 @@ PINNED_BODIES = {
         PROGRESS_URLENCODED_FIELD_BODY_SHA256,
         "application/x-www-form-urlencoded",
     ),
+    "ini_set_body": (ini_set_body, INI_SET_BODY_SHA256, "text/plain"),
+    "php_value_body": (php_value_body, PHP_VALUE_BODY_SHA256, "text/plain"),
+    "php_admin_body": (php_admin_body, PHP_ADMIN_BODY_SHA256, "text/plain"),
 }
