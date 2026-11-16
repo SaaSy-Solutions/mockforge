@@ -53,11 +53,13 @@ test.describe('User Management — Deployed Site', () => {
     test('should load the user management page', async ({ page }) => {
       await expect(page).toHaveURL(/\/organization/);
       await expect(page).toHaveTitle(/MockForge/);
+      await expect(mainContent(page).getByRole('heading', { name: /Organization/i, level: 1 })).toBeVisible();
     });
 
     test('should display heading and subtitle', async ({ page }) => {
       const main = mainContent(page);
       await expect(main.getByRole('heading', { name: /Organization/i, level: 1 })).toBeVisible();
+      await expect(main.getByText('Manage team workspaces and members').first()).toBeVisible();
     });
 
     test('should display breadcrumbs', async ({ page }) => {

@@ -293,6 +293,7 @@ function SidebarContent({
         {isCloudMode() && (
           <a
             href="https://docs.mockforge.dev/getting-started/installation.html"
+            aria-label={t('nav.runLocally')}
             target="_blank"
             rel="noopener noreferrer"
             className="flex h-8 w-full items-center gap-2.5 rounded-md px-2.5 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"

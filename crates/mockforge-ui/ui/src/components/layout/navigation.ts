@@ -471,6 +471,12 @@ export const localOnlyRouteIds = new Set(
     .concat(['playground']),
 );
 
+/** Routes that remain reachable in cloud despite their local-only navigation item. */
+export const localOnlyRouteExceptions = new Set([
+  'analytics', // AnalyticsPage explains the cloud alternatives and links to them.
+  'api-explorer', // HostedMocksPage opens the explorer in cloud mode.
+]);
+
 function resolveItem(item: NavItem, sectionId: string, cloud: boolean): ResolvedNavItem {
   return {
     ...item,
@@ -484,7 +490,7 @@ function resolveItem(item: NavItem, sectionId: string, cloud: boolean): Resolved
  * Sections as the sidebar renders them. Cloud mode hides unsupported items;
  * local mode preserves the existing section layout.
  */
-export function getNavSections(cloud: boolean = isCloud): ResolvedNavSection[] {
+export function getNavSections(cloud: boolean = detectCloudMode()): ResolvedNavSection[] {
   const resolved = navSections.map((section) => ({
     ...section,
     items: section.items
@@ -509,7 +515,7 @@ export function getNavSections(cloud: boolean = isCloud): ResolvedNavSection[] {
   return active;
 }
 
-export function getHelpNavItems(cloud: boolean = isCloud): ResolvedNavItem[] {
+export function getHelpNavItems(cloud: boolean = detectCloudMode()): ResolvedNavItem[] {
   const items = helpNavItems.map((item) => resolveItem(item, 'help', cloud));
   return cloud
     ? [...items, resolveItem({ id: 'run-locally', labelKey: 'nav.runLocally', icon: Server }, 'help', true)]
@@ -519,7 +525,7 @@ export function getHelpNavItems(cloud: boolean = isCloud): ResolvedNavItem[] {
 /** Every page the shell knows about, for breadcrumb/title lookup. */
 export function findNavItem(
   id: string,
-  cloud: boolean = isCloud,
+  cloud: boolean = detectCloudMode(),
 ): { item: ResolvedNavItem; section?: NavSection } | undefined {
   for (const section of navSections) {
     const item = section.items.find((i) => i.id === id);

@@ -1,7 +1,8 @@
 import React, { lazy } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { isCloudMode } from '../utils/cloudMode';
-import { localOnlyRouteIds } from '../components/layout/navigation';
+import { localOnlyRouteExceptions, localOnlyRouteIds } from '../components/layout/navigation';
+import { useI18n } from '../i18n/I18nProvider';
 
 // Eagerly loaded pages (small, frequently used, or needed for initial render)
 import { VirtualBackendsPage } from '../pages/VirtualBackendsPage';
@@ -324,17 +325,22 @@ const RUN_LOCALLY_DOCS_URL = 'https://docs.mockforge.dev/getting-started/install
 
 function LocalOnlyRoute({ routeId, children }: { routeId: string; children: React.ReactNode }) {
   if (!isCloudMode() || !localOnlyRouteIds.has(routeId)) return <>{children}</>;
+  return <LocalOnlyNotice />;
+}
+
+function LocalOnlyNotice() {
+  const { t } = useI18n();
   return (
-    <main className="mx-auto max-w-2xl space-y-4 p-8">
-      <h1 className="text-2xl font-semibold">Requires local MockForge</h1>
-      <p>This feature needs a local MockForge runtime and is not available in the hosted cloud app.</p>
+    <section aria-labelledby="local-only-title" className="mx-auto max-w-2xl space-y-4 p-8">
+      <h1 id="local-only-title" className="text-2xl font-semibold">{t('route.localOnly.title')}</h1>
+      <p>{t('route.localOnly.description')}</p>
       <a href={RUN_LOCALLY_DOCS_URL} target="_blank" rel="noopener noreferrer" className="text-primary underline">
-        Run locally
+        {t('nav.runLocally')}
       </a>
       <Link to="/dashboard" className="block text-primary underline">
-        Back to dashboard
+        {t('route.localOnly.back')}
       </Link>
-    </main>
+    </section>
   );
 }
 
@@ -347,11 +353,11 @@ export interface RouteConfig {
   element: React.ReactNode;
 }
 
-export const routes: RouteConfig[] = [
+const routeTable: Array<RouteConfig & { navId?: string }> = [
   // Core
   { path: '/dashboard', element: <DashboardPage /> },
   { path: '/workspaces', element: <WorkspacesPage /> },
-  { path: '/playground', element: localOnly('playground', <PlaygroundPage />) },
+  { path: '/playground', navId: 'playground', element: <PlaygroundPage /> },
   { path: '/federation', element: <FederationPage /> },
 
   // Services & Data
@@ -360,14 +366,14 @@ export const routes: RouteConfig[] = [
   { path: '/fixtures', element: <FixturesPage /> },
   { path: '/overrides', element: <OverridesPage /> },
   { path: '/hosted-mocks', element: <HostedMocksPage /> },
-  { path: '/api-explorer', element: <ApiExplorerWrapper /> },
+  { path: '/api-explorer', navId: 'api-explorer', element: <ApiExplorerWrapper /> },
   { path: '/tunnels', element: <TunnelsPage /> },
 
   // Orchestration
   { path: '/chains', element: <ChainsPage /> },
   { path: '/graph', element: <GraphPage /> },
   { path: '/world-state', element: <WorldStatePage /> },
-  { path: '/performance', element: <PerformancePage /> },
+  { path: '/performance', navId: 'performance', element: <PerformancePage /> },
   { path: '/state-machine-editor', element: <ScenarioStateMachineEditor /> },
   { path: '/scenario-studio', element: <ScenarioStudioPage /> },
   { path: '/orchestration-builder', element: <OrchestrationBuilder /> },
@@ -380,34 +386,36 @@ export const routes: RouteConfig[] = [
   { path: '/observability', element: <ObservabilityPage /> },
   { path: '/status', element: <StatusPage /> },
   { path: '/logs', element: <LogsPage /> },
-  { path: '/traces', element: <TracesPage /> },
-  { path: '/metrics', element: <MetricsPage /> },
-  { path: '/analytics', element: localOnly('analytics', <AnalyticsPage />) },
+  { path: '/traces', navId: 'traces', element: <TracesPage /> },
+  { path: '/metrics', navId: 'metrics', element: <MetricsPage /> },
+  { path: '/analytics', navId: 'analytics', element: <AnalyticsPage /> },
   { path: '/pillar-analytics', element: <PillarAnalyticsPage /> },
   { path: '/verification', element: <VerificationPage /> },
-  { path: '/contract-diff', element: <ContractDiffPage /> },
+  { path: '/contract-diff', navId: 'contract-diff', element: <ContractDiffPage /> },
   {
     path: '/incidents',
-    element: localOnly('incidents', <IncidentDashboardPage />),
+    navId: 'incidents',
+    element: <IncidentDashboardPage />,
   },
   {
     path: '/incident-dashboard',
-    element: localOnly('incidents', <IncidentDashboardPage />),
+    navId: 'incidents',
+    element: <IncidentDashboardPage />,
   },
   { path: '/fitness-functions', element: <FitnessFunctionsPage /> },
 
   // Testing
   { path: '/testing', element: <TestingPage /> },
   { path: '/test-generator', element: <TestGeneratorPage /> },
-  { path: '/test-execution', element: <TestExecutionDashboard /> },
+  { path: '/test-execution', navId: 'test-execution', element: <TestExecutionDashboard /> },
   { path: '/integration-test-builder', element: <IntegrationTestBuilder /> },
   { path: '/conformance', element: <ConformancePage /> },
 
   // Chaos & Resilience
-  { path: '/chaos', element: <ChaosPage /> },
+  { path: '/chaos', navId: 'chaos', element: <ChaosPage /> },
   { path: '/resilience', element: <ResiliencePage /> },
-  { path: '/recorder', element: <RecorderPage /> },
-  { path: '/behavioral-cloning', element: <BehavioralCloningPage /> },
+  { path: '/recorder', navId: 'recorder', element: <RecorderPage /> },
+  { path: '/behavioral-cloning', navId: 'behavioral-cloning', element: <BehavioralCloningPage /> },
 
   // Import & Templates
   { path: '/import', element: <ImportPage /> },
@@ -419,7 +427,7 @@ export const routes: RouteConfig[] = [
   { path: '/learning-hub', element: <LearningHubPage /> },
 
   // Plugins
-  { path: '/plugins', element: <PluginsPage /> },
+  { path: '/plugins', navId: 'plugins', element: <PluginsPage /> },
   { path: '/cloud-plugins', element: <CloudPluginsPage /> },
   { path: '/plugin-registry', element: <PluginRegistryPage /> },
   { path: '/plugin-registry/moderation', element: <PluginModerationPage /> },
@@ -476,7 +484,7 @@ export const routes: RouteConfig[] = [
   { path: '/time-travel', element: <TimeTravelPage /> },
 
   // Proxy Inspector
-  { path: '/proxy-inspector', element: <ProxyInspectorPage /> },
+  { path: '/proxy-inspector', navId: 'proxy-inspector', element: <ProxyInspectorPage /> },
 
   // Protocol broker dashboards (self-hosted)
   {
@@ -507,3 +515,16 @@ export const routes: RouteConfig[] = [
   // AuthGuard bypasses auth checks for /auth/sso/callback via PUBLIC_PREFIXES.
   { path: '/auth/sso/callback', element: <SsoCallbackPage /> },
 ];
+
+function IncidentRoute({ element }: { element: React.ReactNode }) {
+  return isCloudMode() ? <Navigate to="/cloud-incidents" replace /> : <>{element}</>;
+}
+
+export const routes: RouteConfig[] = routeTable.map(({ navId, path, element }) => ({
+  path,
+  element: navId === 'incidents'
+    ? <IncidentRoute element={element} />
+    : navId && localOnlyRouteIds.has(navId) && !localOnlyRouteExceptions.has(navId)
+      ? localOnly(navId, element)
+      : element,
+}));

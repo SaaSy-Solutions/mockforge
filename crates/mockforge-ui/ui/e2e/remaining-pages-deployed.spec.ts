@@ -276,6 +276,12 @@ test.describe('Community Pages — Deployed Site', () => {
 // PLUGINS & USER MANAGEMENT (2 pages)
 // ============================================================================
 test.describe('Plugins & User Management — Deployed Site', () => {
+  test('should redirect /user-management to /organization', async ({ page }) => {
+    await page.goto(`${BASE_URL}/user-management`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await expect(page).toHaveURL(/\/organization/);
+    await expect(mainContent(page).getByRole('heading', { name: /Organization/i, level: 1 })).toBeVisible();
+  });
+
   const pages = [
     { path: 'plugins', breadcrumb: 'Plugins', heading: /Plugins/i },
     { path: 'organization', breadcrumb: 'Organization', heading: /Organization/i },
