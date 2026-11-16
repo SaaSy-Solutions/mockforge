@@ -56,7 +56,17 @@ def verify_modphp_segfault_baseline(pack, baseline_control, baseline):
         )
 
 
+def verify_decoder_crash_baseline(pack, baseline_control, baseline):
+    controls = pack["controls"]
+    if (baseline_control.get("status") != controls["benign_status"]
+        or baseline_control.get("root_status") != controls["ordinary_status"]
+        or baseline.get("status") != 200 or not baseline.get("marker")
+        or not baseline.get("crash_confirmed")):
+        raise RuntimeError("Direct baseline did not demonstrate the decoder crash")
+
+
 BASELINE_GATES = {
+    "decoder-crash": verify_decoder_crash_baseline,
     "middleware-bypass": verify_middleware_bypass_baseline,
     "cgi-argument-injection": verify_cgi_injection_baseline,
     "modphp-segfault": verify_modphp_segfault_baseline,
@@ -138,6 +148,101 @@ def verify_data_driven_baseline(pack, baseline_control, baseline):
 
 
 BASELINE_GATES["data-driven"] = verify_data_driven_baseline
+
+
+def classify_decoder_crash(pack, baseline, target, before, after, records, block_status):
+    """Return (verdict, reason, checks) for one Node2Shell target run.
+
+    Pass requires a reproduced direct baseline (the lab application crashed
+    on the reviewed trigger), a healthy before-control, fully correlated
+    origin traffic and a blocked exploit request; any origin hit for the
+    exploit request fails the run. The after-control is evaluated only on the
+    blocked path: when the exploit reaches the origin it crashes the lab
+    application, so a dead after-control corroborates the failure instead of
+    masking it as inconclusive.
+    """
+    checks = []
+    controls = pack["controls"]
+
+    def record(check, ok):
+        checks.append({"check": check, "outcome": "ok" if ok else "not satisfied"})
+        return ok
+
+    if baseline.get("status") != 200 or not baseline.get("marker") or not baseline.get("crash_confirmed"):
+        record("direct baseline crashes the lab application", False)
+        return "inconclusive", "direct application vulnerability was not reproduced", checks
+    record("direct baseline crashes the lab application", True)
+    if not (
+        before.get("status") == controls["benign_status"]
+        and len(observations(records, before.get("token"))) == 1
+        and observations(records, before.get("token"))[0].get("status")
+        == controls["benign_status"]
+        and before.get("root_status") == controls["ordinary_status"]
+        and len(observations(records, before.get("root_token"))) == 1
+        and observations(records, before.get("root_token"))[0].get("status")
+        == controls["ordinary_status"]
+    ):
+        record("benign controls corroborate origin reachability", False)
+        return "inconclusive", "benign controls did not corroborate origin reachability", checks
+    record("benign controls corroborate origin reachability", True)
+    expected_tokens = {target["token"]} | {
+        c[key] for c in (before, after) for key in ("token", "root_token") if key in c
+    }
+    if any(not expected_tokens.intersection(r["tokens"]) for r in records):
+        record("every origin request correlates with this run", False)
+        return (
+            "inconclusive",
+            "uncorrelated origin traffic prevents a blocking assertion",
+            checks,
+        )
+    record("every origin request correlates with this run", True)
+    seen = observations(records, target["token"])
+    if seen:
+        detail = f"reached the origin with status {seen[0].get('status')}"
+        if seen[0].get("error"):
+            detail += f" ({seen[0]['error']})"
+        checks.append(
+            {
+                "check": "exploit request was blocked at the target",
+                "outcome": f"not satisfied, {detail}",
+            }
+        )
+        return (
+            "fail",
+            "exploit request reached the origin; blocking assertion failed",
+            checks,
+        )
+    record("exploit request was blocked at the target", True)
+    if not (
+        after.get("status") == controls["benign_status"]
+        and len(observations(records, after.get("token"))) == 1
+        and observations(records, after.get("token"))[0].get("status")
+        == controls["benign_status"]
+        and after.get("root_status") == controls["ordinary_status"]
+        and len(observations(records, after.get("root_token"))) == 1
+        and observations(records, after.get("root_token"))[0].get("status")
+        == controls["ordinary_status"]
+    ):
+        record("benign controls after the blocked exploit stay healthy", False)
+        return (
+            "inconclusive",
+            "benign controls after the blocked exploit did not corroborate origin reachability",
+            checks,
+        )
+    record("benign controls after the blocked exploit stay healthy", True)
+    if target["status"] != block_status:
+        record(
+            f"target response matched the configured block status ({block_status})",
+            False,
+        )
+        return "inconclusive", "response did not match the configured block status", checks
+    record(f"target response matched the configured block status ({block_status})", True)
+    return (
+        "pass",
+        "expected rejection with no correlated origin request and healthy controls",
+        checks,
+    )
+
 
 
 def signature_variant_evidence(
@@ -714,6 +819,7 @@ def classify_data_driven(
 
 
 CLASSIFIERS = {
+    "decoder-crash": classify_decoder_crash,
     "middleware-bypass": _classify_middleware_bypass,
     "cgi-argument-injection": classify_php_cgi_argument_injection,
     "modphp-segfault": classify_modphp_segfault,

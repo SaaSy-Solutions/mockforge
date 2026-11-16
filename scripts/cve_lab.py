@@ -234,7 +234,7 @@ def run(args):
                         # control() is tolerant: a failed one has no body_sha256.
                         before.get("body_sha256") != baseline_control.get("body_sha256")
                         or after.get("body_sha256") != baseline_control.get("body_sha256")
-                    ):
+                    ) and not (verdict == "fail" and pack["classifier"] == "decoder-crash"):
                         verdict, reason = (
                             "inconclusive",
                             "LB controls did not match this application's benign control responses",
@@ -306,6 +306,7 @@ def run(args):
     print(describe(report))
     print(f"Report: {output / 'report.json'}")
     return 0 if report["verdict"] in ("pass", "baseline-confirmed") else 1
+
 
 
 def main(argv=None):
