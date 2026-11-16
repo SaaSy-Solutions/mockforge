@@ -3,6 +3,7 @@
 import hashlib
 import json
 import re
+import subprocess
 from cve_lab_catalog import LABEL
 from cve_lab_engine import command, owned_remove
 
@@ -57,11 +58,10 @@ def probe(engine, base, output, phase, run_id, pack, insecure=False):
     path.write_text(template(pack, token))
     name = "mockforge-cve-client-" + token
     try:
-        result = command(
+        command(
             [
                 engine,
-                "run",
-                "--rm",
+                "create",
                 "--name",
                 name,
                 "--label",
@@ -71,13 +71,11 @@ def probe(engine, base, output, phase, run_id, pack, insecure=False):
                 "--security-opt=no-new-privileges",
                 "--memory=512m",
                 "--pids-limit=128",
-                "-v",
-                f"{output.resolve()}:/work:ro",
                 pack["catalog"]["runner_image"],
                 "-u",
                 base,
                 "-t",
-                f"/work/{phase}.yaml",
+                f"/tmp/{phase}.yaml",
                 "-duc",
                 "-ni",
                 "-no-stdin",
@@ -95,7 +93,17 @@ def probe(engine, base, output, phase, run_id, pack, insecure=False):
                 # flag and never verifies certificates (see docstring).
             ],
             timeout=90,
-            check=False,
+        )
+        try:
+            command(
+                [engine, "cp", str(path), f"{name}:/tmp/{phase}.yaml"], timeout=90
+            )
+        except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
+            raise RuntimeError(
+                f"{phase}: failed to copy Nuclei template into container: {error}"
+            ) from error
+        result = command(
+            [engine, "start", "-a", name], timeout=90, check=False
         )
         (output / f"{phase}.jsonl").write_text(result.stdout)
         (output / f"{phase}.log").write_text(result.stderr)
