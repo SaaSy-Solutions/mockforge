@@ -248,6 +248,61 @@ class InputTests(unittest.TestCase):
                 prepare.assert_not_called()
                 run.assert_not_called()
 
+    def test_pack_without_verified_field_counts_as_unverified(self):
+        # A pack that omits "verified" must behave exactly like one that
+        # declares "verified": False; silence no longer means verified.
+        synthetic = {
+            "CVE-2099-00001": {"catalog": {"cve": "CVE-2099-00001"}},
+            "CVE-2099-00002": {
+                "verified": False,
+                "catalog": {"cve": "CVE-2099-00002"},
+            },
+        }
+        with patch.dict(lab.PACKS, synthetic):
+            for cve in ("CVE-2099-00001", "CVE-2099-00002"):
+                with self.subTest(cve=cve):
+                    self.assertNotIn(cve, lab.verified_cves())
+                    self.assertIn(cve, lab.verified_cves(include_unverified=True))
+                    with self.assertRaisesRegex(
+                        ValueError, "pass --include-unverified"
+                    ):
+                        lab.require_verified(cve, include_unverified=False)
+                    lab.require_verified(cve, include_unverified=True)
+
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                self.assertEqual(lab.main(["list"]), 0)
+            packs = json.loads(output.getvalue())
+            self.assertNotIn("CVE-2099-00001", packs)
+            self.assertNotIn("CVE-2099-00002", packs)
+            self.assertIn("CVE-2025-29927", packs)
+
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                self.assertEqual(lab.main(["--include-unverified", "list"]), 0)
+            packs = json.loads(output.getvalue())
+            self.assertIn("CVE-2099-00001", packs)
+            self.assertIn("CVE-2099-00002", packs)
+
+            for action in ("run", "prepare"):
+                for cve in ("CVE-2099-00001", "CVE-2099-00002"):
+                    err = io.StringIO()
+                    with self.subTest(action=action, cve=cve), patch.object(
+                        lab, "prepare"
+                    ) as prepare, patch.object(lab, "run") as run, contextlib.redirect_stderr(err):
+                        args = [action, cve]
+                        if action == "run":
+                            args += ["--output-dir", "unused-output"]
+                        self.assertEqual(lab.main(args), 1)
+                        self.assertIn(
+                            f"{cve} is an unverified lab pack (its trigger has not "
+                            "reproduced on a lab host); pass --include-unverified to "
+                            "run it for development",
+                            err.getvalue(),
+                        )
+                        prepare.assert_not_called()
+                        run.assert_not_called()
+
     def test_include_unverified_lists_and_runs_development_pack(self):
         for flag_order in (
             ["--include-unverified", "list"],
@@ -2256,6 +2311,9 @@ class DataDrivenCaseTests(unittest.TestCase):
 
     def synthetic_pack(self):
         return {
+            # Packs default to unverified; this synthetic pack models a
+            # reviewed pack, so it declares verified explicitly.
+            "verified": True,
             "catalog": {
                 "schema_version": 1,
                 "pack_revision": 1,
