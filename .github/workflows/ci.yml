@@ -610,7 +610,7 @@ jobs:
     - name: Build mockforge binary with all protocols (for e2e tests)
       run: |
         cargo build --bin mockforge --features all-protocols
-        cp target/debug/mockforge "$RUNNER_TEMP/mockforge-all-protocols"
+        cp "${CARGO_TARGET_DIR:-target}/debug/mockforge" "$RUNNER_TEMP/mockforge-all-protocols"
 
     - name: Generate coverage report
       run: cargo llvm-cov --workspace --exclude mockforge-desktop --lcov --output-path lcov.info
