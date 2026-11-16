@@ -1458,8 +1458,8 @@ class Node2ShellTlsVerifyTests(unittest.TestCase):
             self.assertTrue((output / "baseline.log").exists())
             self.assertEqual((output / "baseline.log").read_text(), "")
             self.assertEqual((output / "baseline.jsonl").read_text(), "container failed")
-            command.assert_called_once()
-            self.assertFalse(command.call_args.kwargs.get("check", True))
+            self.assertEqual(command.call_count, 3)
+            self.assertFalse(command.call_args_list[-1].kwargs.get("check", True))
 
     def test_probe_success_still_writes_findings_and_returns_observation(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -1876,6 +1876,7 @@ NO_CERT_TOOL_SKIP = (
 )
 
 
+
 class TlsVerifyTests(unittest.TestCase):
     """--skip-tls-verify is an explicit opt-in; the default path verifies."""
 
@@ -2028,8 +2029,94 @@ class TlsVerifyTests(unittest.TestCase):
             self.assertTrue((output / "baseline.log").exists())
             self.assertEqual((output / "baseline.log").read_text(), "")
             self.assertEqual((output / "baseline.jsonl").read_text(), "container failed")
-            command.assert_called_once()
-            self.assertFalse(command.call_args.kwargs.get("check", True))
+            self.assertEqual(command.call_count, 3)
+            self.assertFalse(command.call_args_list[-1].kwargs.get("check", True))
+
+    def test_probe_creates_copies_starts_and_cleans_up(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            pack = catalog.PACKS[catalog.CVE]
+            finding = json.dumps(
+                {
+                    "template-id": pack["probe"]["template_id"],
+                    "response": "HTTP/1.1 200 OK\r\n",
+                }
+            ) + "\n"
+            with patch.object(nuclei, "owned_remove") as remove, patch.object(
+                nuclei,
+                "command",
+                side_effect=[completed(), completed(), completed_output(stdout=finding)],
+            ) as command:
+                nuclei.probe("docker", "http://127.0.0.1:1", output, "baseline", "run1", pack)
+
+            calls = [call.args[0] for call in command.call_args_list]
+            create, copy, start = calls
+            self.assertEqual(create[1], "create")
+            self.assertIn("--label", create)
+            self.assertIn(f"{nuclei.LABEL}=run1", create)
+            for flag in (
+                "--network=host",
+                "--cap-drop=ALL",
+                "--security-opt=no-new-privileges",
+                "--memory=512m",
+                "--pids-limit=128",
+            ):
+                self.assertIn(flag, create)
+            self.assertNotIn("-v", create)
+            self.assertEqual(create[create.index("-t") + 1], "/tmp/baseline.yaml")
+            self.assertEqual(
+                copy,
+                [
+                    "docker",
+                    "cp",
+                    str(output / "baseline.yaml"),
+                    "mockforge-cve-client-run1-baseline:/tmp/baseline.yaml",
+                ],
+            )
+            self.assertEqual(
+                start,
+                ["docker", "start", "-a", "mockforge-cve-client-run1-baseline"],
+            )
+            self.assertEqual(command.call_args_list[0].kwargs["timeout"], 90)
+            self.assertFalse(command.call_args_list[-1].kwargs["check"])
+            remove.assert_called_once_with("docker", "mockforge-cve-client-run1-baseline", "run1")
+
+    def test_probe_copy_failure_cleans_up_and_raises_clear_error(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            pack = catalog.PACKS[catalog.CVE]
+            with patch.object(nuclei, "owned_remove") as remove, patch.object(
+                nuclei,
+                "command",
+                side_effect=[completed(), RuntimeError("docker cp failed: no such file")],
+            ) as command:
+                with self.assertRaisesRegex(RuntimeError, "failed to copy Nuclei template"):
+                    nuclei.probe(
+                        "docker", "http://127.0.0.1:1", output, "baseline", "run1", pack
+                    )
+            self.assertEqual(
+                [call.args[0][1] for call in command.call_args_list], ["create", "cp"]
+            )
+            remove.assert_called_once_with("docker", "mockforge-cve-client-run1-baseline", "run1")
+
+    def test_probe_start_failure_cleans_up(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            pack = catalog.PACKS[catalog.CVE]
+            with patch.object(nuclei, "owned_remove") as remove, patch.object(
+                nuclei,
+                "command",
+                side_effect=[completed(), completed(), completed_output(stderr="failed", returncode=3)],
+            ) as command:
+                with self.assertRaisesRegex(RuntimeError, "Nuclei exited with code 3"):
+                    nuclei.probe(
+                        "docker", "http://127.0.0.1:1", output, "baseline", "run1", pack
+                    )
+            self.assertEqual(
+                [call.args[0][1] for call in command.call_args_list],
+                ["create", "cp", "start"],
+            )
+            remove.assert_called_once_with("docker", "mockforge-cve-client-run1-baseline", "run1")
 
     def test_probe_success_still_writes_findings_and_returns_observation(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -2129,8 +2216,7 @@ class TlsVerifyTests(unittest.TestCase):
             token = f"{run_id}-baseline"
             # The engine subprocess inherits this cwd, and rootless engines
             # cannot start from a cwd they cannot see (this host's /mnt/build),
-            # so serve them the temp dir; the output dir is the container mount
-            # and must live there too.
+            # so serve them the temp dir.
             previous_cwd = os.getcwd()
             os.chdir(directory)
             try:
