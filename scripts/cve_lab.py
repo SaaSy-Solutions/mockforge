@@ -17,7 +17,12 @@ from cve_lab_transport import target_url, receiver, control, unverified_context
 from cve_lab_nuclei import probe
 import cve_lab_evidence as evidence
 from cve_lab_evidence import BASELINE_GATES, CLASSIFIERS, describe
-from cve_lab_exploits import BASELINE_EXPLOITS, TARGET_EXPLOITS
+from cve_lab_exploits import (
+    BASELINE_EXPLOITS,
+    TARGET_EXPLOITS,
+    variant_baseline_steps,
+    variant_target_steps,
+)
 
 
 UNVERIFIED_MESSAGE = (
@@ -81,7 +86,11 @@ def run_plan_lines(args):
 def run(args):
     require_verified(args.cve, args.include_unverified)
     pack = PACKS[args.cve]
-    if pack["baseline_gate"] == "data-driven" or pack["classifier"] == "data-driven":
+    if (
+        pack["baseline_gate"] == "data-driven"
+        or pack["classifier"] == "data-driven"
+        or pack.get("signature_variants")
+    ):
         validate_data_driven_pack(pack)
     target_url(args.target) if args.target else None
     ipaddress.IPv4Address(args.listen_address)
@@ -174,6 +183,17 @@ def run(args):
                             "Direct baseline extra cases did not match their "
                             "expected statuses"
                         )
+                if pack.get("signature_variants"):
+                    baseline_variants, not_reproducing = variant_baseline_steps(
+                        args.engine, origin, output, run_id, pack
+                    )
+                    report["baseline_variants"] = baseline_variants
+                    if not_reproducing:
+                        raise RuntimeError(
+                            "Direct baseline signature variants did not "
+                            "reproduce the reviewed corruption: "
+                            + ", ".join(not_reproducing)
+                        )
                 if args.target:
                     target_start = len(records)
                     before = control(pack, args.target, run_id, "before", context=tls_context)
@@ -186,6 +206,19 @@ def run(args):
                         insecure=args.skip_tls_verify,
                     )
                     after = control(pack, args.target, run_id, "after", context=tls_context)
+                    target_variants = {}
+                    variant_tokens = frozenset()
+                    if pack.get("signature_variants"):
+                        target_variants = variant_target_steps(
+                            args.target.rstrip("/"),
+                            output,
+                            run_id,
+                            pack,
+                            context=tls_context,
+                        )
+                        variant_tokens = frozenset(
+                            outcome["token"] for outcome in target_variants.values()
+                        )
                     time.sleep(0.5)
                     verdict, reason, checks = CLASSIFIERS[pack["classifier"]](
                         pack,
@@ -195,12 +228,13 @@ def run(args):
                         after,
                         records[target_start:],
                         args.block_status,
+                        variant_tokens=variant_tokens,
                     )
                     if (
                         # control() is tolerant: a failed one has no body_sha256.
                         before.get("body_sha256") != baseline_control.get("body_sha256")
                         or after.get("body_sha256") != baseline_control.get("body_sha256")
-                    ):
+                    ) and not (verdict == "fail" and pack["classifier"] == "decoder-crash"):
                         verdict, reason = (
                             "inconclusive",
                             "LB controls did not match this application's benign control responses",
@@ -211,6 +245,40 @@ def run(args):
                                 "outcome": "not satisfied",
                             }
                         ]
+                    if pack.get("signature_variants"):
+                        (
+                            variant_entries,
+                            variants_ok,
+                            got_through,
+                            variant_verdicts,
+                        ) = evidence.signature_variant_evidence(
+                            pack,
+                            report.get("baseline_variants", {}),
+                            target_variants,
+                            records[:target_start],
+                            records[target_start:],
+                            args.block_status,
+                        )
+                        # Per-variant evidence can only downgrade the verdict:
+                        # a variant that got through fails the run and is
+                        # named, never averaged away.
+                        checks.extend(variant_entries)
+                        override, override_reason = evidence.variant_verdict(
+                            variants_ok, got_through
+                        )
+                        verdict, reason = evidence.merge_variant_verdict(
+                            verdict, reason, override, override_reason
+                        )
+                        report["signature_variants"] = {
+                            variant_id: {
+                                "direct": report.get("baseline_variants", {}).get(
+                                    variant_id
+                                ),
+                                "target": target_variants.get(variant_id),
+                                "verdict": label,
+                            }
+                            for variant_id, label in variant_verdicts.items()
+                        }
                     report.update(
                         verdict=verdict,
                         reason=reason,
@@ -238,6 +306,7 @@ def run(args):
     print(describe(report))
     print(f"Report: {output / 'report.json'}")
     return 0 if report["verdict"] in ("pass", "baseline-confirmed") else 1
+
 
 
 def main(argv=None):

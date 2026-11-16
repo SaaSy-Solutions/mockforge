@@ -3,6 +3,7 @@
 import hashlib
 import json
 import re
+import subprocess
 from cve_lab_catalog import LABEL
 from cve_lab_engine import command, owned_remove
 
@@ -41,17 +42,26 @@ http:
 
 
 def probe(engine, base, output, phase, run_id, pack, insecure=False):
+    """Run one Nuclei observation probe.
+
+    ``insecure`` mirrors the CLI's --skip-tls-verify opt-in: it governs the
+    Python control transport and is recorded in the report. The pinned Nuclei
+    3.11.1 runner defines no skip-TLS flag ("-insecure" was never one of its
+    flags, so passing it dies at startup with "flag provided but not defined")
+    and does not verify TLS certificates at all - InsecureSkipVerify is
+    unconditional in its HTTP client pool - so no extra runner flag is needed
+    or valid here.
+    """
     probe = pack["probe"]
     token = run_id + "-" + phase
     path = output / f"{phase}.yaml"
     path.write_text(template(pack, token))
     name = "mockforge-cve-client-" + token
     try:
-        result = command(
+        command(
             [
                 engine,
-                "run",
-                "--rm",
+                "create",
                 "--name",
                 name,
                 "--label",
@@ -61,13 +71,11 @@ def probe(engine, base, output, phase, run_id, pack, insecure=False):
                 "--security-opt=no-new-privileges",
                 "--memory=512m",
                 "--pids-limit=128",
-                "-v",
-                f"{output.resolve()}:/work:ro",
                 pack["catalog"]["runner_image"],
                 "-u",
                 base,
                 "-t",
-                f"/work/{phase}.yaml",
+                f"/tmp/{phase}.yaml",
                 "-duc",
                 "-ni",
                 "-no-stdin",
@@ -81,10 +89,21 @@ def probe(engine, base, output, phase, run_id, pack, insecure=False):
                 "1",
                 "-c",
                 "1",
-                *(["-insecure"] if insecure else []),
+                # No TLS flag: the pinned Nuclei 3.11.1 defines no skip-TLS
+                # flag and never verifies certificates (see docstring).
             ],
             timeout=90,
-            check=False,
+        )
+        try:
+            command(
+                [engine, "cp", str(path), f"{name}:/tmp/{phase}.yaml"], timeout=90
+            )
+        except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
+            raise RuntimeError(
+                f"{phase}: failed to copy Nuclei template into container: {error}"
+            ) from error
+        result = command(
+            [engine, "start", "-a", name], timeout=90, check=False
         )
         (output / f"{phase}.jsonl").write_text(result.stdout)
         (output / f"{phase}.log").write_text(result.stderr)
