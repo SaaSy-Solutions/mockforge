@@ -9,7 +9,7 @@
 [![Benchmarks](https://img.shields.io/badge/benchmarks-criterion-blue)](https://github.com/SaaSy-Solutions/mockforge/actions)
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](https://github.com/SaaSy-Solutions/mockforge/blob/main/LICENSE)
 
-MockForge is a comprehensive mocking framework for APIs, gRPC services, and WebSockets. It provides a unified interface for creating, managing, and deploying mock servers across different protocols with advanced data generation capabilities.
+MockForge is an open source mock API generator in Rust. It provides a unified interface for creating, managing, and deploying mock servers across 10 protocols with advanced data generation capabilities.
 
 ## Your first HTTP mock
 
@@ -141,14 +141,14 @@ For detailed use case examples and code samples, see [Ecosystem & Use Cases Guid
 
 All major features listed in this README are **implemented and functional in v1.0**, with the following clarification:
 
-- ✅ **Fully Implemented**: HTTP/REST, gRPC (with HTTP Bridge), WebSocket, GraphQL, AI-powered mocking (with data drift & event streams), Plugin system (WASM + remote loading), E2E encryption, Workspace sync, Data generation (RAG-powered; RAG documents persist with the file storage backend, while the database backend currently falls back to in-memory storage and vector-database backends are not built in yet), Admin UI (with SSE live logs, metrics, drag-and-drop fixtures), Admin UI role-based authentication (JWT login with Admin / Editor / Viewer roles enforced on mutating admin endpoints)
+- ✅ **Fully Implemented**: HTTP/REST, gRPC (with HTTP Bridge), WebSocket, GraphQL, Kafka, MQTT, AMQP, SMTP, FTP, and TCP mocking (10 protocols; SOAP/XML over the HTTP adapter), AI-powered mocking (with data drift & event streams), Plugin system (WASM + remote loading), E2E encryption, Workspace sync, Data generation (RAG-powered; RAG documents persist with the file storage backend, while the database backend currently falls back to in-memory storage and vector-database backends are not built in yet), Admin UI (with SSE live logs, metrics, drag-and-drop fixtures), Admin UI role-based authentication (JWT login with Admin / Editor / Viewer roles enforced on mutating admin endpoints)
 - ⚠️ **Not yet in the local Admin UI**: OAuth / SSO login (SSO via OIDC and SAML is available in MockForge Cloud)
 
 If a command, option or feature documented in a protocol section does not work as described, please [open an issue](https://github.com/SaaSy-Solutions/mockforge/issues).
 
 ### Key Differentiators
 
-- **🚀 True Multi-Protocol**: Only MockForge provides first-class support for HTTP, gRPC, WebSocket, GraphQL, **Kafka, MQTT, and AMQP** in a single binary
+- **🚀 True Multi-Protocol**: Only MockForge provides first-class support for 10 protocols — HTTP, gRPC, WebSocket, GraphQL, **Kafka, MQTT, AMQP, SMTP, FTP, and TCP** — in a single binary (SOAP/XML APIs are covered over the HTTP adapter)
 - **🧠 AI-Driven Mocking**: Industry-first LLM-powered mock generation from natural language prompts
 - **📊 Data Drift Simulation**: Unique realistic data evolution across requests (order status progression, stock depletion, price changes)
 - **🌊 AI Event Streams**: Generate narrative-driven WebSocket events for real-time testing scenarios
@@ -160,7 +160,7 @@ If a command, option or feature documented in a protocol section does not work a
 
 ## ✨ Features
 
-- **Multi-Protocol Support**: HTTP REST APIs, gRPC services, GraphQL APIs, WebSocket connections, SMTP email testing, **Kafka event streaming**, **MQTT pub/sub**, and **AMQP message queuing**
+- **Multi-Protocol Support**: 10 protocols — HTTP REST APIs, gRPC services, GraphQL APIs, WebSocket connections, SMTP email testing, **Kafka event streaming**, **MQTT pub/sub**, **AMQP message queuing**, **FTP file transfer**, and **raw TCP** (SOAP/XML APIs are supported over the HTTP adapter)
 - **🧠 AI-Powered Mocking** *(Industry First)*: Revolutionary artificial intelligence features:
   - **Intelligent Mock Generation**: Generate realistic responses from natural language prompts
     - Natural language → realistic JSON data
@@ -231,7 +231,7 @@ The documentation covers:
 - **[Your First Mock API in 5 Minutes](https://docs.mockforge.dev/getting-started/five-minute-api.html)** - Fastest path to productivity
 - Getting started guide and installation
 - Detailed configuration options
-- API reference for all protocols (HTTP, gRPC, WebSocket)
+- API reference for all 10 protocols (HTTP, gRPC, WebSocket, GraphQL, Kafka, MQTT, AMQP, SMTP, FTP, TCP)
 - Advanced features and examples
 - Contributing guidelines
 
