@@ -76,7 +76,9 @@ k6() {
     "$K6_IMAGE" run -q /probe.js 2>&1 | grep -o 'RESULT status=[0-9]* error=[0-9]*' \
     | sed 's/RESULT //' || echo "status=none"
 }
-victim_hits() { docker logs "$id-victim" 2>&1 | grep -c 'GET /' || true; }
+# busybox `httpd -v` logs one "[addr]:port: response:<code>" line per request
+# (it never logs the request line, so counting "GET /" always gave 0).
+victim_hits() { docker logs "$id-victim" 2>&1 | grep -c 'response:' || true; }
 
 expect() { # name, actual, pattern
   if [[ "$2" =~ $3 ]]; then echo "ok   $1: $2"; else echo "FAIL $1: $2 (want $3)"; fail=1; fi
