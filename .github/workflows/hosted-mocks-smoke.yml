@@ -66,6 +66,22 @@ jobs:
         id: preflight
         run: |
           set -euo pipefail
+          # Until the staging smoke secrets exist (#1628), a scheduled run
+          # skips with a notice instead of failing, so main's daily red means a
+          # real regression. A manual dispatch still fails loudly: whoever runs
+          # it by hand wants the smoke test, not a skip.
+          if [ -z "${REGISTRY_BASE_URL:-}" ] || [ -z "${REGISTRY_SMOKE_TOKEN:-}" ] || [ -z "${REALITY_UPSTREAM_URL:-}" ]; then
+            if [ "${GITHUB_EVENT_NAME:-}" = "workflow_dispatch" ]; then
+              echo "::error::One of REGISTRY_BASE_URL / REGISTRY_SMOKE_TOKEN / REALITY_UPSTREAM_URL secrets is missing."
+              echo "::error::Configure under repo Settings → Secrets → Actions. See workflow header for details."
+              exit 1
+            fi
+            echo "::notice::Hosted mocks smoke skipped: REGISTRY_BASE_URL / REGISTRY_SMOKE_TOKEN / REALITY_UPSTREAM_URL are not configured (#1628)."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "configured=true" >> "$GITHUB_OUTPUT"
+
           missing=()
           for tool in curl jq wscat kcat; do
             if ! command -v "$tool" >/dev/null 2>&1; then
@@ -78,15 +94,11 @@ jobs:
             exit 1
           fi
 
-          if [ -z "${REGISTRY_BASE_URL:-}" ] || [ -z "${REGISTRY_SMOKE_TOKEN:-}" ] || [ -z "${REALITY_UPSTREAM_URL:-}" ]; then
-            echo "::error::One of REGISTRY_BASE_URL / REGISTRY_SMOKE_TOKEN / REALITY_UPSTREAM_URL secrets is missing."
-            echo "::error::Configure under repo Settings → Secrets → Actions. See workflow header for details."
-            exit 1
-          fi
           echo "OK preflight"
 
       - name: Run smoke checks
         id: smoke
+        if: steps.preflight.outputs.configured == 'true'
         # Don't fail the job on first error — we want to capture which step
         # failed for the issue body and still attempt teardown afterwards.
         continue-on-error: true
@@ -285,7 +297,8 @@ jobs:
       - name: Teardown smoke deployments
         # Always run, even if smoke failed — we don't want orphan Fly
         # machines piling up. Failures here are warnings, not job failures.
-        if: always()
+        # Nothing was deployed when pre-flight skipped for missing secrets.
+        if: always() && steps.preflight.outputs.configured == 'true'
         env:
           DEPLOY_IDS_FILE: ${{ steps.smoke.outputs.deploy_ids_file }}
         run: |
