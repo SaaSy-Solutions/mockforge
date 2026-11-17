@@ -24,8 +24,10 @@ name: Hosted Mocks Smoke Test
 #                              forwards to (must echo a stable response so
 #                              the smoke can diff mock vs upstream)
 #
-# If a required secret is missing, the workflow surfaces a clear failure
-# message; add the secret under repo Settings → Secrets → Actions.
+# If a required secret is missing, a scheduled run skips with a notice (so
+# main's daily status still means something) and a manual dispatch fails with
+# a clear message (#1628); add the secrets under repo Settings → Secrets →
+# Actions.
 
 on:
   schedule:
