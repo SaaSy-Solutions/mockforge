@@ -1968,6 +1968,7 @@ dependencies = [
  "libfuzzer-sys",
  "mockforge-core",
  "mockforge-data",
+ "mockforge-openapi",
  "prost-reflect",
  "serde_json",
  "serde_yaml",

@@ -1,7 +1,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use mockforge_core::openapi_routes::create_registry_from_json;
+use mockforge_openapi::openapi_routes::create_registry_from_json;
 
 fuzz_target!(|data: &[u8]| {
     // Try to parse the fuzz input as JSON
