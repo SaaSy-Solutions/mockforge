@@ -123,11 +123,32 @@ describe('AppShell sidebar', () => {
   it('shows one Run locally link without a Local only section in cloud mode', () => {
     cloudMode.enabled = true;
     renderShell();
-    expect(screen.getAllByRole('link', { name: 'Run locally' })).toHaveLength(1);
+    const runLocally = screen.getAllByRole('link', { name: 'Run locally' });
+    expect(runLocally).toHaveLength(1);
+    expect(runLocally[0]).toHaveAttribute('href', 'https://docs.mockforge.dev/getting-started/installation.html');
+    expect(screen.queryByRole('link', { name: /Run locally.*local only/i })).not.toBeInTheDocument();
     expect(screen.queryByText('Local only')).not.toBeInTheDocument();
     const input = openPalette();
     fireEvent.change(input, { target: { value: 'smtp' } });
     expect(screen.queryByRole('option', { name: /SMTP Mailbox/ })).not.toBeInTheDocument();
+    cloudMode.enabled = false;
+  });
+
+  it('offers Run locally in the cloud palette and opens the installation docs', () => {
+    cloudMode.enabled = true;
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+    renderShell();
+    const input = openPalette();
+    fireEvent.change(input, { target: { value: 'run locally' } });
+    const option = screen.getByRole('option', { name: 'Run locally' });
+    expect(option).toBeInTheDocument();
+    fireEvent.click(option);
+    expect(open).toHaveBeenCalledWith(
+      'https://docs.mockforge.dev/getting-started/installation.html',
+      '_blank',
+      'noopener,noreferrer',
+    );
+    open.mockRestore();
     cloudMode.enabled = false;
   });
 

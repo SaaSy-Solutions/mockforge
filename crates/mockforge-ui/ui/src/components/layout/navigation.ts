@@ -304,6 +304,7 @@ const unlistedNavItems: NavItem[] = [{ id: 'api-explorer', labelKey: 'tab.apiExp
 // Cloud mode: only these ids are functional on the cloud app. Everything
 // else stays discoverable in a collapsed "Local only" group.
 const cloudNavItemIds = new Set([
+  'run-locally',
   'dashboard',
   'workspaces',
   'federation',

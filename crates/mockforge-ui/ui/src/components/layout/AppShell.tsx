@@ -173,7 +173,7 @@ function SidebarContent({
 }: SidebarProps) {
   const { t } = useI18n();
   const isMac = useIsMac();
-  const helpItems = getHelpNavItems(isCloudMode());
+  const helpItems = getHelpNavItems(isCloudMode()).filter((item) => item.id !== 'run-locally');
 
   return (
     <div className="flex h-full flex-col">
