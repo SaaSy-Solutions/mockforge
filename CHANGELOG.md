@@ -1,3 +1,38 @@
+## [0.3.247] - 2026-11-18
+
+### Security
+
+- **[DevX]** Update `libz-sys` to 1.1.33 for RUSTSEC-2026-0544 (heap buffer overflow). (#1630)
+- **[DevX]** Update `lettre` to 0.11.24 for six SMTP advisories, RUSTSEC-2026-0560 to RUSTSEC-2026-0565:
+  - STARTTLS response injection that lets a man-in-the-middle forge SMTP replies;
+  - SMTP command injection through missing dot-stuffing;
+  - mail for a quoted local part sent to a different address;
+  - unbounded reply buffering;
+  - two panics (denial of service).
+  This affects outbound mail from the SMTP mock, reporting, pipelines and the registry. (#1648)
+
+### Fixed
+
+- **[Reality]** CVE lab `inconclusive` results explain themselves. When an unverified pack's lab starts but its baseline does not reproduce, the reason says this is a known state of the pack, not a problem with your target or setup, and names the verified packs that run end to end. When your target blocks the exploit with a status other than `--block-status`, the reason names the status it returned and suggests `--block-status <code>`. `report.json` gains `pack_verified`. (#1645, reported on #79)
+- **[Reality]** The managed CVE lab guide states each pack's real status, explains what the lab sends to your target (not a replay of the baseline), and explains that pass or fail is judged by what reaches the lab origin through your load balancer. It also says where an extra test case goes. (#1645, #1646, #1611)
+- **[Reality]** CVE labs deliver the generated Nuclei template into the runner container with create and copy instead of a host bind mount, so runs work when the engine cannot see the host path (Docker Desktop, podman machine and other remote or VM engines). (#1616)
+- **[Reality]** A CVE lab pack without a `verified` field is treated as unverified. (#1599)
+- **[Reality]** A failed main signature is never softened by signature-variant evidence: a run whose main signature fails reports `fail` even when a variant is inconclusive. (#1604)
+- **[DevX]** The `fuzz_openapi_parser` fuzz target compiles again, and all nine fuzz targets build. Three stale member lockfiles that pinned vulnerable dependencies are removed, and the fuzz lockfile is refreshed. (#1634, #1632)
+- **[DevX]** CI fixes:
+  - the browser SDK audit covers shipped dependencies only (#1636);
+  - the scheduled hosted-mocks smoke test skips with a notice while its secrets are unset (#1629);
+  - the load tests serve only HTTP, admin and metrics (#1617);
+  - the coverage job uses the shared build target directory (#1614);
+  - the image smoke test's egress check uses its own redirector and counts blocked requests correctly (#1640).
+- **[DevX]** Documentation copy fixes: the FAQ pricing claim, the canonical description and the protocol list. (#1565)
+
+### Added
+
+- **[Reality]** Every CVE lab run writes `sent_requests.jsonl` next to `report.json`. It holds one line per request the lab sends to its own origin or through `--target`: the correlation marker, method, path, redacted headers, a body hash and preview, and the response status or error. Joined with `report.json`'s `origin_observations`, it shows what was sent versus what arrived through your load balancer. The guide adds `tcpdump`/`tshark` commands for a byte-level capture. (#1647, reported on #79)
+- **[Reality]** Node2Shell CVE-2026-111497 pack (Node.js Brotli decoder out-of-bounds write) with an HTTP/2-capable recorder. It is unverified, because its pinned image has not yet reproduced the crash on a lab host, so it runs only with `--include-unverified`. (#1523)
+- **[Reality]** Signature variants for the CVE-2026-109619 `ini_set`, `php_value` and `php_admin` cases. (#1603)
+
 ## [0.3.246] - 2026-11-15
 
 ### Security
