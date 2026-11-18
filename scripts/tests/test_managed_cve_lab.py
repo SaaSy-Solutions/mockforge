@@ -446,6 +446,14 @@ class VerdictTests(unittest.TestCase):
         self.target["status"] = 502
         self.assertEqual(self.verdict(), "inconclusive")
 
+    def test_block_status_mismatch_reason_names_the_observed_status_and_fix(self):
+        self.target["status"] = 418
+        verdict, reason, _checks = self.outcome()
+        self.assertEqual(verdict, "inconclusive")
+        self.assertIn("418", reason)
+        self.assertIn("403", reason)
+        self.assertIn("--block-status 418", reason)
+
     def test_uncorrelated_origin_request_cannot_pass(self):
         self.records.append({"tokens": [None, None], "status": 200})
         self.assertEqual(self.verdict(), "inconclusive")
@@ -668,6 +676,14 @@ class Cve20244577VerdictTests(unittest.TestCase):
     def test_unexpected_rejection_is_inconclusive(self):
         self.target["status"] = 502
         self.assertEqual(self.verdict(), "inconclusive")
+
+    def test_block_status_mismatch_reason_names_the_observed_status_and_fix(self):
+        self.target["status"] = 418
+        verdict, reason, _checks = self.outcome()
+        self.assertEqual(verdict, "inconclusive")
+        self.assertIn("418", reason)
+        self.assertIn("403", reason)
+        self.assertIn("--block-status 418", reason)
 
     def test_uncorrelated_origin_request_cannot_pass(self):
         self.records.append({"tokens": [None, None], "status": 200})
@@ -1168,6 +1184,22 @@ class Node2ShellVerdictTests(unittest.TestCase):
     def test_unexpected_rejection_is_inconclusive(self):
         self.target["status"] = 502
         self.assertEqual(self.verdict(), "inconclusive")
+
+    def test_block_status_mismatch_reason_names_the_observed_status_and_fix(self):
+        self.target["status"] = 418
+        verdict, reason, _checks = self.outcome()
+        self.assertEqual(verdict, "inconclusive")
+        self.assertIn("418", reason)
+        self.assertIn("403", reason)
+        self.assertIn("--block-status 418", reason)
+
+    def test_block_status_mismatch_without_a_status_suggests_no_flag(self):
+        self.target["status"] = None
+        self.target["error"] = "connection reset by peer"
+        verdict, reason, _checks = self.outcome()
+        self.assertEqual(verdict, "inconclusive")
+        self.assertIn("no HTTP status", reason)
+        self.assertNotIn("--block-status", reason)
 
     def test_uncorrelated_origin_request_cannot_pass(self):
         self.records.append({"tokens": [None, None], "status": 200})
@@ -1788,6 +1820,22 @@ class Php2Shell2026VerdictTests(unittest.TestCase):
     def test_blanket_block_of_the_ordinary_path_is_inconclusive(self):
         self.before["root_status"] = 403
         self.assertEqual(self.verdict(), "inconclusive")
+
+    def test_block_status_mismatch_reason_names_the_observed_status_and_fix(self):
+        self.target["status"] = 418
+        verdict, reason, _checks = self.outcome()
+        self.assertEqual(verdict, "inconclusive")
+        self.assertIn("418", reason)
+        self.assertIn("403", reason)
+        self.assertIn("--block-status 418", reason)
+
+    def test_block_status_mismatch_without_a_status_suggests_no_flag(self):
+        self.target["status"] = None
+        self.target["error"] = "connection reset"
+        verdict, reason, _checks = self.outcome()
+        self.assertEqual(verdict, "inconclusive")
+        self.assertIn("no HTTP status", reason)
+        self.assertNotIn("--block-status", reason)
 
     def test_uncorrelated_origin_request_cannot_pass(self):
         self.records.append({"tokens": [None, None], "status": 200})
@@ -2605,6 +2653,15 @@ class DataDrivenCaseTests(unittest.TestCase):
         verdict, _reason, _checks = self.outcome_for(pack, target=target)
         self.assertEqual(verdict, "inconclusive")
 
+    def test_data_driven_block_status_reason_names_observed_and_fix(self):
+        pack = self.synthetic_pack()
+        target = {"token": "attack", "status": 418}
+        verdict, reason, _checks = self.outcome_for(pack, target=target)
+        self.assertEqual(verdict, "inconclusive")
+        self.assertIn("418", reason)
+        self.assertIn("403", reason)
+        self.assertIn("--block-status 418", reason)
+
     def test_data_driven_classifier_is_inconclusive_when_the_baseline_marker_is_absent(
         self,
     ):
@@ -3296,6 +3353,38 @@ class SignatureVariantEvidenceTests(unittest.TestCase):
         ][0]
         self.assertIn("connection refused", blocked["outcome"])
 
+    def test_variant_block_status_mismatch_names_observed_and_fix(self):
+        pack = self.pack()
+        baseline_variants = {
+            "marker-in-query": {"token": "bv-marker-in-query", "status": 200},
+        }
+        baseline_records = [
+            {"tokens": ["bv-marker-in-query"], "status": 200},
+        ]
+        target_variants = {
+            "marker-in-query": {"token": "tv-marker-in-query", "status": 200},
+        }
+        entries, _all_ok, _got_through, _verdicts = (
+            evidence.signature_variant_evidence(
+                pack,
+                baseline_variants,
+                target_variants,
+                baseline_records,
+                [],
+                403,
+            )
+        )
+        mismatch = [
+            entry
+            for entry in entries
+            if entry["check"]
+            == "variant marker-in-query response matched the configured "
+            "block status (403)"
+        ][0]
+        self.assertIn("200", mismatch["outcome"])
+        self.assertIn("403", mismatch["outcome"])
+        self.assertIn("--block-status 200", mismatch["outcome"])
+
     def test_variant_evidence_marks_a_missing_direct_receipt(self):
         pack = self.pack()
         entries, all_ok, got_through, verdicts = evidence.signature_variant_evidence(
@@ -3944,6 +4033,144 @@ class ImageVerificationTests(unittest.TestCase):
             )
             report = json.loads((output / "report.json").read_text())
         self.assertEqual(report["image_verification"], entries)
+
+
+class UnverifiedRunReasonTests(unittest.TestCase):
+    """An inconclusive run explains itself: an unverified pack whose direct
+    baseline never completed is a known state of the pack, not a problem
+    with the target, and the report reason says so and names the verified
+    packs that run end to end."""
+
+    @staticmethod
+    def _lab_context():
+        @contextlib.contextmanager
+        def fake(*_args, **_kwargs):
+            yield "backend"
+        return fake
+
+    @staticmethod
+    def _receiver_context(records):
+        @contextlib.contextmanager
+        def fake(*_args, **_kwargs):
+            yield records
+        return fake
+
+    def _run_pack(
+        self,
+        cve,
+        pre=(),
+        post=(),
+        control=None,
+        probe=None,
+        baseline_exploits=None,
+        baseline_variants=None,
+        prepare_error=None,
+    ):
+        entries = [
+            {"role": "application", "image": "app@sha256:a", "status": "present"},
+            {"role": "runner", "image": "runner@sha256:b", "status": "present"},
+        ]
+        patches = [
+            patch.object(lab, "prepare", side_effect=prepare_error),
+            patch.object(lab, "verify_images", return_value=entries),
+            patch.object(lab, "lab", self._lab_context()),
+            patch.object(lab, "receiver", self._receiver_context([])),
+            patch.object(
+                lab,
+                "control",
+                side_effect=control
+                or RuntimeError("baseline control unreachable"),
+            ),
+        ]
+        if probe is not None:
+            patches.append(patch.object(lab, "probe", return_value=probe))
+        if baseline_exploits:
+            patches.append(patch.dict(lab.BASELINE_EXPLOITS, baseline_exploits))
+        if baseline_variants is not None:
+            patches.append(
+                patch.object(
+                    lab, "variant_baseline_steps", return_value=baseline_variants
+                )
+            )
+        with contextlib.ExitStack() as stack:
+            for patched in patches:
+                stack.enter_context(patched)
+            stdout = io.StringIO()
+            with tempfile.TemporaryDirectory() as directory, contextlib.redirect_stdout(
+                stdout
+            ), contextlib.redirect_stderr(io.StringIO()):
+                output = Path(directory) / "out"
+                exit_code = lab.main(
+                    list(pre)
+                    + ["run", cve]
+                    + list(post)
+                    + ["--output-dir", str(output)]
+                )
+                report = json.loads((output / "report.json").read_text())
+        return exit_code, report
+
+    def test_unverified_pack_inconclusive_names_known_state_and_runnable_packs(self):
+        exit_code, report = self._run_pack(
+            "CVE-2026-109618", pre=("--include-unverified",)
+        )
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(report["verdict"], "inconclusive")
+        self.assertIs(report["pack_verified"], False)
+        reason = report["reason"]
+        self.assertIn("baseline control unreachable", reason)
+        self.assertIn("unverified", reason)
+        self.assertIn("known state of the pack", reason)
+        # Verified and digest-pinned, so it runs end to end and is named.
+        self.assertIn("CVE-2025-29927", reason)
+        # Verified but its lab image is still pending review, so it is not
+        # named as a pack that runs end to end.
+        self.assertNotIn("CVE-2024-4577", reason)
+
+    def test_verified_pack_baseline_failure_keeps_the_plain_reason(self):
+        exit_code, report = self._run_pack("CVE-2025-29927")
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(report["verdict"], "inconclusive")
+        self.assertIs(report["pack_verified"], True)
+        self.assertEqual(report["reason"], "baseline control unreachable")
+
+    def test_unverified_pack_setup_failure_gets_no_known_state_note(self):
+        # A failure before the lab is up (engine, image pull, ports) is a
+        # setup problem; telling the user it is "not a problem with your
+        # target or setup" there would be wrong.
+        exit_code, report = self._run_pack(
+            "CVE-2026-109618",
+            pre=("--include-unverified",),
+            prepare_error=RuntimeError("image pull failed: engine unreachable"),
+        )
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(report["verdict"], "inconclusive")
+        self.assertIs(report["pack_verified"], False)
+        self.assertEqual(report["reason"], "image pull failed: engine unreachable")
+
+    def test_unverified_pack_target_phase_failure_gets_no_known_state_note(self):
+        # The unverified note covers only an uncompleted direct baseline;
+        # once the run reaches the target phase an inconclusive verdict is
+        # about the target or setup, so no known-state sentence is added.
+        def control(_pack, _origin, _run_id, phase, context=None):
+            if phase == "baseline-control":
+                return {"status": 200, "root_status": 200}
+            raise RuntimeError("target controls unreachable")
+
+        exit_code, report = self._run_pack(
+            "CVE-2026-109618",
+            pre=("--include-unverified",),
+            post=("--target", "http://lb.test"),
+            control=control,
+            probe={"token": "baseline", "status": 200, "marker": True},
+            baseline_exploits={
+                "modphp-oom": lambda *_args, **_kwargs: {"crash_confirmed": True}
+            },
+            baseline_variants=({}, []),
+        )
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(report["verdict"], "inconclusive")
+        self.assertIs(report["pack_verified"], False)
+        self.assertEqual(report["reason"], "target controls unreachable")
 
 
 if __name__ == "__main__":

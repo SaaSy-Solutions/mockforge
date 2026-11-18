@@ -44,6 +44,38 @@ def require_verified(cve, include_unverified):
         raise ValueError(f"{cve} {UNVERIFIED_MESSAGE}")
 
 
+def _pack_images_runnable(pack_catalog):
+    """Whether a pack's images can carry a run end to end today: every image
+    digest-pinned and no pending/unreviewed image status."""
+    status = pack_catalog.get("image_status") or ""
+    if "pending" in status or "unreviewed" in status:
+        return False
+    return all(
+        "@sha256:" in pack_catalog.get(key, "")
+        for key in ("application_image", "runner_image")
+    )
+
+
+def verified_runnable_cves():
+    """Verified packs whose images are also runnable end to end."""
+    return [
+        cve
+        for cve, pack in PACKS.items()
+        if pack.get("verified", False) and _pack_images_runnable(pack["catalog"])
+    ]
+
+
+def unverified_baseline_note():
+    """Plain-language suffix explaining an unverified pack's inconclusive run."""
+    runnable = ", ".join(verified_runnable_cves()) or "none"
+    return (
+        "This pack is unverified: its reference baseline has not yet "
+        "reproduced the bug on a MockForge lab host, so this result is a "
+        "known state of the pack, not a problem with your target or setup. "
+        f"Verified packs that run end to end: {runnable}."
+    )
+
+
 def run_plan_lines(args):
     """Human-readable plan printed before anything downloads or starts."""
     pack_catalog = PACKS[args.cve]["catalog"]
@@ -108,6 +140,7 @@ def run(args):
         "target": args.target,
         "tls_verify": not args.skip_tls_verify,
         "verdict": "inconclusive",
+        "pack_verified": bool(pack.get("verified", False)),
         "runtime_patch_evidence": "unverified",
         "scope": "Selected CVE lab reproduction and request-blocking regression, not comprehensive CVE coverage",
     }
@@ -122,6 +155,13 @@ def run(args):
             "use this against an untrusted network.",
             flush=True,
         )
+    # The lab is up and the direct baseline is running against it: a failure
+    # from here until the target phase means the baseline did not reproduce.
+    # For an unverified pack that is a known state of the pack, which the
+    # report reason says plainly. Failures before this point (engine, image
+    # pulls, ports) are setup problems and get no such note.
+    direct_baseline_started = False
+    direct_baseline_complete = False
     try:
         prepare(args.engine, pack)
         image_verification = verify_images(args.engine, pack)
@@ -154,6 +194,7 @@ def run(args):
                     f"Lab ready. LB upstream: {args.listen_address}:{args.origin_port}",
                     flush=True,
                 )
+                direct_baseline_started = True
                 baseline_control = control(
                     pack, origin, run_id, "baseline-control", context=tls_context
                 )
@@ -194,6 +235,7 @@ def run(args):
                             "reproduce the reviewed corruption: "
                             + ", ".join(not_reproducing)
                         )
+                direct_baseline_complete = True
                 if args.target:
                     target_start = len(records)
                     before = control(pack, args.target, run_id, "before", context=tls_context)
@@ -300,7 +342,16 @@ def run(args):
         http.client.HTTPException,
         subprocess.TimeoutExpired,
     ) as exc:
-        report.update(verdict="inconclusive", reason=str(exc))
+        reason = str(exc)
+        if (
+            direct_baseline_started
+            and not direct_baseline_complete
+            and not report["pack_verified"]
+        ):
+            if not reason.endswith("."):
+                reason += "."
+            reason += " " + unverified_baseline_note()
+        report.update(verdict="inconclusive", reason=reason)
     finally:
         (output / "report.json").write_text(json.dumps(report, indent=2) + "\n")
     print(describe(report))
