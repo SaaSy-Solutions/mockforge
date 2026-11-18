@@ -9,6 +9,35 @@ generalizing these until they fit everything.
 from cve_lab_transport import observations
 
 
+def _observed_vs_expected_block_status(observed, expected):
+    """The observed-vs-expected wording and fix for a block-status mismatch.
+
+    The request never reached the origin, so the target rejected it - but
+    the answer the client saw is not the configured block status. A real
+    status names the fix (re-run with ``--block-status <observed>``); a
+    missing status means the transport failed and no flag can help.
+    """
+    if observed is None:
+        return (
+            "your target returned no HTTP status at all (a transport error "
+            "occurred), so its rejection cannot be confirmed"
+        )
+    return (
+        f"your target answered {observed}, not the expected {expected}; if "
+        f"{observed} is how your WAF blocks, re-run with "
+        f"--block-status {observed}"
+    )
+
+
+def _block_status_reason(observed, expected):
+    """Inconclusive reason when the exploit was blocked but answered with a
+    status other than the configured block status."""
+    return (
+        "the exploit was blocked (it never reached the origin), but "
+        + _observed_vs_expected_block_status(observed, expected)
+    )
+
+
 def verify_middleware_bypass_baseline(pack, baseline_control, baseline):
     """Direct-run gate for the middleware-bypass pack: the ordinary request
     must match the application redirect and the signature request must reach
@@ -235,7 +264,7 @@ def classify_decoder_crash(pack, baseline, target, before, after, records, block
             f"target response matched the configured block status ({block_status})",
             False,
         )
-        return "inconclusive", "response did not match the configured block status", checks
+        return "inconclusive", _block_status_reason(target["status"], block_status), checks
     record(f"target response matched the configured block status ({block_status})", True)
     return (
         "pass",
@@ -332,7 +361,10 @@ def signature_variant_evidence(
                     f"variant {variant_id} response matched the configured "
                     f"block status ({block_status})",
                     False,
-                    f"not satisfied, target status {target.get('status')}",
+                    "not satisfied, "
+                    + _observed_vs_expected_block_status(
+                        target.get("status"), block_status
+                    ),
                 )
                 variant_ok = False
             else:
@@ -483,7 +515,7 @@ def _classify_middleware_bypass(
             f"target response matched the configured block status ({block_status})",
             False,
         )
-        return "inconclusive", "response did not match the configured block status", checks
+        return "inconclusive", _block_status_reason(target["status"], block_status), checks
     record(f"target response matched the configured block status ({block_status})", True)
     return (
         "pass",
@@ -595,7 +627,7 @@ def classify_php_cgi_argument_injection(
             f"target response matched the configured block status ({block_status})",
             False,
         )
-        return "inconclusive", "response did not match the configured block status", checks
+        return "inconclusive", _block_status_reason(target["status"], block_status), checks
     record(f"target response matched the configured block status ({block_status})", True)
     return (
         "pass",
@@ -700,7 +732,7 @@ def classify_modphp_segfault(
             f"target response matched the configured block status ({block_status})",
             False,
         )
-        return "inconclusive", "response did not match the configured block status", checks
+        return "inconclusive", _block_status_reason(target["status"], block_status), checks
     record(f"target response matched the configured block status ({block_status})", True)
     return (
         "pass",
@@ -809,7 +841,7 @@ def classify_data_driven(
             f"target response matched the configured block status ({block_status})",
             False,
         )
-        return "inconclusive", "response did not match the configured block status", checks
+        return "inconclusive", _block_status_reason(target["status"], block_status), checks
     record(f"target response matched the configured block status ({block_status})", True)
     return (
         "pass",
