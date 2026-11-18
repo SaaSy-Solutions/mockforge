@@ -1,4 +1,6 @@
-## [0.3.247] - 2026-11-18
+## [0.3.248] - 2026-11-18
+
+0.3.247 was tagged but never published: its release check found that `mockforge cve` failed on Linux, so 0.3.248 ships its changes with the fix.
 
 ### Security
 
@@ -13,6 +15,7 @@
 
 ### Fixed
 
+- **[Reality]** `mockforge cve` works again. It passed every bundled CVE lab module to Python as one command-line argument, and once the bundle grew past Linux's 128 KiB per-argument limit, every `mockforge cve` command failed with "Argument list too long", reported as needing Python 3.11+. The modules now go to a private temporary directory, and a missing `python3` is reported only when it is really missing. (#1654)
 - **[Reality]** CVE lab `inconclusive` results explain themselves. When an unverified pack's lab starts but its baseline does not reproduce, the reason says this is a known state of the pack, not a problem with your target or setup, and names the verified packs that run end to end. When your target blocks the exploit with a status other than `--block-status`, the reason names the status it returned and suggests `--block-status <code>`. `report.json` gains `pack_verified`. (#1645, reported on #79)
 - **[Reality]** The managed CVE lab guide states each pack's real status, explains what the lab sends to your target (not a replay of the baseline), and explains that pass or fail is judged by what reaches the lab origin through your load balancer. It also says where an extra test case goes. (#1645, #1646, #1611)
 - **[Reality]** CVE labs deliver the generated Nuclei template into the runner container with create and copy instead of a host bind mount, so runs work when the engine cannot see the host path (Docker Desktop, podman machine and other remote or VM engines). (#1616)
@@ -25,6 +28,7 @@
   - the load tests serve only HTTP, admin and metrics (#1617);
   - the coverage job uses the shared build target directory (#1614);
   - the image smoke test's egress check uses its own redirector and counts blocked requests correctly (#1640).
+  - the production smoke test runs on GitHub-hosted runners, so it no longer queues behind builds on the shared runners (#1652).
 - **[DevX]** Documentation copy fixes: the FAQ pricing claim, the canonical description and the protocol list. (#1565)
 
 ### Added
