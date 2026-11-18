@@ -15,6 +15,7 @@ from cve_lab_catalog import CATALOG, CVE, PACKS, validate_data_driven_pack
 from cve_lab_engine import doctor, prepare, lab, cleanup, verify_images
 from cve_lab_transport import target_url, receiver, control, unverified_context
 from cve_lab_nuclei import probe
+import cve_lab_sent as sent
 import cve_lab_evidence as evidence
 from cve_lab_evidence import BASELINE_GATES, CLASSIFIERS, describe
 from cve_lab_exploits import (
@@ -133,6 +134,14 @@ def run(args):
     output = Path(args.output_dir).resolve()
     output.mkdir(parents=True, exist_ok=False)
     run_id = uuid.uuid4().hex
+    direct_host = (
+        "127.0.0.1" if args.listen_address == "0.0.0.0" else args.listen_address
+    )
+    sent.open_sink(
+        output / "sent_requests.jsonl",
+        origin=f"http://{direct_host}:{args.origin_port}",
+        target=args.target,
+    )
     report = {
         "schema_version": 1,
         "run_id": run_id,
@@ -142,6 +151,7 @@ def run(args):
         "verdict": "inconclusive",
         "pack_verified": bool(pack.get("verified", False)),
         "runtime_patch_evidence": "unverified",
+        "sent_requests": "sent_requests.jsonl",
         "scope": "Selected CVE lab reproduction and request-blocking regression, not comprehensive CVE coverage",
     }
     (output / "ownership.json").write_text(
@@ -184,11 +194,6 @@ def run(args):
                 signature_header=pack["probe"].get("signature_header"),
                 max_body=(pack.get("exploit") or {}).get("max_forwarded_body"),
             ) as records:
-                direct_host = (
-                    "127.0.0.1"
-                    if args.listen_address == "0.0.0.0"
-                    else args.listen_address
-                )
                 origin = f"http://{direct_host}:{args.origin_port}"
                 print(
                     f"Lab ready. LB upstream: {args.listen_address}:{args.origin_port}",
@@ -353,9 +358,15 @@ def run(args):
             reason += " " + unverified_baseline_note()
         report.update(verdict="inconclusive", reason=reason)
     finally:
-        (output / "report.json").write_text(json.dumps(report, indent=2) + "\n")
+        try:
+            (output / "report.json").write_text(
+                json.dumps(report, indent=2) + "\n"
+            )
+        finally:
+            sent.close_sink()
     print(describe(report))
     print(f"Report: {output / 'report.json'}")
+    print(f"Sent requests: {output / 'sent_requests.jsonl'}")
     return 0 if report["verdict"] in ("pass", "baseline-confirmed") else 1
 
 
