@@ -228,7 +228,7 @@ def lab(engine, run_id, output, pack):
         while time.monotonic() < deadline:
             try:
                 ready = (
-                    request(backend, app["readiness"]["path"])[0]
+                    request(backend, app["readiness"]["path"], log_sent=False)[0]
                     == app["readiness"]["status"]
                 )
             except (OSError, ValueError, http.client.HTTPException):

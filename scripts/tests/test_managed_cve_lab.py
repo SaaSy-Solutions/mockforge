@@ -29,6 +29,11 @@ import cve_lab_nuclei as nuclei
 import cve_lab_evidence as evidence
 import cve_lab_transport as transport
 
+try:
+    import cve_lab_sent as sent
+except ImportError:
+    sent = None
+
 SPEC = importlib.util.spec_from_file_location(
     "managed_cve_lab", Path(__file__).resolve().parents[1] / "cve_lab.py"
 )
@@ -4171,6 +4176,441 @@ class UnverifiedRunReasonTests(unittest.TestCase):
         self.assertEqual(report["verdict"], "inconclusive")
         self.assertIs(report["pack_verified"], False)
         self.assertEqual(report["reason"], "target controls unreachable")
+
+
+class SentRequestsLogTests(unittest.TestCase):
+    """<output>/sent_requests.jsonl logs every request the lab sends, one
+    JSON line each - the send side that pairs with report.json's
+    origin_observations (what arrived)."""
+
+    def setUp(self):
+        if sent is None:
+            self.fail("cve_lab_sent module is required")
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+        class Backend(BaseHTTPRequestHandler):
+            def _reply(self):
+                length = int(self.headers.get("Content-Length") or 0)
+                if length:
+                    self.rfile.read(length)
+                # Next.js-pack control shape: /login is benign (200), the
+                # protected root redirects (307); anything else answers 200.
+                status = (
+                    307 if self.path == "/" or self.path.startswith("/?") else 200
+                )
+                self.send_response(status)
+                self.send_header("Content-Length", "2")
+                self.end_headers()
+                self.wfile.write(b"ok")
+
+            do_GET = _reply
+            do_POST = _reply
+
+            def log_message(self, *_args):
+                pass
+
+        self.backend = ThreadingHTTPServer(("127.0.0.1", 0), Backend)
+        threading.Thread(target=self.backend.serve_forever, daemon=True).start()
+        self.backend_port = self.backend.server_address[1]
+        self.backend_base = f"http://127.0.0.1:{self.backend_port}"
+
+    def tearDown(self):
+        self.backend.shutdown()
+        self.backend.server_close()
+        if sent is not None:
+            sent.close_sink()
+
+    @contextlib.contextmanager
+    def recorder(self):
+        with socket.socket() as reservation:
+            reservation.bind(("127.0.0.1", 0))
+            port = reservation.getsockname()[1]
+        with transport.receiver(
+            port, "127.0.0.1", self.backend_base
+        ) as records:
+            yield f"http://127.0.0.1:{port}", records
+
+    @staticmethod
+    def _lines(path):
+        return [json.loads(line) for line in path.read_text().splitlines()]
+
+    def test_control_and_request_write_one_line_each_with_redaction(self):
+        pack = {
+            "controls": {
+                "benign_path": "/login?__mockforge_cve={token}",
+                "ordinary_path": "/?__mockforge_cve={token}",
+            }
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            sink = Path(directory) / "sent_requests.jsonl"
+            with self.recorder() as (base, _records):
+                sent.open_sink(sink, origin=base)
+                status, _headers, _body = transport.request(
+                    base,
+                    "/login?__mockforge_cve=tok1",
+                    {"X-Mockforge-Cve": "tok1", "Authorization": "Bearer secret"},
+                )
+                outcome = transport.control(pack, base, "run1", "phase")
+            sent.close_sink()
+            lines = self._lines(sink)
+        self.assertEqual(status, 200)
+        origin_lines = [line for line in lines if line["destination"] == "origin"]
+        # One direct request plus the benign and root controls. The recorder
+        # also forwarded each to the backend, but those forwards are lab
+        # internals and are not logged as sent requests.
+        self.assertEqual(len(origin_lines), 3)
+        self.assertEqual(len(lines), 3)
+        self.assertEqual([line["method"] for line in origin_lines], ["GET"] * 3)
+        self.assertEqual([line["status"] for line in origin_lines], [200, 200, 307])
+        self.assertEqual([line["client"] for line in lines], ["python-http1"] * 3)
+        first = origin_lines[0]
+        self.assertEqual(first["marker"], "tok1")
+        self.assertEqual(first["path"], "/login?__mockforge_cve=tok1")
+        self.assertEqual(first["base"], base)
+        self.assertEqual(first["headers"]["Authorization"], "[redacted]")
+        self.assertEqual(first["headers"]["X-Mockforge-Cve"], "tok1")
+        self.assertEqual(origin_lines[1]["marker"], outcome["token"])
+        self.assertEqual(origin_lines[2]["marker"], outcome["root_token"])
+        self.assertEqual(len(set(line["base"] for line in lines)), 1)
+        self.assertEqual(
+            [line["seq"] for line in lines], list(range(1, len(lines) + 1))
+        )
+        for line in lines:
+            self.assertIsNone(line["error"])
+            self.assertIn("T", line["ts"])
+            self.assertIsInstance(line["elapsed_ms"], (int, float))
+            self.assertIsInstance(line["body_bytes"], int)
+
+    def test_no_sink_recording_is_a_noop(self):
+        sent.close_sink()
+        sent.record(base="http://x.test", method="GET", path="/")
+        with self.recorder() as (base, _records):
+            status, _headers, _body = transport.request(
+                base, "/x?__mockforge_cve=t", {"X-Mockforge-Cve": "t"}
+            )
+        self.assertEqual(status, 200)
+
+    def test_request_tolerant_and_post_sequence_log_bodies_and_errors(self):
+        body = b"multipart-ish payload"
+        with tempfile.TemporaryDirectory() as directory:
+            sink = Path(directory) / "sent_requests.jsonl"
+            sent.open_sink(sink, origin=self.backend_base)
+            outcome = exploits._request_tolerant(
+                "127.0.0.1",
+                self.backend_port,
+                "POST",
+                "/upload?__mockforge_cve=tok-body",
+                {"X-Mockforge-Cve": "tok-body"},
+                body,
+                5,
+            )
+            outcomes = exploits._post_sequence(
+                "127.0.0.1",
+                self.backend_port,
+                (
+                    ("/p?__mockforge_cve=seq-1", [("X-Mockforge-Cve", "seq-1")], b"one"),
+                    ("/p?__mockforge_cve=seq-2", [("X-Mockforge-Cve", "seq-2")], b"two"),
+                ),
+                5,
+            )
+            failed = exploits._request_tolerant(
+                "127.0.0.1",
+                1,
+                "GET",
+                "/x?__mockforge_cve=down",
+                {"X-Mockforge-Cve": "down"},
+                None,
+                2,
+            )
+            sent.close_sink()
+            lines = self._lines(sink)
+        self.assertIsNone(outcome["error"])
+        self.assertIsNone(outcomes[0]["error"])
+        self.assertIsNotNone(failed["error"])
+        self.assertEqual(len(lines), 4)
+        first = lines[0]
+        self.assertEqual(first["marker"], "tok-body")
+        self.assertEqual(first["destination"], "origin")
+        self.assertEqual(first["method"], "POST")
+        self.assertEqual(first["body_bytes"], len(body))
+        self.assertEqual(first["body_sha256"], hashlib.sha256(body).hexdigest())
+        self.assertEqual(first["body_preview"], body.decode("utf-8"))
+        self.assertEqual(first["status"], 200)
+        self.assertEqual(lines[1]["marker"], "seq-1")
+        self.assertEqual(lines[2]["marker"], "seq-2")
+        self.assertEqual([line["method"] for line in lines[1:3]], ["POST", "POST"])
+        last = lines[3]
+        self.assertEqual(last["marker"], "down")
+        self.assertIsNone(last["status"])
+        self.assertIsNotNone(last["error"])
+        self.assertEqual(last["destination"], "other")
+
+    def test_http2_request_records_the_logical_request(self):
+        with tempfile.TemporaryDirectory() as directory:
+            sink = Path(directory) / "sent_requests.jsonl"
+            with self.recorder() as (base, _records):
+                sent.open_sink(sink, origin=base)
+                url = transport.target_url(base)
+                result = http2_module.request(
+                    url.hostname,
+                    url.port,
+                    "POST",
+                    "/decode?__mockforge_cve=tok-h2",
+                    [
+                        ("content-type", "application/brotli"),
+                        ("x-mockforge-cve", "tok-h2"),
+                    ],
+                    b"payload-bytes",
+                    timeout=10,
+                )
+            sent.close_sink()
+            lines = self._lines(sink)
+        self.assertIsNone(result["error"])
+        h2_lines = [line for line in lines if line["client"] == "python-http2"]
+        self.assertEqual(len(h2_lines), 1)
+        line = h2_lines[0]
+        self.assertEqual(line["destination"], "origin")
+        self.assertEqual(line["marker"], "tok-h2")
+        self.assertEqual(line["method"], "POST")
+        self.assertEqual(line["status"], 200)
+        self.assertEqual(line["body_bytes"], len(b"payload-bytes"))
+        self.assertEqual(line["body_preview"], "payload-bytes")
+        self.assertEqual(line["headers"]["x-mockforge-cve"], "tok-h2")
+
+    def test_http2_connection_failure_still_raises_and_is_logged(self):
+        # Callers rely on a refused connection raising (run() reports it as
+        # the inconclusive reason); logging must not swallow it.
+        import socket
+
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            port = probe.getsockname()[1]
+        with tempfile.TemporaryDirectory() as directory:
+            sink = Path(directory) / "sent_requests.jsonl"
+            sent.open_sink(sink, origin=f"http://127.0.0.1:{port}")
+            try:
+                with self.assertRaises(OSError):
+                    http2_module.request(
+                        "127.0.0.1", port, "POST", "/decode?__mockforge_cve=tok-h2",
+                        [("x-mockforge-cve", "tok-h2")], b"payload", timeout=2,
+                    )
+            finally:
+                sent.close_sink()
+            lines = self._lines(sink)
+        self.assertEqual(len(lines), 1)
+        self.assertEqual(lines[0]["client"], "python-http2")
+        self.assertEqual(lines[0]["destination"], "origin")
+        self.assertIsNone(lines[0]["status"])
+        self.assertTrue(lines[0]["error"])
+
+    def test_nuclei_probe_records_the_template_request(self):
+        pack = catalog.PACKS["CVE-2025-29927"]
+        finding = (
+            json.dumps(
+                {
+                    "template-id": pack["probe"]["template_id"],
+                    "response": "HTTP/1.1 200 OK\r\n\r\nDashboard Content",
+                }
+            )
+            + "\n"
+        )
+
+        def fake_command(args, **_kwargs):
+            if args[1:3] == ["start", "-a"]:
+                return completed_output(stdout=finding, stderr="log")
+            return completed()
+
+        with tempfile.TemporaryDirectory() as directory:
+            sink = Path(directory) / "sent_requests.jsonl"
+            sent.open_sink(sink, origin="http://127.0.0.1:9")
+            with patch.object(nuclei, "owned_remove"), patch.object(
+                nuclei, "command", side_effect=fake_command
+            ):
+                result = nuclei.probe(
+                    "docker", "http://127.0.0.1:9", Path(directory),
+                    "baseline", "run1", pack,
+                )
+            sent.close_sink()
+            lines = self._lines(sink)
+        self.assertEqual(result["status"], 200)
+        self.assertEqual(len(lines), 1)
+        line = lines[0]
+        self.assertEqual(line["client"], "nuclei")
+        self.assertEqual(line["destination"], "origin")
+        self.assertEqual(line["marker"], "run1-baseline")
+        self.assertEqual(line["method"], "GET")
+        self.assertEqual(line["path"], "/?__mockforge_cve=run1-baseline")
+        self.assertEqual(line["headers"]["X-Mockforge-Cve"], "run1-baseline")
+        self.assertEqual(line["status"], 200)
+        self.assertIsNone(line["error"])
+
+    def test_nuclei_probe_failure_records_an_error_line(self):
+        pack = catalog.PACKS["CVE-2025-29927"]
+
+        def fake_command(args, **_kwargs):
+            if args[1:3] == ["start", "-a"]:
+                return completed_output(stdout="container failed", returncode=2)
+            return completed()
+
+        with tempfile.TemporaryDirectory() as directory:
+            sink = Path(directory) / "sent_requests.jsonl"
+            sent.open_sink(sink, target="http://lb.test")
+            with patch.object(nuclei, "owned_remove"), patch.object(
+                nuclei, "command", side_effect=fake_command
+            ):
+                with self.assertRaises(RuntimeError):
+                    nuclei.probe(
+                        "docker", "http://lb.test", Path(directory),
+                        "target", "run1", pack,
+                    )
+            sent.close_sink()
+            lines = self._lines(sink)
+        self.assertEqual(len(lines), 1)
+        line = lines[0]
+        self.assertEqual(line["client"], "nuclei")
+        self.assertEqual(line["destination"], "target")
+        self.assertEqual(line["marker"], "run1-target")
+        self.assertIsNone(line["status"])
+        self.assertIn("code 2", line["error"])
+
+    def test_destination_is_other_when_neither_origin_nor_target(self):
+        with tempfile.TemporaryDirectory() as directory:
+            sink = Path(directory) / "sent_requests.jsonl"
+            sent.open_sink(
+                sink, origin="http://127.0.0.1:1", target="http://target.test"
+            )
+            transport.request(
+                self.backend_base,
+                "/x?__mockforge_cve=o",
+                {"X-Mockforge-Cve": "o"},
+            )
+            sent.close_sink()
+            lines = self._lines(sink)
+        self.assertEqual(len(lines), 1)
+        self.assertEqual(lines[0]["destination"], "other")
+        self.assertEqual(lines[0]["base"], self.backend_base)
+
+    @staticmethod
+    def _lab_context(backend_base):
+        @contextlib.contextmanager
+        def fake(*_args, **_kwargs):
+            yield backend_base
+        return fake
+
+    def _run_lab(self, extra_args=()):
+        """An end-to-end run with only the engine steps and Nuclei's
+        subprocess mocked: the recorder, controls and probe paths all run for
+        real on loopback."""
+        entries = [
+            {"role": "application", "image": "app@sha256:a", "status": "present"},
+            {"role": "runner", "image": "runner@sha256:b", "status": "present"},
+        ]
+        finding = (
+            json.dumps(
+                {
+                    "template-id": "mockforge-nextjs-29927-observation",
+                    "response": "HTTP/1.1 200 OK\r\n\r\nDashboard Content",
+                }
+            )
+            + "\n"
+        )
+
+        def fake_command(args, **_kwargs):
+            if args[1:3] == ["start", "-a"]:
+                return completed_output(stdout=finding, stderr="log")
+            return completed()
+
+        with socket.socket() as reservation:
+            reservation.bind(("127.0.0.1", 0))
+            origin_port = reservation.getsockname()[1]
+        patches = [
+            patch.object(lab, "prepare"),
+            patch.object(lab, "verify_images", return_value=entries),
+            patch.object(lab, "lab", self._lab_context(self.backend_base)),
+            patch.object(nuclei, "owned_remove"),
+            patch.object(nuclei, "command", side_effect=fake_command),
+        ]
+        with contextlib.ExitStack() as stack:
+            for patched in patches:
+                stack.enter_context(patched)
+            stdout = io.StringIO()
+            with tempfile.TemporaryDirectory() as directory, contextlib.redirect_stdout(
+                stdout
+            ), contextlib.redirect_stderr(io.StringIO()):
+                output = Path(directory) / "out"
+                exit_code = lab.main(
+                    ["run", "CVE-2025-29927", "--origin-port", str(origin_port)]
+                    + list(extra_args)
+                    + ["--output-dir", str(output)]
+                )
+                report = json.loads((output / "report.json").read_text())
+                sent_path = output / "sent_requests.jsonl"
+                lines = self._lines(sent_path) if sent_path.exists() else None
+        return exit_code, report, lines, stdout.getvalue()
+
+    def test_run_writes_baseline_requests_to_the_origin(self):
+        exit_code, report, lines, stdout = self._run_lab()
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(report["verdict"], "baseline-confirmed")
+        self.assertEqual(report["sent_requests"], "sent_requests.jsonl")
+        self.assertIn("Sent requests: ", stdout)
+        self.assertIsNotNone(lines)
+        run_id = report["run_id"]
+        control_lines = [
+            line
+            for line in lines
+            if line["destination"] == "origin"
+            and line["marker"]
+            and line["marker"].startswith(run_id + "-baseline-control-")
+        ]
+        self.assertEqual(len(control_lines), 2)
+        self.assertTrue(
+            any(line["marker"].endswith("-root") for line in control_lines)
+        )
+        self.assertTrue(
+            any(
+                line["client"] == "nuclei"
+                and line["marker"] == run_id + "-baseline"
+                and line["destination"] == "origin"
+                for line in lines
+            )
+        )
+
+    def test_run_with_target_marks_target_requests(self):
+        exit_code, report, lines, _stdout = self._run_lab(
+            ["--target", self.backend_base]
+        )
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(report["sent_requests"], "sent_requests.jsonl")
+        self.assertIsNotNone(lines)
+        run_id = report["run_id"]
+        target_lines = [line for line in lines if line["destination"] == "target"]
+        self.assertTrue(
+            any(line["marker"] == run_id + "-target" for line in target_lines)
+        )
+        self.assertTrue(
+            any(
+                line["marker"]
+                and line["marker"].startswith(run_id + "-before-")
+                for line in target_lines
+            )
+        )
+        self.assertTrue(
+            any(
+                line["marker"]
+                and line["marker"].startswith(run_id + "-after-")
+                for line in target_lines
+            )
+        )
+        # The direct baseline still went to the origin, never the target.
+        self.assertTrue(
+            any(
+                line["marker"]
+                and line["marker"].startswith(run_id + "-baseline-control-")
+                and line["destination"] == "origin"
+                for line in lines
+            )
+        )
 
 
 if __name__ == "__main__":

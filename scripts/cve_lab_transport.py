@@ -5,11 +5,13 @@ import ssl
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import hashlib
 import threading
+import time
 from contextlib import contextmanager
 from urllib.parse import parse_qs, urlsplit
 import uuid
 
 import cve_lab_http2 as http2
+import cve_lab_sent as sent
 
 
 def target_url(value):
@@ -43,7 +45,7 @@ def unverified_context():
     return context
 
 
-def request(base, path, headers=None, method="GET", body=None, context=None):
+def request(base, path, headers=None, method="GET", body=None, context=None, log_sent=True):
     url = target_url(base)
     options = {"timeout": 5}
     if url.scheme == "https":
@@ -53,15 +55,36 @@ def request(base, path, headers=None, method="GET", body=None, context=None):
     else:
         cls = http.client.HTTPConnection
     conn = cls(url.hostname, url.port, **options)
+    started = time.monotonic()
+    status = None
+    error = None
     try:
         conn.request(method, path, body=body, headers=headers or {})
         response = conn.getresponse()
+        status = response.status
         payload = response.read(2 * 1024 * 1024 + 1)
         if len(payload) > 2 * 1024 * 1024:
             raise ValueError("response exceeds 2 MiB")
-        return response.status, response.getheaders(), payload
+        return status, response.getheaders(), payload
+    except Exception as exc:
+        error = str(exc)
+        raise
     finally:
         conn.close()
+        # The recorder's forwards to the lab app and engine readiness polls are
+        # lab internals, not requests the lab sends; they pass log_sent=False.
+        if log_sent:
+            sent.record(
+                base=base,
+                method=method,
+                path=path,
+                headers=headers,
+                body=body,
+                status=status,
+                error=error,
+                elapsed_ms=(time.monotonic() - started) * 1000,
+                client="python-http1",
+            )
 
 
 MAX_FORWARDED_BODY = 2 * 1024 * 1024
@@ -82,7 +105,7 @@ def receiver(port, address, backend, signature_header=None, max_body=None):
             name: value for name, value in header_items
             if name.lower() not in ("host", "connection", "accept-encoding", "transfer-encoding", "content-length", "keep-alive")
         }
-        status, response_headers, payload = request(backend, path, headers, method=method, body=body or None)
+        status, response_headers, payload = request(backend, path, headers, method=method, body=body or None, log_sent=False)
         return status, [(name, value) for name, value in response_headers
                         if name.lower() not in ("transfer-encoding", "connection", "content-length")], payload
 
@@ -121,6 +144,7 @@ def receiver(port, address, backend, signature_header=None, max_body=None):
                     headers,
                     method=self.command,
                     body=body,
+                    log_sent=False,
                 )
                 observation["status"] = status
                 self.send_response(status)
