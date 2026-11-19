@@ -1,3 +1,8 @@
+// Not run by playwright-deployed.config.ts (issue #1051): /playground is absent
+// from cloudNavItemIds in src/components/layout/navigation.ts, so on the cloud
+// app it only appears under the collapsed "Local only" group and is not a
+// functional cloud page. This spec asserts the local-server playground UI.
+// Kept in-tree; see the testIgnore note in playwright-deployed.config.ts.
 import { test, expect } from '@playwright/test';
 
 /**
