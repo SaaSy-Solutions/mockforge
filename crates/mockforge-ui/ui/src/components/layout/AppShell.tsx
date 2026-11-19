@@ -19,6 +19,7 @@ import { UserProfile } from '../auth/UserProfile';
 import { HelpSupport } from '../auth/HelpSupport';
 import { Logo } from '../ui/Logo';
 import { useHelpStore } from '../../stores/useHelpStore';
+import { useAuthStore } from '../../stores/useAuthStore';
 import { usePreferencesStore } from '../../stores/usePreferencesStore';
 import { useAppShortcuts } from '../../hooks/useKeyboardNavigation';
 import { useSkipLinks } from '../../hooks/useFocusManagement';
@@ -341,7 +342,8 @@ export function AppShell({ children, onRefresh }: AppShellProps) {
   const activeId = location.pathname.split('/').filter(Boolean)[0] ?? 'dashboard';
 
   const cloud = isCloudMode();
-  const sections = useMemo(() => getNavSections(cloud), [cloud]);
+  const isAdmin = useAuthStore((state) => state.user?.is_admin === true);
+  const sections = useMemo(() => getNavSections(cloud), [cloud, isAdmin]);
   const current = findNavItem(activeId, cloud);
   const currentSectionTitle = current?.section?.titleKey ? t(current.section.titleKey) : undefined;
   const currentLabel = current

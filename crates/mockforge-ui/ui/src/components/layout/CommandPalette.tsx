@@ -28,6 +28,7 @@ import { useLogStore } from '../../stores/useLogStore';
 import { useServiceStore } from '../../stores/useServiceStore';
 import { useWorkspaceStore } from '../../stores/useWorkspaceStore';
 import { usePreferencesStore } from '../../stores/usePreferencesStore';
+import { useAuthStore } from '../../stores/useAuthStore';
 import { useThemePaletteStore } from '../../stores/useThemePaletteStore';
 import { getHelpNavItems, getNavSections, matchesNavQuery, readRecentPages } from './navigation';
 
@@ -55,6 +56,7 @@ export function CommandPalette({ open, onOpenChange, onRefresh, onToggleSidebar,
   const [active, setActive] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
 
+  const isAdmin = useAuthStore((s) => s.user?.is_admin === true);
   const setLogFilter = useLogStore((s) => s.setFilter);
   const setGlobalSearch = useServiceStore((s) => s.setGlobalSearch);
   const workspaces = useWorkspaceStore((s) => s.workspaces);
@@ -231,6 +233,7 @@ export function CommandPalette({ open, onOpenChange, onRefresh, onToggleSidebar,
     onToggleSidebar,
     onOpenHelp,
     onOpenChange,
+    isAdmin,
   ]);
 
   // Keep the highlighted row in view while arrowing through long lists.

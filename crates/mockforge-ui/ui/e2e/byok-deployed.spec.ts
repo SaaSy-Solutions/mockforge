@@ -35,7 +35,7 @@ test.describe('BYOK Keys — Deployed Site', () => {
 
     test('should display AI Provider options', async ({ page }) => {
       const main = mainContent(page);
-      await expect(main.getByText('AI Provider')).toBeVisible();
+      await expect(main.getByText('AI Provider').first()).toBeVisible();
       // Each provider appears as both a title and a description ("Use OpenAI API…"),
       // so use exact: true to disambiguate.
       await expect(main.getByText('OpenAI', { exact: true })).toBeVisible();

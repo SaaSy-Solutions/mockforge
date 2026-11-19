@@ -1,3 +1,9 @@
+// Not run by playwright-deployed.config.ts (issue #1051): /user-management was
+// retired (#15) — the surface lives inside the Organization page's Members /
+// Roles / Activity tabs — and this spec asserts the retired page's UI, whose
+// data comes from local-server endpoints (/api/users, /api/teams,
+// /api/invitations) that the registry does not serve. Kept in-tree; see the
+// testIgnore note in playwright-deployed.config.ts.
 import { test, expect } from '@playwright/test';
 
 /**

@@ -64,6 +64,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { isCloudMode as detectCloudMode } from '../../utils/cloudMode';
+import { useAuthStore } from '../../stores/useAuthStore';
 
 export interface NavItem {
   id: string;
@@ -492,10 +493,12 @@ function resolveItem(item: NavItem, sectionId: string, cloud: boolean): Resolved
  * local mode preserves the existing section layout.
  */
 export function getNavSections(cloud: boolean = detectCloudMode()): ResolvedNavSection[] {
+  const isAdmin = useAuthStore.getState().user?.is_admin === true;
   const resolved = navSections.map((section) => ({
     ...section,
     items: section.items
       .filter((item) => !(cloud && cloudHiddenNavItemIds.has(item.id)))
+      .filter((item) => item.id !== 'cloud-showcase-admin' || isAdmin)
       .map((item) => resolveItem(item, section.id, cloud)),
   }));
 
