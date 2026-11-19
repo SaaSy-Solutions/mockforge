@@ -5,8 +5,9 @@ on:
   # just benchmark code + workspace deps. The PR signal we care about is
   # "did this change regress benchmarks" — broader paths burned a 10-15 min
   # self-hosted run per PR for output that wasn't driving review decisions.
-  # Main-push still runs the full bench so the baseline published to the
-  # `bench-baseline` branch stays current.
+  # The full main bench runs nightly (not on every main push) so the baseline
+  # published to the `bench-baseline` branch stays current without a 45-minute
+  # run per merge on the shared runners.
   pull_request:
     paths:
       - 'crates/*/benches/**'
@@ -19,12 +20,12 @@ on:
       - 'scripts/tests/test_paired_benchmarks.py'
       - 'scripts/ci/*benchmarks*.py'
       - 'scripts/ci/benchmark_measurements.py'
-  push:
-    branches:
-      - main
+  schedule:
+    # Nightly at 05:41 UTC, clear of the other schedules (06:00, 07:23, :17, :47).
+    - cron: '41 5 * * *'
   workflow_dispatch:
 
-# Push-on-main retained: it republishes the bench-baseline branch.
+# The nightly run on main republishes the bench-baseline branch.
 # Concurrency keys are GitHub-internal context (not user-supplied), safe.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -117,13 +118,13 @@ jobs:
         run: node .github/scripts/compare-benchmarks.js compare
 
       - name: Save new baseline (main branch only)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'schedule' && github.ref == 'refs/heads/main'
         run: |
           echo "Saving new baseline from main branch..."
           node .github/scripts/compare-benchmarks.js save-baseline
 
       - name: Publish baseline to bench-baseline branch (main branch only)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'schedule' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ github.sha }}
