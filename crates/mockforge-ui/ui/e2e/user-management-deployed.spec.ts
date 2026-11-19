@@ -48,7 +48,7 @@ test.describe('User Management — Deployed Site', () => {
     });
 
     await expect(
-      mainContent(page).getByRole('heading', { name: 'User Management', level: 1 })
+      mainContent(page).getByRole('heading', { name: /Organization/i, level: 1 })
     ).toBeVisible({ timeout: 10000 });
 
     // Wait briefly to avoid hitting rate limits from previous test
@@ -57,14 +57,15 @@ test.describe('User Management — Deployed Site', () => {
 
   test.describe('Page Load', () => {
     test('should load the user management page', async ({ page }) => {
-      await expect(page).toHaveURL(/\/user-management/);
+      await expect(page).toHaveURL(/\/organization/);
       await expect(page).toHaveTitle(/MockForge/);
+      await expect(mainContent(page).getByRole('heading', { name: /Organization/i, level: 1 })).toBeVisible();
     });
 
     test('should display heading and subtitle', async ({ page }) => {
       const main = mainContent(page);
-      await expect(main.getByRole('heading', { name: 'User Management', level: 1 })).toBeVisible();
-      await expect(main.getByText('Manage users, teams, invitations, and quotas').first()).toBeVisible();
+      await expect(main.getByRole('heading', { name: /Organization/i, level: 1 })).toBeVisible();
+      await expect(main.getByText('Manage team workspaces and members').first()).toBeVisible();
     });
 
     test('should display breadcrumbs', async ({ page }) => {

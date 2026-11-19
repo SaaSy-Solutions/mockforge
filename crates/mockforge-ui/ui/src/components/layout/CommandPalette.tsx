@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import { useI18n } from '../../i18n/I18nProvider';
+import { isCloudMode } from '../../utils/cloudMode';
 import { useLogStore } from '../../stores/useLogStore';
 import { useServiceStore } from '../../stores/useServiceStore';
 import { useWorkspaceStore } from '../../stores/useWorkspaceStore';
@@ -48,13 +49,7 @@ interface CommandPaletteProps {
   onOpenHelp: () => void;
 }
 
-export function CommandPalette({
-  open,
-  onOpenChange,
-  onRefresh,
-  onToggleSidebar,
-  onOpenHelp,
-}: CommandPaletteProps) {
+export function CommandPalette({ open, onOpenChange, onRefresh, onToggleSidebar, onOpenHelp }: CommandPaletteProps) {
   const { t } = useI18n();
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
@@ -81,15 +76,19 @@ export function CommandPalette({
   const items = useMemo<PaletteItem[]>(() => {
     const close = () => onOpenChange(false);
     const q = query.trim();
-    const sections = getNavSections();
+    const cloud = isCloudMode();
+    const sections = getNavSections(cloud);
     const titleOf = (sectionId: string) => {
       const section = sections.find((s) => s.id === sectionId);
       return section?.titleKey ? t(section.titleKey) : undefined;
     };
-    const pages = [...sections.flatMap((s) => s.items), ...getHelpNavItems()].filter(
-      (item) => !item.localOnly,
-    );
+    const pages = [...sections.flatMap((s) => s.items), ...getHelpNavItems(cloud)].filter((item) => !item.localOnly);
     const goTo = (id: string) => () => {
+      if (id === 'run-locally') {
+        window.open('https://docs.mockforge.dev/getting-started/installation.html', '_blank', 'noopener,noreferrer');
+        close();
+        return;
+      }
       navigate('/' + id);
       close();
     };
@@ -112,9 +111,7 @@ export function CommandPalette({
     }
 
     // Section names count as search terms too ("settings" lists every settings page).
-    const pageMatches = pages.filter((p) =>
-      matchesNavQuery(p, `${t(p.labelKey)} ${titleOf(p.sectionId) ?? ''}`, q),
-    );
+    const pageMatches = pages.filter((p) => matchesNavQuery(p, `${t(p.labelKey)} ${titleOf(p.sectionId) ?? ''}`, q));
     for (const page of q ? pageMatches.slice(0, 8) : pageMatches.slice(0, 6)) {
       result.push({
         key: 'page:' + page.id,
@@ -206,12 +203,18 @@ export function CommandPalette({
       },
     ];
     if (onRefresh) {
-      shellActions.push({ key: 'action:refresh', group: 'actions', label: t('shell.action.refresh'), icon: RefreshCw,
-        onSelect: () => { onRefresh(); close(); } });
+      shellActions.push({
+        key: 'action:refresh',
+        group: 'actions',
+        label: t('shell.action.refresh'),
+        icon: RefreshCw,
+        onSelect: () => {
+          onRefresh();
+          close();
+        },
+      });
     }
-    actions.push(
-      ...shellActions.filter((a) => !q || a.label.toLowerCase().includes(q.toLowerCase())),
-    );
+    actions.push(...shellActions.filter((a) => !q || a.label.toLowerCase().includes(q.toLowerCase())));
     result.push(...actions);
     return result;
   }, [
@@ -338,16 +341,11 @@ export function CommandPalette({
                       )}
                     >
                       <Icon
-                        className={cn(
-                          'h-4 w-4 shrink-0',
-                          index === active ? 'text-primary' : 'text-muted-foreground',
-                        )}
+                        className={cn('h-4 w-4 shrink-0', index === active ? 'text-primary' : 'text-muted-foreground')}
                         aria-hidden
                       />
                       <span className="flex-1 truncate">{item.label}</span>
-                      {item.hint && (
-                        <span className="shrink-0 text-xs text-muted-foreground">{item.hint}</span>
-                      )}
+                      {item.hint && <span className="shrink-0 text-xs text-muted-foreground">{item.hint}</span>}
                       {index === active && (
                         <CornerDownLeft className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
                       )}

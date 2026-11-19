@@ -41,7 +41,7 @@ test.describe('Incident Dashboard — Deployed Site', () => {
   test.describe.configure({ mode: 'serial' });
 
   test.beforeEach(async ({ page }) => {
-    await page.goto(`${BASE_URL}/incidents`, {
+    await page.goto(`${BASE_URL}/cloud-incidents`, {
       waitUntil: 'domcontentloaded',
       timeout: 30000,
     });
@@ -65,8 +65,8 @@ test.describe('Incident Dashboard — Deployed Site', () => {
   // 1. Page Load & Layout
   // ---------------------------------------------------------------------------
   test.describe('Page Load & Layout', () => {
-    test('should load the incidents page at /incidents', async ({ page }) => {
-      await expect(page).toHaveURL(/\/incidents/);
+    test('should load the cloud incidents page', async ({ page }) => {
+      await expect(page).toHaveURL(/\/cloud-incidents/);
       await expect(page).toHaveTitle(/MockForge/);
     });
 
@@ -75,10 +75,8 @@ test.describe('Incident Dashboard — Deployed Site', () => {
         waitUntil: 'domcontentloaded',
         timeout: 30000,
       });
-      await expect(page).toHaveURL(/\/incident-dashboard/);
-      await expect(
-        mainContent(page).getByRole('heading', { name: 'Incident Dashboard', level: 1 })
-      ).toBeVisible({ timeout: 10000 });
+      await expect(page).toHaveURL(/\/cloud-incidents/);
+      await expect(mainContent(page).getByRole('heading', { name: /Incidents/i, level: 1 })).toBeVisible();
     });
 
     test('should display the page heading', async ({ page }) => {
@@ -918,7 +916,7 @@ test.describe('Incident Dashboard — Deployed Site', () => {
       if (hasIncidentsButton) {
         await nav.getByRole('button', { name: /Incidents/i }).click();
       } else {
-        await page.goto(`${BASE_URL}/incidents`, {
+        await page.goto(`${BASE_URL}/cloud-incidents`, {
           waitUntil: 'domcontentloaded',
           timeout: 30000,
         });
@@ -949,7 +947,7 @@ test.describe('Incident Dashboard — Deployed Site', () => {
       if (hasIncidentsButton) {
         await nav.getByRole('button', { name: /Incidents/i }).click();
       } else {
-        await page.goto(`${BASE_URL}/incidents`, {
+        await page.goto(`${BASE_URL}/cloud-incidents`, {
           waitUntil: 'domcontentloaded',
           timeout: 30000,
         });
