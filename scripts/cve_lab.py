@@ -23,9 +23,15 @@ from cve_lab_engine import (
 )
 from cve_lab_transport import target_url, receiver, control, unverified_context
 from cve_lab_nuclei import probe
+import cve_lab_sent as sent
 import cve_lab_evidence as evidence
 from cve_lab_evidence import BASELINE_GATES, CLASSIFIERS, describe
-from cve_lab_exploits import BASELINE_EXPLOITS, TARGET_EXPLOITS
+from cve_lab_exploits import (
+    BASELINE_EXPLOITS,
+    TARGET_EXPLOITS,
+    variant_baseline_steps,
+    variant_target_steps,
+)
 
 
 UNVERIFIED_MESSAGE = (
@@ -38,13 +44,45 @@ def verified_cves(include_unverified=False):
     return tuple(
         cve
         for cve, pack in PACKS.items()
-        if include_unverified or pack.get("verified", True)
+        if include_unverified or pack.get("verified", False)
     )
 
 
 def require_verified(cve, include_unverified):
-    if not PACKS[cve].get("verified", True) and not include_unverified:
+    if not PACKS[cve].get("verified", False) and not include_unverified:
         raise ValueError(f"{cve} {UNVERIFIED_MESSAGE}")
+
+
+def _pack_images_runnable(pack_catalog):
+    """Whether a pack's images can carry a run end to end today: every image
+    digest-pinned and no pending/unreviewed image status."""
+    status = pack_catalog.get("image_status") or ""
+    if "pending" in status or "unreviewed" in status:
+        return False
+    return all(
+        "@sha256:" in pack_catalog.get(key, "")
+        for key in ("application_image", "runner_image")
+    )
+
+
+def verified_runnable_cves():
+    """Verified packs whose images are also runnable end to end."""
+    return [
+        cve
+        for cve, pack in PACKS.items()
+        if pack.get("verified", False) and _pack_images_runnable(pack["catalog"])
+    ]
+
+
+def unverified_baseline_note():
+    """Plain-language suffix explaining an unverified pack's inconclusive run."""
+    runnable = ", ".join(verified_runnable_cves()) or "none"
+    return (
+        "This pack is unverified: its reference baseline has not yet "
+        "reproduced the bug on a MockForge lab host, so this result is a "
+        "known state of the pack, not a problem with your target or setup. "
+        f"Verified packs that run end to end: {runnable}."
+    )
 
 
 def run_plan_lines(args):
@@ -89,7 +127,11 @@ def run_plan_lines(args):
 def run(args):
     require_verified(args.cve, args.include_unverified)
     pack = PACKS[args.cve]
-    if pack["baseline_gate"] == "data-driven" or pack["classifier"] == "data-driven":
+    if (
+        pack["baseline_gate"] == "data-driven"
+        or pack["classifier"] == "data-driven"
+        or pack.get("signature_variants")
+    ):
         validate_data_driven_pack(pack)
     target_url(args.target) if args.target else None
     ipaddress.IPv4Address(args.listen_address)
@@ -100,6 +142,14 @@ def run(args):
     output = Path(args.output_dir).resolve()
     output.mkdir(parents=True, exist_ok=False)
     run_id = uuid.uuid4().hex
+    direct_host = (
+        "127.0.0.1" if args.listen_address == "0.0.0.0" else args.listen_address
+    )
+    sent.open_sink(
+        output / "sent_requests.jsonl",
+        origin=f"http://{direct_host}:{args.origin_port}",
+        target=args.target,
+    )
     report = {
         "schema_version": 1,
         "run_id": run_id,
@@ -107,7 +157,9 @@ def run(args):
         "target": args.target,
         "tls_verify": not args.skip_tls_verify,
         "verdict": "inconclusive",
+        "pack_verified": bool(pack.get("verified", False)),
         "runtime_patch_evidence": "unverified",
+        "sent_requests": "sent_requests.jsonl",
         "scope": "Selected CVE lab reproduction and request-blocking regression, not comprehensive CVE coverage",
     }
     (output / "ownership.json").write_text(
@@ -121,6 +173,13 @@ def run(args):
             "use this against an untrusted network.",
             flush=True,
         )
+    # The lab is up and the direct baseline is running against it: a failure
+    # from here until the target phase means the baseline did not reproduce.
+    # For an unverified pack that is a known state of the pack, which the
+    # report reason says plainly. Failures before this point (engine, image
+    # pulls, ports) are setup problems and get no such note.
+    direct_baseline_started = False
+    direct_baseline_complete = False
     try:
         prepare(args.engine, pack)
         image_verification = verify_images(args.engine, pack)
@@ -158,16 +217,12 @@ def run(args):
                 signature_header=pack["probe"].get("signature_header"),
                 max_body=(pack.get("exploit") or {}).get("max_forwarded_body"),
             ) as records:
-                direct_host = (
-                    "127.0.0.1"
-                    if args.listen_address == "0.0.0.0"
-                    else args.listen_address
-                )
                 origin = f"http://{direct_host}:{args.origin_port}"
                 print(
                     f"Lab ready. LB upstream: {args.listen_address}:{args.origin_port}",
                     flush=True,
                 )
+                direct_baseline_started = True
                 baseline_control = control(
                     pack, origin, run_id, "baseline-control", context=tls_context
                 )
@@ -197,6 +252,18 @@ def run(args):
                             "Direct baseline extra cases did not match their "
                             "expected statuses"
                         )
+                if pack.get("signature_variants"):
+                    baseline_variants, not_reproducing = variant_baseline_steps(
+                        args.engine, origin, output, run_id, pack
+                    )
+                    report["baseline_variants"] = baseline_variants
+                    if not_reproducing:
+                        raise RuntimeError(
+                            "Direct baseline signature variants did not "
+                            "reproduce the reviewed corruption: "
+                            + ", ".join(not_reproducing)
+                        )
+                direct_baseline_complete = True
                 if args.target:
                     target_start = len(records)
                     before = control(pack, args.target, run_id, "before", context=tls_context)
@@ -209,6 +276,19 @@ def run(args):
                         insecure=args.skip_tls_verify,
                     )
                     after = control(pack, args.target, run_id, "after", context=tls_context)
+                    target_variants = {}
+                    variant_tokens = frozenset()
+                    if pack.get("signature_variants"):
+                        target_variants = variant_target_steps(
+                            args.target.rstrip("/"),
+                            output,
+                            run_id,
+                            pack,
+                            context=tls_context,
+                        )
+                        variant_tokens = frozenset(
+                            outcome["token"] for outcome in target_variants.values()
+                        )
                     time.sleep(0.5)
                     verdict, reason, checks = CLASSIFIERS[pack["classifier"]](
                         pack,
@@ -218,12 +298,13 @@ def run(args):
                         after,
                         records[target_start:],
                         args.block_status,
+                        variant_tokens=variant_tokens,
                     )
                     if (
                         # control() is tolerant: a failed one has no body_sha256.
                         before.get("body_sha256") != baseline_control.get("body_sha256")
                         or after.get("body_sha256") != baseline_control.get("body_sha256")
-                    ):
+                    ) and not (verdict == "fail" and pack["classifier"] == "decoder-crash"):
                         verdict, reason = (
                             "inconclusive",
                             "LB controls did not match this application's benign control responses",
@@ -234,6 +315,40 @@ def run(args):
                                 "outcome": "not satisfied",
                             }
                         ]
+                    if pack.get("signature_variants"):
+                        (
+                            variant_entries,
+                            variants_ok,
+                            got_through,
+                            variant_verdicts,
+                        ) = evidence.signature_variant_evidence(
+                            pack,
+                            report.get("baseline_variants", {}),
+                            target_variants,
+                            records[:target_start],
+                            records[target_start:],
+                            args.block_status,
+                        )
+                        # Per-variant evidence can only downgrade the verdict:
+                        # a variant that got through fails the run and is
+                        # named, never averaged away.
+                        checks.extend(variant_entries)
+                        override, override_reason = evidence.variant_verdict(
+                            variants_ok, got_through
+                        )
+                        verdict, reason = evidence.merge_variant_verdict(
+                            verdict, reason, override, override_reason
+                        )
+                        report["signature_variants"] = {
+                            variant_id: {
+                                "direct": report.get("baseline_variants", {}).get(
+                                    variant_id
+                                ),
+                                "target": target_variants.get(variant_id),
+                                "verdict": label,
+                            }
+                            for variant_id, label in variant_verdicts.items()
+                        }
                     report.update(
                         verdict=verdict,
                         reason=reason,
@@ -255,12 +370,28 @@ def run(args):
         http.client.HTTPException,
         subprocess.TimeoutExpired,
     ) as exc:
-        report.update(verdict="inconclusive", reason=str(exc))
+        reason = str(exc)
+        if (
+            direct_baseline_started
+            and not direct_baseline_complete
+            and not report["pack_verified"]
+        ):
+            if not reason.endswith("."):
+                reason += "."
+            reason += " " + unverified_baseline_note()
+        report.update(verdict="inconclusive", reason=reason)
     finally:
-        (output / "report.json").write_text(json.dumps(report, indent=2) + "\n")
+        try:
+            (output / "report.json").write_text(
+                json.dumps(report, indent=2) + "\n"
+            )
+        finally:
+            sent.close_sink()
     print(describe(report))
     print(f"Report: {output / 'report.json'}")
+    print(f"Sent requests: {output / 'sent_requests.jsonl'}")
     return 0 if report["verdict"] in ("pass", "baseline-confirmed") else 1
+
 
 
 def main(argv=None):

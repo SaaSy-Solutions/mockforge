@@ -241,21 +241,6 @@ def host_network_refusal(recorder, probe):
     )
 
 
-def owned_remove(engine, name, run_id):
-    result = command([engine, "inspect", name], check=False)
-    if result.returncode:
-        listing = command([engine, "ps", "-a", "--format", "{{.Names}}"], check=False)
-        if listing.returncode or name in listing.stdout.splitlines():
-            raise RuntimeError(
-                f"Cannot verify removal of {name}: {result.stderr[-1000:]}"
-            )
-        return
-    item = json.loads(result.stdout)[0]
-    if item.get("Config", {}).get("Labels", {}).get(LABEL) != run_id:
-        raise RuntimeError(f"Refusing to remove unowned container {name}")
-    command([engine, "rm", "-f", name])
-
-
 def container_running(engine, run_id):
     """Whether this run's application container is still alive.
 
@@ -269,6 +254,7 @@ def container_running(engine, run_id):
     if result.returncode:
         return False
     return result.stdout.strip().lower() == "true"
+
 
 
 def container_log(engine, run_id, tail=400):
@@ -285,6 +271,21 @@ def container_log(engine, run_id, tail=400):
     if result.returncode:
         return ""
     return result.stdout + result.stderr
+
+
+def owned_remove(engine, name, run_id):
+    result = command([engine, "inspect", name], check=False)
+    if result.returncode:
+        listing = command([engine, "ps", "-a", "--format", "{{.Names}}"], check=False)
+        if listing.returncode or name in listing.stdout.splitlines():
+            raise RuntimeError(
+                f"Cannot verify removal of {name}: {result.stderr[-1000:]}"
+            )
+        return
+    item = json.loads(result.stdout)[0]
+    if item.get("Config", {}).get("Labels", {}).get(LABEL) != run_id:
+        raise RuntimeError(f"Refusing to remove unowned container {name}")
+    command([engine, "rm", "-f", name])
 
 
 @contextmanager
@@ -327,10 +328,6 @@ def lab(engine, run_id, output, pack):
         command(run_args)
         ports = command([engine, "port", name, app["port"]]).stdout.strip().splitlines()
         if not ports:
-            # No published mapping means the container never bound app["port"]
-            # (it exited or failed to start, e.g. the server could not bind the
-            # port). Surface the clean readiness diagnostic that run() catches
-            # instead of letting an IndexError escape as a raw traceback.
             raise RuntimeError(
                 "Application did not expose "
                 + app["port"]
@@ -341,7 +338,7 @@ def lab(engine, run_id, output, pack):
         while time.monotonic() < deadline:
             try:
                 ready = (
-                    request(backend, app["readiness"]["path"])[0]
+                    request(backend, app["readiness"]["path"], log_sent=False)[0]
                     == app["readiness"]["status"]
                 )
             except (OSError, ValueError, http.client.HTTPException):

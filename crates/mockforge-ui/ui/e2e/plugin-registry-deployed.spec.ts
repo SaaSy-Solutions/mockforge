@@ -27,7 +27,7 @@ test.describe('Plugin Registry — Deployed Site', () => {
     });
 
     await expect(
-      mainContent(page).getByRole('heading', { name: 'Plugin Registry' })
+      mainContent(page).getByRole('heading', { name: 'Plugin Registry' }).first()
     ).toBeVisible({ timeout: 10000 });
   });
 
@@ -42,7 +42,7 @@ test.describe('Plugin Registry — Deployed Site', () => {
 
     test('should display the page heading', async ({ page }) => {
       await expect(
-        mainContent(page).getByRole('heading', { name: 'Plugin Registry' })
+        mainContent(page).getByRole('heading', { name: 'Plugin Registry' }).first()
       ).toBeVisible();
     });
 
@@ -326,7 +326,7 @@ test.describe('Plugin Registry — Deployed Site', () => {
       await page.waitForTimeout(1500);
 
       await expect(
-        mainContent(page).getByRole('heading', { name: 'Plugin Registry' })
+        mainContent(page).getByRole('heading', { name: 'Plugin Registry' }).first()
       ).toBeVisible({ timeout: 5000 });
     });
 
@@ -344,7 +344,7 @@ test.describe('Plugin Registry — Deployed Site', () => {
       await page.waitForTimeout(1500);
 
       await expect(
-        mainContent(page).getByRole('heading', { name: 'Plugin Registry' })
+        mainContent(page).getByRole('heading', { name: 'Plugin Registry' }).first()
       ).toBeVisible({ timeout: 5000 });
     });
   });
@@ -355,7 +355,7 @@ test.describe('Plugin Registry — Deployed Site', () => {
   test.describe('Accessibility', () => {
     test('should have a page heading', async ({ page }) => {
       await expect(
-        mainContent(page).getByRole('heading', { name: 'Plugin Registry' })
+        mainContent(page).getByRole('heading', { name: 'Plugin Registry' }).first()
       ).toBeVisible();
     });
 
