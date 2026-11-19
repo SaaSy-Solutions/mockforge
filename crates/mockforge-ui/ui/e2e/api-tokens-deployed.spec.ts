@@ -71,7 +71,7 @@ test.describe('API Tokens — Deployed Site', () => {
     });
 
     test('should display "Create Token" button', async ({ page }) => {
-      await expect(mainContent(page).getByRole('button', { name: 'Create Token' })).toBeVisible();
+      await expect(mainContent(page).getByRole('button', { name: 'Create Token' }).first()).toBeVisible();
     });
   });
 
@@ -99,7 +99,7 @@ test.describe('API Tokens — Deployed Site', () => {
 
   test.describe('Create Token Dialog', () => {
     test('should open dialog from "Create Token" button', async ({ page }) => {
-      await mainContent(page).getByRole('button', { name: 'Create Token' }).click();
+      await mainContent(page).getByRole('button', { name: 'Create Token' }).first().click();
       await page.waitForTimeout(500);
 
       const dialog = page.getByRole('dialog');
@@ -108,7 +108,7 @@ test.describe('API Tokens — Deployed Site', () => {
     });
 
     test('should display Token Name field', async ({ page }) => {
-      await mainContent(page).getByRole('button', { name: 'Create Token' }).click();
+      await mainContent(page).getByRole('button', { name: 'Create Token' }).first().click();
       await page.waitForTimeout(500);
 
       const dialog = page.getByRole('dialog');
@@ -117,7 +117,7 @@ test.describe('API Tokens — Deployed Site', () => {
     });
 
     test('should display scope checkboxes', async ({ page }) => {
-      await mainContent(page).getByRole('button', { name: 'Create Token' }).click();
+      await mainContent(page).getByRole('button', { name: 'Create Token' }).first().click();
       await page.waitForTimeout(500);
 
       const dialog = page.getByRole('dialog');
@@ -130,7 +130,7 @@ test.describe('API Tokens — Deployed Site', () => {
     });
 
     test('should display Expires In field', async ({ page }) => {
-      await mainContent(page).getByRole('button', { name: 'Create Token' }).click();
+      await mainContent(page).getByRole('button', { name: 'Create Token' }).first().click();
       await page.waitForTimeout(500);
 
       const dialog = page.getByRole('dialog');
@@ -139,7 +139,7 @@ test.describe('API Tokens — Deployed Site', () => {
     });
 
     test('should disable Create button when name is empty', async ({ page }) => {
-      await mainContent(page).getByRole('button', { name: 'Create Token' }).click();
+      await mainContent(page).getByRole('button', { name: 'Create Token' }).first().click();
       await page.waitForTimeout(500);
       await expect(page.getByRole('dialog').getByRole('button', { name: 'Create Token' })).toBeDisabled();
     });
@@ -147,7 +147,7 @@ test.describe('API Tokens — Deployed Site', () => {
     test('should enable Create button when name and scope are filled', async ({ page }) => {
       // Deployed form requires both a token name AND at least one scope before
       // the Create button enables.
-      await mainContent(page).getByRole('button', { name: 'Create Token' }).click();
+      await mainContent(page).getByRole('button', { name: 'Create Token' }).first().click();
       await page.waitForTimeout(500);
 
       const dialog = page.getByRole('dialog');
@@ -161,7 +161,7 @@ test.describe('API Tokens — Deployed Site', () => {
     });
 
     test('should allow toggling a scope checkbox', async ({ page }) => {
-      await mainContent(page).getByRole('button', { name: 'Create Token' }).click();
+      await mainContent(page).getByRole('button', { name: 'Create Token' }).first().click();
       await page.waitForTimeout(500);
 
       const dialog = page.getByRole('dialog');
@@ -175,7 +175,7 @@ test.describe('API Tokens — Deployed Site', () => {
     });
 
     test('should allow toggling multiple scope checkboxes', async ({ page }) => {
-      await mainContent(page).getByRole('button', { name: 'Create Token' }).click();
+      await mainContent(page).getByRole('button', { name: 'Create Token' }).first().click();
       await page.waitForTimeout(500);
 
       const dialog = page.getByRole('dialog');
@@ -194,7 +194,7 @@ test.describe('API Tokens — Deployed Site', () => {
     });
 
     test('should allow setting expiry days', async ({ page }) => {
-      await mainContent(page).getByRole('button', { name: 'Create Token' }).click();
+      await mainContent(page).getByRole('button', { name: 'Create Token' }).first().click();
       await page.waitForTimeout(500);
 
       const dialog = page.getByRole('dialog');
@@ -210,7 +210,7 @@ test.describe('API Tokens — Deployed Site', () => {
     });
 
     test('should close dialog on Cancel', async ({ page }) => {
-      await mainContent(page).getByRole('button', { name: 'Create Token' }).click();
+      await mainContent(page).getByRole('button', { name: 'Create Token' }).first().click();
       await page.waitForTimeout(500);
       const dialog = page.getByRole('dialog');
       await expect(dialog).toBeVisible();
@@ -222,7 +222,7 @@ test.describe('API Tokens — Deployed Site', () => {
     test('should create a token and show it in the list', async ({ page }) => {
       const tokenName = `${E2E_TOKEN_PREFIX}${Date.now()}`;
       try {
-        await mainContent(page).getByRole('button', { name: 'Create Token' }).click();
+        await mainContent(page).getByRole('button', { name: 'Create Token' }).first().click();
         await page.waitForTimeout(500);
 
         const dialog = page.getByRole('dialog');
@@ -252,7 +252,7 @@ test.describe('API Tokens — Deployed Site', () => {
 
   test.describe('Token Scopes & Validation', () => {
     test('should display all 6 scope checkboxes with labels', async ({ page }) => {
-      await mainContent(page).getByRole('button', { name: 'Create Token' }).click();
+      await mainContent(page).getByRole('button', { name: 'Create Token' }).first().click();
       await page.waitForTimeout(500);
 
       const dialog = page.getByRole('dialog');
@@ -264,7 +264,7 @@ test.describe('API Tokens — Deployed Site', () => {
     });
 
     test('should allow selecting multiple scopes', async ({ page }) => {
-      await mainContent(page).getByRole('button', { name: 'Create Token' }).click();
+      await mainContent(page).getByRole('button', { name: 'Create Token' }).first().click();
       await page.waitForTimeout(500);
 
       const dialog = page.getByRole('dialog');
@@ -283,7 +283,7 @@ test.describe('API Tokens — Deployed Site', () => {
     });
 
     test('should accept custom expiry days value', async ({ page }) => {
-      await mainContent(page).getByRole('button', { name: 'Create Token' }).click();
+      await mainContent(page).getByRole('button', { name: 'Create Token' }).first().click();
       await page.waitForTimeout(500);
 
       const dialog = page.getByRole('dialog');
@@ -312,7 +312,7 @@ test.describe('API Tokens — Deployed Site', () => {
     });
 
     test('dialog should have proper heading and labeled inputs', async ({ page }) => {
-      await mainContent(page).getByRole('button', { name: 'Create Token' }).click();
+      await mainContent(page).getByRole('button', { name: 'Create Token' }).first().click();
       await page.waitForTimeout(500);
       const dialog = page.getByRole('dialog');
       await expect(dialog.getByRole('heading', { level: 2 })).toBeVisible();

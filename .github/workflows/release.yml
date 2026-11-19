@@ -51,7 +51,7 @@ jobs:
       # GitHub cache storage. See scripts/ci/runner-cargo-target.sh.
       if: runner.environment == 'self-hosted'
       env:
-        MOCKFORGE_RUNNER_TARGET_MAX_GB: ${{ vars.MOCKFORGE_RUNNER_TARGET_MAX_GB || '40' }}
+        MOCKFORGE_RUNNER_TARGET_MAX_GB: ${{ vars.MOCKFORGE_RUNNER_TARGET_MAX_GB || '25' }}
       run: bash scripts/ci/guard-runner-cargo-targets.sh && bash scripts/ci/runner-cargo-target.sh release >> "$GITHUB_ENV"
 
     # mockforge-cli's default features do NOT include `ws`/`grpc`/`mqtt` (see
@@ -205,7 +205,7 @@ jobs:
       # GitHub cache storage. See scripts/ci/runner-cargo-target.sh.
       if: runner.environment == 'self-hosted'
       env:
-        MOCKFORGE_RUNNER_TARGET_MAX_GB: ${{ vars.MOCKFORGE_RUNNER_TARGET_MAX_GB || '40' }}
+        MOCKFORGE_RUNNER_TARGET_MAX_GB: ${{ vars.MOCKFORGE_RUNNER_TARGET_MAX_GB || '25' }}
       run: bash scripts/ci/guard-runner-cargo-targets.sh && bash scripts/ci/runner-cargo-target.sh release-publish >> "$GITHUB_ENV"
 
     - name: Publish crates
