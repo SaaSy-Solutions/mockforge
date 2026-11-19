@@ -57,4 +57,8 @@ ignore = [
     "RUSTSEC-2026-0372",
     # libsqlite3-sys via sqlx 0.8; low exposure, see root audit.toml (#1552).
     "RUSTSEC-2026-0459",
+    # wasmtime advisories whose upstream affected ranges start above 36.x
+    # (>= 39 and >= 47); see root audit.toml.
+    "RUSTSEC-2026-0567",
+    "RUSTSEC-2026-0573",
 ]
