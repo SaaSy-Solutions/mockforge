@@ -19,6 +19,8 @@ import socket as _socket
 import time as _time
 from urllib.parse import parse_qs, urlsplit
 
+import cve_lab_sent as sent
+
 MAGIC = b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
 
 DATA = 0x0
@@ -682,7 +684,15 @@ def request(host, port, method, path, headers, body=b"", timeout=10):
     reported as evidence (``reset``/``error``), never silently retried.
     """
     result = {"status": None, "headers": [], "body": b"", "reset": False, "goaway": False, "error": None}
-    sock = _socket.create_connection((host, port), timeout=timeout)
+    started = _time.monotonic()
+    try:
+        # A connection failure still raises to the caller, exactly as before
+        # the sent-requests log existed; it is recorded on the way out.
+        sock = _socket.create_connection((host, port), timeout=timeout)
+    except OSError as exc:
+        result["error"] = str(exc)
+        _record_sent(host, port, method, path, headers, body, result, started)
+        raise
     sock.settimeout(timeout)
     try:
         sock.sendall(MAGIC + frame(SETTINGS, 0, 0, settings_payload(((SETTINGS_ENABLE_PUSH, 0),))))
@@ -766,11 +776,26 @@ def request(host, port, method, path, headers, body=b"", timeout=10):
             elif frame_type == PING and not flags & FLAG_ACK:
                 sock.sendall(frame(PING, FLAG_ACK, 0, payload))
         result["body"] = bytes(response_body)
-        return result
     except (OSError, Http2Error, ValueError) as exc:
         result["error"] = str(exc)
         if isinstance(exc, ConnectionResetError):
             result["reset"] = True
-        return result
     finally:
         sock.close()
+        _record_sent(host, port, method, path, headers, body, result, started)
+    return result
+
+
+def _record_sent(host, port, method, path, headers, body, result, started):
+    """Log the logical request (not its frames) to the sent-requests log."""
+    sent.record(
+        base=sent.base_url("http", host, port),
+        method=method,
+        path=path,
+        headers=dict(headers),
+        body=body,
+        status=result["status"],
+        error=result["error"],
+        elapsed_ms=(_time.monotonic() - started) * 1000,
+        client="python-http2",
+    )

@@ -1,3 +1,8 @@
+// Not run by playwright-deployed.config.ts (issue #1051): /chaos is hidden on
+// the cloud app because cloud chaos campaigns supersede it — cloudHiddenNavItemIds
+// in src/components/layout/navigation.ts points chaos at /cloud-chaos, and this
+// spec asserts the local-server chaos UI (/api/chaos/*), which the registry does
+// not serve. Kept in-tree; see the testIgnore note in playwright-deployed.config.ts.
 import { test, expect } from '@playwright/test';
 
 /**

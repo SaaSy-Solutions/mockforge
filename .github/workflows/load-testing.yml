@@ -1,20 +1,15 @@
 name: Load Testing & Performance Regression
 
-# Load tests run on main-push + manual dispatch only — NOT per-PR. Load testing
-# and perf benchmarks as PR merge-gates burned a full release build + k6 run on
-# every code PR against a single self-hosted runner, for a signal we don't gate
-# merges on (none of these jobs are required checks). The regression we actually
-# act on is "did this regress after landing on main", so they run post-merge.
-# Nightly cron stays disabled (runner queue contention); use workflow_dispatch
-# for on-demand runs.
+# Load tests run nightly on main + manual dispatch only — NOT per-PR and not per
+# main push. As PR gates they burned a full release build + k6 run per code PR,
+# and on every main push they queued 45-60 minute runs ahead of CI and releases
+# on the shared runners, for a signal we don't gate merges on (none of these
+# jobs are required checks). The regression we act on is "did main regress",
+# which one nightly run answers. Use workflow_dispatch for on-demand runs.
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'crates/**'
-      - 'tests/load/**'
-      - 'Cargo.toml'
-      - '.github/workflows/load-testing.yml'
+  schedule:
+    # Nightly at 04:41 UTC, clear of the other schedules (06:00, 07:23, :17, :47).
+    - cron: '41 4 * * *'
   workflow_dispatch:
     inputs:
       test_type:
@@ -85,15 +80,15 @@ jobs:
           python3 - >> "$GITHUB_ENV" <<'EOF'
           import socket
           held = []
-          for name in ("HTTP", "WS", "GRPC", "ADMIN", "METRICS"):
+          for name in ("HTTP", "ADMIN", "METRICS"):
               s = socket.socket()
               s.bind(("", 0))
               held.append(s)
               print(f"MF_{name}_PORT={s.getsockname()[1]}")
           EOF
           . <(grep '^MF_' "$GITHUB_ENV" | sed 's/^/export /')
-          ./target/release/mockforge serve --spec examples/user-management-api.json --no-rate-limit \
-            --http-port "$MF_HTTP_PORT" --ws-port "$MF_WS_PORT" --grpc-port "$MF_GRPC_PORT" \
+          "${CARGO_TARGET_DIR:-target}/release/mockforge" serve --spec examples/user-management-api.json --no-rate-limit \
+            --http-port "$MF_HTTP_PORT" \
             --admin --admin-port "$MF_ADMIN_PORT" --metrics-port "$MF_METRICS_PORT" \
             > mockforge-server.log 2>&1 &
           pid=$!
@@ -163,15 +158,15 @@ jobs:
           python3 - >> "$GITHUB_ENV" <<'EOF'
           import socket
           held = []
-          for name in ("HTTP", "WS", "GRPC", "ADMIN", "METRICS"):
+          for name in ("HTTP", "ADMIN", "METRICS"):
               s = socket.socket()
               s.bind(("", 0))
               held.append(s)
               print(f"MF_{name}_PORT={s.getsockname()[1]}")
           EOF
           . <(grep '^MF_' "$GITHUB_ENV" | sed 's/^/export /')
-          ./target/release/mockforge serve --spec examples/user-management-api.json --no-rate-limit \
-            --http-port "$MF_HTTP_PORT" --ws-port "$MF_WS_PORT" --grpc-port "$MF_GRPC_PORT" \
+          "${CARGO_TARGET_DIR:-target}/release/mockforge" serve --spec examples/user-management-api.json --no-rate-limit \
+            --http-port "$MF_HTTP_PORT" \
             --admin --admin-port "$MF_ADMIN_PORT" --metrics-port "$MF_METRICS_PORT" \
             > mockforge-server.log 2>&1 &
           pid=$!

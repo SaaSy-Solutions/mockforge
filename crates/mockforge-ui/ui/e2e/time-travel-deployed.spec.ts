@@ -80,7 +80,7 @@ test.describe('Time Travel — Deployed Site', () => {
 
     test('should display breadcrumb navigation', async ({ page }) => {
       const banner = page.getByRole('banner');
-      await expect(banner.getByText('Home').first()).toBeVisible();
+      await expect(banner.getByText('Test & Verify', { exact: true }).first()).toBeVisible();
       await expect(banner.getByText('Time Travel').first()).toBeVisible();
     });
 
