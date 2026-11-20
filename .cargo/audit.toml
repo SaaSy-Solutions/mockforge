@@ -4,34 +4,13 @@ ignore = [
     "RUSTSEC-2026-0435",
     "RUSTSEC-2023-0071",
     "RUSTSEC-2024-0370",
-    "RUSTSEC-2026-0020",
-    "RUSTSEC-2026-0021",
-    "RUSTSEC-2026-0044",
-    "RUSTSEC-2026-0045",
-    "RUSTSEC-2026-0046",
-    "RUSTSEC-2026-0047",
-    "RUSTSEC-2026-0048",
     "RUSTSEC-2026-0049",
     # quick-xml < 0.41.0 DoS (published 2026-07-02); direct SAML bump tracked
     # in #919. Root audit.toml is the CI source of truth; kept here for local
     # `cargo audit` runs.
     "RUSTSEC-2026-0194",
     "RUSTSEC-2026-0195",
-    # zstd/zstd-safe 2026-10 advisories; see root audit.toml for the reason.
-    "RUSTSEC-2026-0391",
-    "RUSTSEC-2026-0398",
-    "RUSTSEC-2026-0403",
     # 2026-10-29 batch; see root audit.toml for reasons.
-    "RUSTSEC-2026-0395",
-    "RUSTSEC-2026-0396",
-    "RUSTSEC-2026-0397",
-    "RUSTSEC-2026-0399",
-    "RUSTSEC-2026-0400",
-    "RUSTSEC-2026-0401",
-    "RUSTSEC-2026-0402",
-    "RUSTSEC-2026-0404",
-    "RUSTSEC-2026-0405",
-    "RUSTSEC-2026-0406",
     "RUSTSEC-2024-0429",
     "RUSTSEC-2026-0002",
     "RUSTSEC-2026-0253",
@@ -57,8 +36,14 @@ ignore = [
     "RUSTSEC-2026-0372",
     # libsqlite3-sys via sqlx 0.8; low exposure, see root audit.toml (#1552).
     "RUSTSEC-2026-0459",
-    # wasmtime advisories whose upstream affected ranges start above 36.x
-    # (>= 39 and >= 47); see root audit.toml.
-    "RUSTSEC-2026-0567",
-    "RUSTSEC-2026-0573",
+    # Present in root audit.toml (the CI source of truth) but missing here;
+    # see the reasons there.
+    "RUSTSEC-2026-0098",
+    "RUSTSEC-2026-0099",
+    "RUSTSEC-2026-0104",
+    "RUSTSEC-2026-0187",
+    "RUSTSEC-2026-0258",
+    "RUSTSEC-2026-0271",
+    "RUSTSEC-2026-0275",
+    "RUSTSEC-2026-0382",
 ]
