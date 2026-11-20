@@ -646,10 +646,15 @@ class PackRegistryTests(unittest.TestCase):
             nuclei.probe(
                 "docker", "http://127.0.0.1:1", output, "baseline", "run1", pack
             )
-        args = command.call_args.args[0]
-        self.assertIn(pack["catalog"]["runner_image"], args)
-        self.assertIn("-duc", args)
-        self.assertNotIn("pull", args)
+        calls = [call.args[0] for call in command.call_args_list]
+        # The client container is created from the pinned image, then started;
+        # the image and the update-check flag live on the create call.
+        created = [args for args in calls if "create" in args]
+        self.assertEqual(len(created), 1, calls)
+        self.assertIn(pack["catalog"]["runner_image"], created[0])
+        self.assertIn("-duc", created[0])
+        for args in calls:
+            self.assertNotIn("pull", args)
 
 
 class Cve20244577PackTests(unittest.TestCase):
