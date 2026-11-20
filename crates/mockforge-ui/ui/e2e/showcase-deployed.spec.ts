@@ -75,11 +75,11 @@ test.describe('Community Showcase — Deployed Site', () => {
         .getByText('Showcase')
         .isVisible({ timeout: 3000 })
         .catch(() => false);
-      const hasHomeBreadcrumb = await banner
-        .getByText('Home')
+      const hasSection = await banner
+        .getByText('Ecosystem', { exact: true })
         .isVisible({ timeout: 3000 })
         .catch(() => false);
-      expect(hasBreadcrumb || hasHomeBreadcrumb).toBeTruthy();
+      expect(hasBreadcrumb && hasSection).toBeTruthy();
     });
   });
 

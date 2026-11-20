@@ -8,6 +8,8 @@ export interface User {
   preferences?: UserPreferences;
   /** Cloud-only: hydrated from /api/v1/users/me; absent in local admin mode. */
   is_verified?: boolean;
+  /** Cloud-only: site administrator status from /api/v1/users/me. */
+  is_admin?: boolean;
   /** Cloud-only: account creation timestamp from /api/v1/users/me. */
   created_at?: string;
 }

@@ -54,7 +54,7 @@ test.describe('Template Marketplace — Deployed Site', () => {
 
     test('should display breadcrumb navigation', async ({ page }) => {
       const banner = page.getByRole('banner');
-      await expect(banner.getByText('Home')).toBeVisible();
+      await expect(banner.getByText('Ecosystem', { exact: true })).toBeVisible();
       await expect(banner.getByText('Template Marketplace')).toBeVisible();
     });
   });

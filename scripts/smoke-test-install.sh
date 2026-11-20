@@ -62,14 +62,18 @@ if [ "$FAST" = true ]; then
 fi
 
 # Stage 2: simulate `cargo install --locked mockforge-cli` from local path in
-# a fresh target dir. This catches issues that the workspace target dir could
-# mask (e.g. cached artifacts compiled with a wider feature set during an
-# earlier `cargo build --workspace`).
+# a fresh target dir by default. `SMOKE_INSTALL_TARGET_DIR` can point at a
+# runner-persistent target to reuse dependency artifacts. This remains a
+# faithful install-path check: Cargo resolves features for the installed
+# package alone and keys artifacts by feature set, so a shared target cannot
+# mask the v0.3.142-class feature-unification bug; it only reuses dependency
+# artifacts whose features match.
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
+INSTALL_TARGET_DIR="${SMOKE_INSTALL_TARGET_DIR:-$TMP/target}"
 
-blue "==> [2/2] cargo install --locked --path crates/mockforge-cli --root $TMP --target-dir $TMP/target --force"
-if ! cargo install --locked --path crates/mockforge-cli --root "$TMP" --target-dir "$TMP/target" --force; then
+blue "==> [2/2] cargo install --locked --path crates/mockforge-cli --root $TMP --target-dir $INSTALL_TARGET_DIR --force"
+if ! cargo install --locked --path crates/mockforge-cli --root "$TMP" --target-dir "$INSTALL_TARGET_DIR" --force; then
   red "FAIL: cargo install --locked --path failed."
   red "      Users running 'cargo install mockforge-cli' would hit the same error."
   exit 1

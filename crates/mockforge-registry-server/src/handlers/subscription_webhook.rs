@@ -146,10 +146,21 @@ async fn apply_inner(
 
     let existing = Subscription::find_by_stripe_subscription_id(pool, &subscription.id).await?;
     let org_id = if deleted {
-        existing
-            .as_ref()
-            .map(|record| record.org_id)
-            .ok_or_else(|| pending("subscription deletion arrived before its prerequisite"))?
+        if let Some(record) = existing.as_ref() {
+            record.org_id
+        } else {
+            let org_id =
+                subscription.metadata.get("org_id").and_then(|id| Uuid::parse_str(id).ok());
+            let Some(org_id) = org_id else {
+                return Err(WebhookError::Ignored("missing subscription organization".into()));
+            };
+            if Organization::find_by_id(pool, org_id).await?.is_none() {
+                return Err(WebhookError::Ignored(
+                    "subscription organization no longer exists".into(),
+                ));
+            }
+            return Err(pending("subscription deletion arrived before its prerequisite"));
+        }
     } else {
         subscription
             .metadata

@@ -454,9 +454,9 @@ dependencies = [
 
 [[package]]
 name = "async-compression"
-version = "0.4.51"
+version = "0.4.52"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9d5755640120b24961f8231e05892e4a4f7e0d04e8aeca161508c9c397946970"
+checksum = "6ad47a740fb906fffdd891e8b6d5fde2511600f7bfaebd68939fa08a14999459"
 dependencies = [
  "compression-codecs",
  "compression-core",
@@ -1347,9 +1347,9 @@ dependencies = [
 
 [[package]]
 name = "aws-smithy-types"
-version = "1.9.1"
+version = "1.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cf183d70774ea2cfcc101ca74a8884e4c76be8b9df65cd303f6a1175c88e8f80"
+checksum = "aff4bf014c512840b2bba80a20417b723cbd6a0a65c02e2d81f50b4268aedfc7"
 dependencies = [
  "base64-simd",
  "bytes",
@@ -1361,7 +1361,6 @@ dependencies = [
  "http-body 1.0.1",
  "http-body-util",
  "itoa",
- "num-integer",
  "pin-project-lite",
  "ryu",
  "serde",
@@ -2631,9 +2630,9 @@ dependencies = [
 
 [[package]]
 name = "compression-codecs"
-version = "0.4.46"
+version = "0.4.47"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cae36683101b2899f48bd31f8db9839437356188e3b1ff23096e73dab09ba8fe"
+checksum = "84f840cff84d10085260e460023934d0af699e71212b09b2a41452e8bd9cda43"
 dependencies = [
  "brotli",
  "compression-core",
@@ -2947,36 +2946,36 @@ dependencies = [
 
 [[package]]
 name = "cranelift-assembler-x64"
-version = "0.123.20"
+version = "0.123.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "40d4018626c25bb153a72738b261bdfed97ad6b7f21b100d556c0b8457fa9b3b"
+checksum = "142696a120a5dc298df74bcfb8c5ec43f0f8c53ff2f3607b3cffe67c1bc3fe0b"
 dependencies = [
  "cranelift-assembler-x64-meta",
 ]
 
 [[package]]
 name = "cranelift-assembler-x64-meta"
-version = "0.123.20"
+version = "0.123.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c69b47b7ffbd42f8d162ee958886e685b374b102b3bd116b0470c911153428b4"
+checksum = "24a12a121860c44ba6dc9d0bd2b4b9284f409c2f305aa04093184a7878148726"
 dependencies = [
  "cranelift-srcgen",
 ]
 
 [[package]]
 name = "cranelift-bforest"
-version = "0.123.20"
+version = "0.123.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d1994514a2e498d42a7173804fb0618472c94176b72c54ef8d64acdada05d0f"
+checksum = "26e0347ec8886cfe409616aeeeb3d1ee4ae0ec6ae0e053fc111e0214f67c830c"
 dependencies = [
  "cranelift-entity",
 ]
 
 [[package]]
 name = "cranelift-bitset"
-version = "0.123.20"
+version = "0.123.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "019bfe57e970cf56fd9ad9ea45e4290457eb1ceb9bea954646abbe9d657a4a61"
+checksum = "b8a8d504f1c49cf5b3c59166fa77c990d6618987baa16095a8adbc125218a710"
 dependencies = [
  "serde",
  "serde_derive",
@@ -2984,9 +2983,9 @@ dependencies = [
 
 [[package]]
 name = "cranelift-codegen"
-version = "0.123.20"
+version = "0.123.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "397c0a3cc8a67f9f85dbe47fbba2c1e88430293b130f91f3c98411f6ae4e0e80"
+checksum = "0826e7db0453c2e4def6cc16e661309b88acfe5c688727d2bd14f210c5979228"
 dependencies = [
  "bumpalo",
  "cranelift-assembler-x64",
@@ -3011,9 +3010,9 @@ dependencies = [
 
 [[package]]
 name = "cranelift-codegen-meta"
-version = "0.123.20"
+version = "0.123.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a5bc504c51980615d594a685367584d1fa95d36c32c14a15b0eb4b1d9cc0dc2e"
+checksum = "5466899a46c1b457a2c40e62c0db595ead52ce070283349f24f1ea3e3ab95e59"
 dependencies = [
  "cranelift-assembler-x64-meta",
  "cranelift-codegen-shared",
@@ -3024,24 +3023,24 @@ dependencies = [
 
 [[package]]
 name = "cranelift-codegen-shared"
-version = "0.123.20"
+version = "0.123.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc8ae2c52ca44f49719cd78e48480c076e115a490b4e51ae28a89535ec4d76df"
+checksum = "4cb2af0ddf040bc688bb1c7c3f98026caf1f7be9735a90abe5210fb3ed61b31e"
 
 [[package]]
 name = "cranelift-control"
-version = "0.123.20"
+version = "0.123.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d94159e930a391bb589c8c4832769c3e2f9c81d8f1cd1266083a33a1787d41a9"
+checksum = "23928359f722201147e559d1ad68b26e04f542df2da609615883373ca95488f9"
 dependencies = [
  "arbitrary",
 ]
 
 [[package]]
 name = "cranelift-entity"
-version = "0.123.20"
+version = "0.123.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5cc0257dc68c7d282dabc1b3c9effec3f5d00fff56a964a80e7c08af7a3aa4dc"
+checksum = "544a5be17891f159c85d2a1200cbd1846d5ffdc9fbb26fa9140f4c0040cde8fe"
 dependencies = [
  "cranelift-bitset",
  "serde",
@@ -3050,9 +3049,9 @@ dependencies = [
 
 [[package]]
 name = "cranelift-frontend"
-version = "0.123.20"
+version = "0.123.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5a60aa092dbffc0b8e501845afc3f67a3c987d780d22dd302829aa9f0255738e"
+checksum = "41a1775f555a016d16b212b38b7f4b4759f258ae90c7139ffc198bb3cb63829c"
 dependencies = [
  "cranelift-codegen",
  "log",
@@ -3062,15 +3061,15 @@ dependencies = [
 
 [[package]]
 name = "cranelift-isle"
-version = "0.123.20"
+version = "0.123.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e62bea43dd7767887c6b7861021846b0f0a03d9cc72bafddd0827e79b5f5deb5"
+checksum = "3cc4649f050a50eaf0ee29b47d797e76a7dbd6f4a1fa1247e21667fd50ccc197"
 
 [[package]]
 name = "cranelift-native"
-version = "0.123.20"
+version = "0.123.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f410a5e75d4758d0564106931a1809d50d17681385ea1686518d029593a06b2a"
+checksum = "90b5fbff9fd5b0fef29865a393f77d1706f9ed50ff90ca40f2768ea2f53ccc7c"
 dependencies = [
  "cranelift-codegen",
  "libc",
@@ -3079,9 +3078,9 @@ dependencies = [
 
 [[package]]
 name = "cranelift-srcgen"
-version = "0.123.20"
+version = "0.123.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d5f98d0e96c17d2654a95820c77403050754561f2b2cd737dbf59462c64896f3"
+checksum = "d2877cb00084918ff719184b88e247a2b46ebd0dca27fac3569a168590053ae1"
 
 [[package]]
 name = "crc"
@@ -3112,9 +3111,9 @@ dependencies = [
 
 [[package]]
 name = "crc32c"
-version = "0.6.8"
+version = "0.6.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3a47af21622d091a8f0fb295b88bc886ac74efcc613efc19f5d0b21de5c89e47"
+checksum = "7f132a176423ee852e8f0a35d43088d1850966b50745be818a88b76f64b1c6cb"
 dependencies = [
  "rustc_version",
 ]
@@ -4138,11 +4137,11 @@ dependencies = [
 
 [[package]]
 name = "email-encoding"
-version = "0.4.1"
+version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9298e6504d9b9e780ed3f7dfd43a61be8cd0e09eb07f7706a945b0072b6670b6"
+checksum = "9f690ae2169f2ceb3f45b28b6fcd8fa16839f2f5c8818546774b9425f5f71004"
 dependencies = [
- "base64 0.22.1",
+ "base64 0.23.1",
  "memchr",
 ]
 
@@ -4520,9 +4519,9 @@ checksum = "b7ac824320a75a52197e8f2d787f6a38b6718bb6897a35142d749af3c0e8f4fe"
 
 [[package]]
 name = "flate2"
-version = "1.1.10"
+version = "1.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e634e2e0ebac1ee034020da1ca582e17ffe4e0f5e985823721e168928136dcb"
+checksum = "626d4928326b646e70f65ed36fc7cf9f206bdb68a0019ee7c6b4709da4e084c4"
 dependencies = [
  "crc32fast",
  "miniz_oxide 0.9.1",
@@ -5316,7 +5315,7 @@ dependencies = [
  "opentelemetry_sdk 0.32.0",
  "percent-encoding",
  "pin-project",
- "prost 0.14.4",
+ "prost 0.14.6",
  "prost-types",
  "reqwest 0.13.4",
  "rustc_version",
@@ -5423,7 +5422,7 @@ dependencies = [
  "http-body 1.0.1",
  "md5 0.8.0",
  "percent-encoding",
- "prost 0.14.4",
+ "prost 0.14.6",
  "prost-types",
  "serde",
  "serde_json",
@@ -7196,9 +7195,9 @@ checksum = "09edd9e8b54e49e587e4f6295a7d29c3ea94d469cb40ab8ca70b288248a81db2"
 
 [[package]]
 name = "lettre"
-version = "0.11.23"
+version = "0.11.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f2c646bd5cc763b1087b15493e29a64be6147ba8f19342004fa52048ee596eae"
+checksum = "f294f3d7cdb313e578acef7d7727d4e8d897e0fcd0d6d58c19959cec95073f19"
 dependencies = [
  "async-trait",
  "base64 0.23.1",
@@ -7382,9 +7381,9 @@ dependencies = [
 
 [[package]]
 name = "libz-sys"
-version = "1.1.31"
+version = "1.1.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ff20308ecabd635a2dc1dd5834a86c462cca20efba1d5d3ddab1f8aea3455cb2"
+checksum = "fee3f59f4321dab0c78d828942e7aa09d0bd8ad6e78a501977e6bf3d02938045"
 dependencies = [
  "cc",
  "libc",
@@ -7480,9 +7479,9 @@ checksum = "112b39cec0b298b6c1999fee3e31427f74f676e4cb9879ed1a121b43661a4154"
 
 [[package]]
 name = "lz4_flex"
-version = "0.11.6"
+version = "0.11.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "373f5eceeeab7925e0c1098212f2fbc4d416adec9d35051a6ab251e824c1854a"
+checksum = "13591d77a9b6d941f7e6fcade7f9dfd9e801308752bde50c0a9bb5852778c22c"
 dependencies = [
  "twox-hash",
 ]
@@ -7710,7 +7709,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-ai-core"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "async-trait",
  "chrono",
@@ -7727,7 +7726,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-amqp"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -7751,7 +7750,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-analytics"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "anyhow",
  "chrono",
@@ -7773,7 +7772,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-auth"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "async-trait",
  "axum 0.8.9",
@@ -7802,7 +7801,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-behavioral-cloning"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "async-trait",
  "chrono",
@@ -7815,7 +7814,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-bench"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -7855,7 +7854,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-chaos"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -7896,7 +7895,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-chaos-ml"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "anyhow",
  "chrono",
@@ -7911,7 +7910,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-chaos-orchestration"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -7934,7 +7933,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-chaos-proxy"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "axum 0.8.9",
  "mockforge-bench",
@@ -7950,7 +7949,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-cli"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -8032,7 +8031,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-collab"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "anyhow",
  "argon2",
@@ -8077,7 +8076,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-config"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "schemars 0.8.22",
  "serde",
@@ -8087,7 +8086,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-contracts"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "async-trait",
  "bytes",
@@ -8113,7 +8112,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-core"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -8154,7 +8153,7 @@ dependencies = [
  "openapiv3",
  "pbkdf2 0.12.2",
  "proptest",
- "prost 0.14.4",
+ "prost 0.14.6",
  "prost-reflect",
  "prost-types",
  "rand 0.9.5",
@@ -8189,7 +8188,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-data"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8224,7 +8223,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-desktop"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "anyhow",
  "axum 0.8.9",
@@ -8257,7 +8256,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-federation"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8280,7 +8279,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-foundation"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "async-trait",
  "chrono",
@@ -8305,7 +8304,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-ftp"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8332,7 +8331,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-graphql"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "anyhow",
  "async-graphql",
@@ -8370,7 +8369,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-grpc"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "async-trait",
  "axum 0.8.9",
@@ -8389,7 +8388,7 @@ dependencies = [
  "once_cell",
  "opentelemetry 0.22.0",
  "opentelemetry_sdk 0.22.1",
- "prost 0.14.4",
+ "prost 0.14.6",
  "prost-reflect",
  "prost-types",
  "protoc-bin-vendored",
@@ -8414,7 +8413,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-http"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8500,7 +8499,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-import"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "axum 0.8.9",
  "base64 0.22.1",
@@ -8518,7 +8517,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-integration-tests"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "axum 0.8.9",
  "chrono",
@@ -8547,7 +8546,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-intelligence"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8582,7 +8581,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-k8s-operator"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "anyhow",
  "chrono",
@@ -8604,7 +8603,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-kafka"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8627,12 +8626,12 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
- "zstd 0.13.3",
+ "zstd 0.13.5",
 ]
 
 [[package]]
 name = "mockforge-mqtt"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8658,7 +8657,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-observability"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "axum 0.8.9",
  "chrono",
@@ -8681,7 +8680,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-openapi"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "async-trait",
  "axum 0.8.9",
@@ -8707,7 +8706,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-performance"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8723,7 +8722,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-pipelines"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8753,7 +8752,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-platform-signing"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "async-trait",
  "aws-config",
@@ -8772,7 +8771,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-cli"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "anyhow",
  "base64 0.21.7",
@@ -8802,7 +8801,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-core"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8831,7 +8830,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-egress"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "anyhow",
  "ipnet",
@@ -8846,7 +8845,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-host"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -8870,7 +8869,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-loader"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8910,7 +8909,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-registry"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "chrono",
  "dirs 5.0.1",
@@ -8928,7 +8927,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-response-graphql"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8947,7 +8946,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-sdk"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8972,7 +8971,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-protocol"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "async-trait",
  "chrono",
@@ -8989,7 +8988,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-proxy"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "async-compression",
  "axum 0.8.9",
@@ -9014,7 +9013,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-recorder"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9048,7 +9047,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-registry-core"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9087,7 +9086,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-registry-server"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "anyhow",
  "async-nats",
@@ -9130,7 +9129,7 @@ dependencies = [
  "oauth2",
  "opentelemetry-proto 0.32.0",
  "prometheus",
- "prost 0.14.4",
+ "prost 0.14.6",
  "qrcode",
  "quick-xml 0.41.0",
  "rand 0.9.5",
@@ -9168,7 +9167,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-reporting"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "anyhow",
  "chrono",
@@ -9188,7 +9187,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-route-chaos"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "async-trait",
  "axum 0.8.9",
@@ -9201,7 +9200,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-runtime-daemon"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "anyhow",
  "axum 0.8.9",
@@ -9223,7 +9222,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-scenarios"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9260,7 +9259,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-sdk"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "anyhow",
  "axum 0.8.9",
@@ -9288,7 +9287,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-security-core"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -9318,7 +9317,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-smtp"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9345,7 +9344,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-tcp"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9365,14 +9364,14 @@ dependencies = [
 
 [[package]]
 name = "mockforge-template-expansion"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "mockforge-test"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -9399,7 +9398,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-test-integration-examples"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "mockforge-test",
  "tokio",
@@ -9410,7 +9409,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-test-runner"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9432,7 +9431,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-tracing"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "axum 0.8.9",
  "http 1.5.0",
@@ -9450,7 +9449,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-tui"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "anyhow",
  "arboard",
@@ -9474,7 +9473,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-tunnel"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9505,7 +9504,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-ui"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9561,7 +9560,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-vbr"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9596,7 +9595,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-workspace"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "globwalk",
  "mockforge-core",
@@ -9607,7 +9606,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-world-state"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9624,7 +9623,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-ws"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "async-trait",
  "axum 0.8.9",
@@ -10575,15 +10574,14 @@ dependencies = [
 
 [[package]]
 name = "openssl"
-version = "0.10.75"
+version = "0.10.82"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "08838db121398ad17ab8531ce9de97b244589089e290a384c900cb9ff7434328"
+checksum = "4de8111e94a56adca7ebfe6c365b6d42f99deb69b74b6becacd4204e2f193aa2"
 dependencies = [
  "bitflags 2.11.0",
  "cfg-if 1.0.4",
  "foreign-types 0.3.2",
  "libc",
- "once_cell",
  "openssl-macros",
  "openssl-sys",
 ]
@@ -10622,9 +10620,9 @@ dependencies = [
 
 [[package]]
 name = "openssl-sys"
-version = "0.9.111"
+version = "0.9.118"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "82cab2d520aa75e3c58898289429321eb788c3106963d0dc886ec7a5f4adc321"
+checksum = "19c413d6ec9ebaf5e1c829d355cb3e9f783778d700f135be0921d52fce3c60ae"
 dependencies = [
  "cc",
  "libc",
@@ -10733,7 +10731,7 @@ checksum = "56d658ba1faf63f7b9c492cfbe6e0ec365440a16132d3270c1065f7b33f1b638"
 dependencies = [
  "opentelemetry 0.32.0",
  "opentelemetry_sdk 0.32.0",
- "prost 0.14.4",
+ "prost 0.14.6",
  "tonic 0.14.9",
  "tonic-prost",
 ]
@@ -11883,12 +11881,12 @@ dependencies = [
 
 [[package]]
 name = "prost"
-version = "0.14.4"
+version = "0.14.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "528ac67416ff8646872a3c02cad9cc4ee5dc9f9540c9b10771855c95cb2e5ae1"
+checksum = "3ef0b569d1d907ab3a28596aee62cf1f61dacb0529a4bedcd8e7460e2d5228b4"
 dependencies = [
  "bytes",
- "prost-derive 0.14.4",
+ "prost-derive 0.14.6",
 ]
 
 [[package]]
@@ -11903,7 +11901,7 @@ dependencies = [
  "multimap",
  "petgraph",
  "prettyplease",
- "prost 0.14.4",
+ "prost 0.14.6",
  "prost-types",
  "pulldown-cmark",
  "pulldown-cmark-to-cmark",
@@ -11927,9 +11925,9 @@ dependencies = [
 
 [[package]]
 name = "prost-derive"
-version = "0.14.4"
+version = "0.14.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b570b25f7617e43d59005d0990ccb79e950a423952cea19671b7a876da390adf"
+checksum = "1ad9c5423459fa2f729b8d9235fab810aa29628b171467744fc86d21460ad70d"
 dependencies = [
  "anyhow",
  "itertools 0.14.0",
@@ -11944,17 +11942,17 @@ version = "0.16.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "01b80ea363c31af2de2b92e3c07ed1156628f7838c4afb4df75ee78a37fedbd1"
 dependencies = [
- "prost 0.14.4",
+ "prost 0.14.6",
  "prost-types",
 ]
 
 [[package]]
 name = "prost-types"
-version = "0.14.4"
+version = "0.14.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f94967dc7688f3054c7fac87473ffae4cc4c3904800e2d9f5b857246d8963b0a"
+checksum = "f29a7c4c7a84cef41a53d338a2d10d4f1b043ea5c3dde26db22ee2c9c1b1c75b"
 dependencies = [
- "prost 0.14.4",
+ "prost 0.14.6",
 ]
 
 [[package]]
@@ -12073,9 +12071,9 @@ dependencies = [
 
 [[package]]
 name = "pulley-interpreter"
-version = "36.0.20"
+version = "36.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4f6a7699ba3c24456c4235f6578a5f182386a1a9230653e8783f165ea1085bbe"
+checksum = "0781f03b600890175c17522913366e8543c96acd76d074b39a27835879f89702"
 dependencies = [
  "cranelift-bitset",
  "log",
@@ -12085,9 +12083,9 @@ dependencies = [
 
 [[package]]
 name = "pulley-macros"
-version = "36.0.20"
+version = "36.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1efdd17eb6ed2d844c29350fffb7230c550ddb0cbe93e1fd2b9cfcc345d77450"
+checksum = "dc7ad6f328adda4f2d169d9338402fad5f726630e9c9fdc26660771b13d1a788"
 dependencies = [
  "proc-macro2",
  "quote 1.0.47",
@@ -12190,9 +12188,9 @@ dependencies = [
 
 [[package]]
 name = "quinn-proto"
-version = "0.11.18"
+version = "0.11.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a9746dbde176634f4f2f1faf2404e30a31b2bc1e9cafb5329c95d8177a18c9fc"
+checksum = "0e750cca55fe4f0439a15d0bb529da9651e79993e8e72c61a899a36d462befbe"
 dependencies = [
  "aws-lc-rs",
  "bytes",
@@ -12213,16 +12211,16 @@ dependencies = [
 
 [[package]]
 name = "quinn-udp"
-version = "0.5.14"
+version = "0.5.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "addec6a0dcad8a8d96a771f815f0eaf55f9d1805756410b39f5fa81332574cbd"
+checksum = "af66907df18639dcf4db56ca65490cabc4b27a97dbadd96f2926cca73298f016"
 dependencies = [
  "cfg_aliases",
  "libc",
  "once_cell",
  "socket2 0.6.3",
  "tracing",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -14791,9 +14789,9 @@ checksum = "adb6935a6f5c20170eeceb1a3835a49e12e19d792f6dd344ccc76a985ca5a6ca"
 
 [[package]]
 name = "tauri"
-version = "2.12.5"
+version = "2.12.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5fb0244332cfb9cee7e2a568bf5da29a36ed8fdbd717f6f47a66b6b7b358c072"
+checksum = "9c2a5cad3827d1fa46c206a6bcaee8ca14203e9b0aaabe447dd4acef33ecd065"
 dependencies = [
  "anyhow",
  "bytes",
@@ -14842,9 +14840,9 @@ dependencies = [
 
 [[package]]
 name = "tauri-build"
-version = "2.7.4"
+version = "2.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "adddb0e648752aaac5da9c3c3c6a68e1e87cab55e3b757b18a9441ef8c3ac614"
+checksum = "73d80784e874fa117b9b00a6680cf2f9b8a51bbd14406bea980cf8f328b00646"
 dependencies = [
  "anyhow",
  "cargo_toml",
@@ -14865,9 +14863,9 @@ dependencies = [
 
 [[package]]
 name = "tauri-codegen"
-version = "2.7.4"
+version = "2.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fb37631cf71dab5e8ab55e1bdd701e18a52653d90b78e71d0e5598b1e0a61316"
+checksum = "c5dc6caab4da5646f57648f39b794bae118f0dd4a4305eeb8c892966171f4852"
 dependencies = [
  "base64 0.23.1",
  "brotli",
@@ -14880,7 +14878,7 @@ dependencies = [
  "semver",
  "serde",
  "serde_json",
- "sha2 0.10.9",
+ "sha2 0.11.0",
  "syn 2.0.119",
  "tauri-utils",
  "thiserror 2.0.18",
@@ -14892,9 +14890,9 @@ dependencies = [
 
 [[package]]
 name = "tauri-macros"
-version = "2.7.4"
+version = "2.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0cc38db58854c10fb5f91a887ed8bf82d3239bb92b5d8db86eda09e96d9963d1"
+checksum = "2831c5da8603a96b1efc0b650c2cb6decc69b6cda257d815fe70c7f5be53818e"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -14979,9 +14977,9 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-notification"
-version = "2.8.0"
+version = "2.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5bc6c194a95a535abdfbe3bc1af9a43935b8b9b29c216b8e71af8b59132703cf"
+checksum = "14a226bfb8189ec4ab2c1936e66330ad06c44d9f6c54a674338208491dee177f"
 dependencies = [
  "log",
  "notify-rust",
@@ -14999,9 +14997,9 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-opener"
-version = "2.7.2"
+version = "2.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "53810be1b4fed22bb6ac3f4cab5a2b80d9391d1af436bda145607532bc0bb219"
+checksum = "54592c6718b42ab198bf11bda6a428a3553ca2f2f8e506df56f6a063ec328331"
 dependencies = [
  "dunce",
  "glob",
@@ -15078,9 +15076,9 @@ dependencies = [
 
 [[package]]
 name = "tauri-runtime"
-version = "2.12.2"
+version = "2.12.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7c55766d99cea69055904d1735b93c2049302b2e09effd462120deb5581d78e9"
+checksum = "60c2b14bd5265b63993cdc34ad526fb836e0fd0cf64a4634a895db0784844d5e"
 dependencies = [
  "cookie",
  "dpi",
@@ -15103,9 +15101,9 @@ dependencies = [
 
 [[package]]
 name = "tauri-runtime-wry"
-version = "2.12.3"
+version = "2.12.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e1aa9d8b7a120f879f44fdc1053f7b7dbf416bf0bbc6a72b714dec46b782b52f"
+checksum = "b8c14a025255cc9816d401635035075b09b6cc9973b7b8fd7b8fcb8753f30f92"
 dependencies = [
  "gtk",
  "http 1.5.0",
@@ -15128,9 +15126,9 @@ dependencies = [
 
 [[package]]
 name = "tauri-utils"
-version = "2.10.2"
+version = "2.10.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "362ab21cd4cc713f2a02b1a9b5688198b1541cfb6907c4281e9190e0f0ef4aa3"
+checksum = "28d1d33d4453c5df0bf1672dbc7ada69d8ed74f56a4316d964a4aa73d4ecd3ad"
 dependencies = [
  "anyhow",
  "brotli",
@@ -15260,7 +15258,7 @@ checksum = "8f50febec83f5ee1df3015341d8bd429f2d1cc62bcba7ea2076759d315084683"
 
 [[package]]
 name = "test-openapi"
-version = "0.3.241"
+version = "0.3.248"
 dependencies = [
  "mockforge-core",
  "serde_json",
@@ -15840,7 +15838,7 @@ version = "0.14.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bc97d645691d64d96db1afe386d0d2918ac84ab56e2c91e153f22f6349a378cd"
 dependencies = [
- "prost 0.14.4",
+ "prost 0.14.6",
  "tokio",
  "tokio-stream",
  "tonic 0.14.9",
@@ -15854,7 +15852,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eba464054e2226f182a34489b8b079bf4c6e3e7ab5fd7fc30e024f24aa92a484"
 dependencies = [
  "bytes",
- "prost 0.14.4",
+ "prost 0.14.6",
  "tonic 0.14.9",
 ]
 
@@ -15880,7 +15878,7 @@ version = "0.14.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7eb4700e220803efd45baf3babaa1958c79adc9e0fe6fbd4422f9188d1e57d26"
 dependencies = [
- "prost 0.14.4",
+ "prost 0.14.6",
  "prost-types",
  "tokio",
  "tokio-stream",
@@ -16484,9 +16482,9 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 
 [[package]]
 name = "uuid"
-version = "1.29.0"
+version = "1.29.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4a0e2d11620c50695fe12bbbfde96b3477fe606e7284c22d505c12ce51214514"
+checksum = "bed99139f7dac9b5cfe5f17be4d66dc7079a34dee1d74bcc77217119240e267c"
 dependencies = [
  "atomic",
  "getrandom 0.4.1",
@@ -16900,9 +16898,9 @@ dependencies = [
 
 [[package]]
 name = "wasmtime"
-version = "36.0.20"
+version = "36.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a32143e651d97f1b8d749713d242f70a72c9a0d7e16fd498a7e5a3f5574ed10b"
+checksum = "c58d2cbba3817454af39ec9f0b39279870a9a98ef4c52bbbcdd9c1ffc1f5f17f"
 dependencies = [
  "addr2line",
  "anyhow",
@@ -16955,9 +16953,9 @@ dependencies = [
 
 [[package]]
 name = "wasmtime-environ"
-version = "36.0.20"
+version = "36.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f0501ad47df09ae57fbb76e3bdc6513b1f6d9dd0eadf3a115bb39360798890c7"
+checksum = "2e64cbeb0aa73682360f848c931ec7e024a59bb15e855fc461c21c6ec665775e"
 dependencies = [
  "anyhow",
  "cpp_demangle",
@@ -16982,18 +16980,18 @@ dependencies = [
 
 [[package]]
 name = "wasmtime-internal-asm-macros"
-version = "36.0.20"
+version = "36.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "de4c70c3fb098b9b28b73f7fc2b0147c5624621fb017a5354cdedb660f273e07"
+checksum = "ead251813500a15bb1fc31db43f8d2e612fcc0c723f3efff69c5d7bedd9edaf9"
 dependencies = [
  "cfg-if 1.0.4",
 ]
 
 [[package]]
 name = "wasmtime-internal-cache"
-version = "36.0.20"
+version = "36.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "65f09c789d1bb2e7ab1618ac8336d783c1ff0babc38430c7f1940d01c546722b"
+checksum = "1ff2377df26271c42d9649ac4ee13656ef89a51f02f0daa7917e67c635d9bc1d"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -17006,14 +17004,14 @@ dependencies = [
  "sha2 0.10.9",
  "toml 0.8.23",
  "windows-sys 0.60.2",
- "zstd 0.13.3",
+ "zstd 0.13.5",
 ]
 
 [[package]]
 name = "wasmtime-internal-component-macro"
-version = "36.0.20"
+version = "36.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "28729d33f5731506bcfe774a4b9eaf9e7e713449e1e3d848748f7de9978bea53"
+checksum = "c6aba235e8bfa25cf76312a8b8295964968164cbd4e3fb6e2d9be167128ae3d7"
 dependencies = [
  "anyhow",
  "proc-macro2",
@@ -17026,15 +17024,15 @@ dependencies = [
 
 [[package]]
 name = "wasmtime-internal-component-util"
-version = "36.0.20"
+version = "36.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "91abf6b751d0f135cab1e78448f402af00a0f3e0638be858d18cc93170ab1009"
+checksum = "0e1b1657d77558b86ace8e85e0f016655f7b68b8a8c5b8ad875515f4880aece3"
 
 [[package]]
 name = "wasmtime-internal-cranelift"
-version = "36.0.20"
+version = "36.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c3840e7bb2d2593f3178b13a6717f215ad63e233ef54b61892f3cee80582f098"
+checksum = "0dc2e39983f07c0e85ba5f83df2dfb8a4e8607a5cab01c761a3a5deb15abc5bd"
 dependencies = [
  "anyhow",
  "cfg-if 1.0.4",
@@ -17059,9 +17057,9 @@ dependencies = [
 
 [[package]]
 name = "wasmtime-internal-fiber"
-version = "36.0.20"
+version = "36.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "458d24ab006050e9b5fcf79f2d83ccc236f69846685fb27a7bf4c50a1583f1ea"
+checksum = "3d8f744e4eea04b2b1070b941d32138c1c34e50887b27d9f11c47f9ce8187cd6"
 dependencies = [
  "anyhow",
  "cc",
@@ -17075,9 +17073,9 @@ dependencies = [
 
 [[package]]
 name = "wasmtime-internal-jit-debug"
-version = "36.0.20"
+version = "36.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eca1ce583227e82e6370939f48395ae902acdcd4c91ca32ea1ae7abbc86232a7"
+checksum = "7e12bcf0d25fa4e1c4346d0ecea325d0ef850505ca1fabec5711b7a86679ae3e"
 dependencies = [
  "cc",
  "object",
@@ -17087,9 +17085,9 @@ dependencies = [
 
 [[package]]
 name = "wasmtime-internal-jit-icache-coherence"
-version = "36.0.20"
+version = "36.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c110f07b222a8eb29d957eabf90dce38f41461f883099ab28dc50861913ba17"
+checksum = "147bdb5ff208cf503adb480a9bd9a3c9012b3289007e69d46117ca31cef51ed6"
 dependencies = [
  "anyhow",
  "cfg-if 1.0.4",
@@ -17099,24 +17097,24 @@ dependencies = [
 
 [[package]]
 name = "wasmtime-internal-math"
-version = "36.0.20"
+version = "36.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a273dd4ec37457d435538c00b30f3ec9ae99e04a4f6ba89a737048e8de6095df"
+checksum = "4e77a4cd77f1aa48a23ef9cc544cdc8732de512f2ad50f628a39092fb53cb34c"
 dependencies = [
  "libm",
 ]
 
 [[package]]
 name = "wasmtime-internal-slab"
-version = "36.0.20"
+version = "36.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d12c7b3ae65639ab90d8d29135348dfd16de6d96eb36ab5b63861f3e12cf8e0"
+checksum = "2652fc800965c03acb4e5a2a2bb0ce52650a1f1b3d23e91cd3f65ebafbd68ff0"
 
 [[package]]
 name = "wasmtime-internal-unwinder"
-version = "36.0.20"
+version = "36.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6da6131cb87700e06ffb7a83cc933658f521176f04d6d73511f1ee60db58c515"
+checksum = "cb5796bfab805bdb0f13e8a8502c0ebd643f11bc209c9199da71c97c17234da3"
 dependencies = [
  "anyhow",
  "cfg-if 1.0.4",
@@ -17127,9 +17125,9 @@ dependencies = [
 
 [[package]]
 name = "wasmtime-internal-versioned-export-macros"
-version = "36.0.20"
+version = "36.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "71efc44d34bb86408d7f620d308dad19457f34543e5c44ace680bdbe2d819917"
+checksum = "f534370e1ccf59b3d903c6f4db72036c43b5d2b94a77ccd39c43239e90b07e61"
 dependencies = [
  "proc-macro2",
  "quote 1.0.47",
@@ -17138,9 +17136,9 @@ dependencies = [
 
 [[package]]
 name = "wasmtime-internal-winch"
-version = "36.0.20"
+version = "36.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "af4da8c46ddb215374f023c0e3ec8917185b878b3d9874fbfaaefdc2d2df38e0"
+checksum = "f286941452a9d79b9e681f7272354280129ef38c55497b757bfc9d5810277afd"
 dependencies = [
  "anyhow",
  "cranelift-codegen",
@@ -17155,9 +17153,9 @@ dependencies = [
 
 [[package]]
 name = "wasmtime-internal-wit-bindgen"
-version = "36.0.20"
+version = "36.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "356a1ae3cfc0534a84df35d9df214a241ca454983c0d311f8169b1674b4979a3"
+checksum = "f0f67e6dc46acb465d17902b302f19bf29018d05b7cc00c8d6eeb2e8aa703399"
 dependencies = [
  "anyhow",
  "bitflags 2.11.0",
@@ -17168,9 +17166,9 @@ dependencies = [
 
 [[package]]
 name = "wasmtime-wasi"
-version = "36.0.20"
+version = "36.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "40e4a022237ea8896014ab1ee3fd4be3a37782c05db06a1a638cf3ed31fadeb3"
+checksum = "18dd02e37d2859d776bac5291d04c4c91c67d61f0c9d79170a1038685e9085f8"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -17201,9 +17199,9 @@ dependencies = [
 
 [[package]]
 name = "wasmtime-wasi-io"
-version = "36.0.20"
+version = "36.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9a6f67fc9f40fc549a5f74dfd5bdcbab12ff079a69b4f92a06a5eea787e76730"
+checksum = "4b47b540b3f087d7ef74f64ad356c935a3dc0844ecc7bae4f70daea9ebc0d179"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -17439,9 +17437,9 @@ checksum = "72069c3113ab32ab29e5584db3c6ec55d416895e60715417b5b883a357c3e471"
 
 [[package]]
 name = "wiggle"
-version = "36.0.20"
+version = "36.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "87a44f84dfaf90fa24fda8f0043b3ca162d31decfd5a2b34d59572bbed54ff0d"
+checksum = "77eefd75bf0216c7e641f4f2f39d369b8f9aa48dfe252f975fd1ca0ae1591e92"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -17454,9 +17452,9 @@ dependencies = [
 
 [[package]]
 name = "wiggle-generate"
-version = "36.0.20"
+version = "36.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fda6ac6e2611fd16ceddafc8b693fdc2e5f78fb721d2a10e596053cc0849581d"
+checksum = "f5b53f60e0f759078d02694a955f53e493a0cc84ab942862975a566779c03a26"
 dependencies = [
  "anyhow",
  "heck 0.5.0",
@@ -17468,9 +17466,9 @@ dependencies = [
 
 [[package]]
 name = "wiggle-macro"
-version = "36.0.20"
+version = "36.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "af04bb48c64b9f1a938398240eee9e50d0f745e08eacb41a1fcd011990f71490"
+checksum = "fc8da89a1b19218028469f41b18c61222bfcebbd1ca02270a4a5cf09337e91bd"
 dependencies = [
  "proc-macro2",
  "quote 1.0.47",
@@ -17511,9 +17509,9 @@ checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
 
 [[package]]
 name = "winch-codegen"
-version = "36.0.20"
+version = "36.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "09aff830750e48ca9828e9df5ba4589688f49f2748e4a1d43fd543d6a673d272"
+checksum = "48ff4619adfdac753592c13508b49067f857cb41a1e5c2579e12580ad7470ce6"
 dependencies = [
  "anyhow",
  "cranelift-assembler-x64",
@@ -18833,11 +18831,11 @@ dependencies = [
 
 [[package]]
 name = "zstd"
-version = "0.13.3"
+version = "0.13.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e91ee311a569c327171651566e07972200e76fcfe2242a4fa446149a3881c08a"
+checksum = "50adf04cf3ec914b0b9905c9dde90c80fe74bfd701e331fc80a39c512c525278"
 dependencies = [
- "zstd-safe 7.2.4",
+ "zstd-safe 7.4.1",
 ]
 
 [[package]]
@@ -18851,9 +18849,9 @@ dependencies = [
 
 [[package]]
 name = "zstd-safe"
-version = "7.2.4"
+version = "7.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f49c4d5f0abb602a93fb8736af2a4f4dd9512e36f7f570d66e65ff867ed3b9d"
+checksum = "498d94ad68720c89b4fbe41b9090850651e68cb2dd9210ce7ffbff3a94653819"
 dependencies = [
  "zstd-sys",
 ]

@@ -176,6 +176,7 @@ crates/mockforge-collab/*.db-wal
 /.rls-gate-state
 # Generated benchmark results
 bench-results/
+benchmarks/compare/.venv/
 # Analytics SQLite databases (generated at runtime)
 analytics.db
 analytics.db-shm
@@ -208,3 +209,7 @@ compile-check.db
 /.claude/worktrees/
 
 /crates/mockforge-ui/ui/.codex-dependency-owner.json
+benchmarks/compare/.tools/
+benchmarks/compare/generated/
+benchmarks/compare/results/*.json
+!benchmarks/compare/results/README.md

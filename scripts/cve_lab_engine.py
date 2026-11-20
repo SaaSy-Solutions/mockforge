@@ -8,11 +8,17 @@ import shutil
 import subprocess
 import sys
 import time
+import uuid
 import http.client
 from contextlib import contextmanager
 from cve_lab_catalog import LABEL
 from cve_lab_transport import request
 import re
+
+
+ALLOWED_APP_CAPABILITIES = frozenset(("SETUID", "SETGID", "CHOWN"))
+
+GUIDE_URL = "https://docs.mockforge.dev/user-guide/managed-cve-labs.html"
 
 
 def command(args, timeout=120, check=True):
@@ -22,7 +28,7 @@ def command(args, timeout=120, check=True):
     return result
 
 
-def doctor(engine):
+def doctor(engine, packs=None):
     if sys.version_info < (3, 11):
         raise RuntimeError("Install Python 3.11 or newer")
     if platform.system() != "Linux" or platform.machine() not in ("x86_64", "amd64"):
@@ -62,12 +68,45 @@ def doctor(engine):
             host = contexts[0]["Endpoints"]["docker"]["Host"]
             if not host.startswith("unix://"):
                 raise RuntimeError("Remote container engines are unsupported")
-    return {
+    report = {
         "python": platform.python_version(),
         "engine": engine,
         "server": version.stdout.strip(),
         "platform": platform.machine(),
     }
+    if packs:
+        # Per-pack pinned image presence (by-digest inspects, never a parse
+        # of `docker images`) and the host-network probe: both diagnostics
+        # are gathered locally, without downloading anything.
+        report["images"] = {
+            cve: verify_images(engine, pack) for cve, pack in packs.items()
+        }
+        report["host_network"] = host_network_report(engine, report["images"])
+    return report
+
+
+def host_network_report(engine, images):
+    """Probe whether --network=host containers share this machine's network.
+
+    The probe needs the pinned runner image already present locally (doctor
+    never downloads), so without it the check reports unknown: ``prepare``
+    or the next run probes again once the image is in place.
+    """
+    runners = [
+        entry["image"]
+        for entries in images.values()
+        for entry in entries
+        if entry["role"] == "runner" and entry["status"] == "present"
+    ]
+    if not runners:
+        return {
+            "shared": None,
+            "reason": (
+                "the pinned runner image is not present locally; the check "
+                "runs after prepare or at the start of a run"
+            ),
+        }
+    return host_network_probe(engine, runners[0])
 
 
 def prepare(engine, pack):
@@ -90,6 +129,150 @@ def prepare(engine, pack):
         command([engine, "image", "inspect", image])
 
 
+def image_status(engine, image):
+    """Whether the exact image reference exists in the local engine.
+
+    The check is the same by-digest inspect ``prepare`` performs - never a
+    parse of ``docker images`` output, which does not list digest-pulled
+    images the way tagged ones appear.
+    """
+    if "@sha256:" not in image:
+        # A tag (a pack still pending review) is not a pinned image: a local
+        # image with that tag proves nothing, and prepare refuses it anyway.
+        return "unpinned"
+    result = command([engine, "image", "inspect", image], check=False)
+    return "present" if result.returncode == 0 else "missing"
+
+
+def verify_images(engine, pack):
+    """Report each pack-pinned image with its local presence status.
+
+    Returns one entry per pinned image (the application and the runner) in
+    catalog order, so a run report or a dedicated check can attest exactly
+    which digest-pinned images this machine holds.
+    """
+    catalog = pack["catalog"]
+    return [
+        {
+            "role": "application",
+            "image": catalog["application_image"],
+            "status": image_status(engine, catalog["application_image"]),
+        },
+        {
+            "role": "runner",
+            "image": catalog["runner_image"],
+            "status": image_status(engine, catalog["runner_image"]),
+        },
+    ]
+
+
+def host_netns():
+    """The network namespace of this process, where the recorder listens."""
+    return os.readlink("/proc/self/ns/net")
+
+
+def host_network_probe(engine, image):
+    """Whether a --network=host container shares this machine's network.
+
+    Compares readlink /proc/self/ns/net on this host with the same command
+    inside a --network=host container of the pinned runner image. Engines
+    whose daemon runs in another network namespace (a snap, a VM, an LXD
+    container, a systemd unit with private networking) hand such containers
+    a "host" network where this machine's listeners do not exist, so the
+    scanner could never reach the recorder and the run would only fail
+    inside Nuclei with no reason.
+    """
+    host = host_netns()
+    probe_id = uuid.uuid4().hex
+    name = "mockforge-cve-netns-" + probe_id
+    try:
+        result = command(
+            [
+                engine,
+                "run",
+                "--rm",
+                "--name",
+                name,
+                "--label",
+                f"{LABEL}={probe_id}",
+                "--network=host",
+                # Never pull: the image is verified present by the caller
+                # (prepare or the doctor image listing) first.
+                "--pull=never",
+                "--cap-drop=ALL",
+                "--security-opt=no-new-privileges",
+                "--memory=64m",
+                "--pids-limit=16",
+                # The runner image's entrypoint is Nuclei; readlink needs no
+                # capabilities and exists on the image's busybox base.
+                "--entrypoint",
+                "/bin/readlink",
+                image,
+                "/proc/self/ns/net",
+            ],
+            timeout=60,
+            check=False,
+        )
+        if result.returncode:
+            raise RuntimeError(
+                "Cannot probe the engine's host network namespace: "
+                f"{result.stderr[-1000:]}"
+            )
+        container = result.stdout.strip()
+        return {
+            "host": host,
+            "container": container,
+            "shared": host == container,
+        }
+    finally:
+        owned_remove(engine, name, probe_id)
+
+
+def host_network_refusal(recorder, probe):
+    """The plain refusal for an engine whose --network=host containers get
+    another network namespace from this machine's: the scanner could never
+    reach the recorder, so no run can produce evidence."""
+    return (
+        "containers started with --network=host on this engine don't share "
+        "this machine's network, so the scanner can't reach the recorder at "
+        f"{recorder} (host network namespace {probe['host']}, --network=host "
+        f"container namespace {probe['container']}); see the managed CVE labs "
+        f"guide: {GUIDE_URL}"
+    )
+
+
+def container_running(engine, run_id):
+    """Whether this run's application container is still alive.
+
+    Crash-evidence packs use this to distinguish a reviewed exploit outcome
+    from a healthy application.
+    """
+    result = command(
+        [engine, "inspect", "mockforge-cve-" + run_id, "--format", "{{.State.Running}}"],
+        check=False,
+    )
+    if result.returncode:
+        return False
+    return result.stdout.strip().lower() == "true"
+
+
+
+def container_log(engine, run_id, tail=400):
+    """The application container's recent log output, mid-run.
+
+    Evidence packs whose exploit outcome lives in the application log (an
+    Apache prefork child segmentation fault, for example) compare marker
+    counts before and after the exploit request.
+    """
+    result = command(
+        [engine, "logs", "--tail", str(tail), "mockforge-cve-" + run_id],
+        check=False,
+    )
+    if result.returncode:
+        return ""
+    return result.stdout + result.stderr
+
+
 def owned_remove(engine, name, run_id):
     result = command([engine, "inspect", name], check=False)
     if result.returncode:
@@ -108,6 +291,13 @@ def owned_remove(engine, name, run_id):
 @contextmanager
 def lab(engine, run_id, output, pack):
     app = pack["app"]
+    cap_add = app.get("cap_add", ())
+    if not isinstance(cap_add, (list, tuple)) or any(
+        capability not in ALLOWED_APP_CAPABILITIES for capability in cap_add
+    ):
+        raise RuntimeError(
+            "app.cap_add entries must be from the allowlist: SETUID, SETGID, CHOWN"
+        )
     name = "mockforge-cve-" + run_id
     try:
         run_args = [
@@ -125,17 +315,30 @@ def lab(engine, run_id, output, pack):
             "-p",
             f"127.0.0.1::{app['port']}",
         ]
+        run_args.extend(f"--cap-add={capability}" for capability in cap_add)
         for key, value in app["env"].items():
             run_args.extend(["-e", f"{key}={value}"])
+        for mount in app.get("mounts", ()):
+            host = mount["host"].replace("{output}", str(output))
+            run_args.extend(["-v", f"{host}:{mount['container']}:ro"])
+        if app.get("workdir"):
+            run_args.extend(["-w", app["workdir"]])
         run_args.append(pack["catalog"]["application_image"])
+        run_args.extend(app.get("command", ()))
         command(run_args)
         ports = command([engine, "port", name, app["port"]]).stdout.strip().splitlines()
+        if not ports:
+            raise RuntimeError(
+                "Application did not expose "
+                + app["port"]
+                + "; it failed to start (see application.log)"
+            )
         backend = "http://" + ports[0]
         deadline = time.monotonic() + 90
         while time.monotonic() < deadline:
             try:
                 ready = (
-                    request(backend, app["readiness"]["path"])[0]
+                    request(backend, app["readiness"]["path"], log_sent=False)[0]
                     == app["readiness"]["status"]
                 )
             except (OSError, ValueError, http.client.HTTPException):

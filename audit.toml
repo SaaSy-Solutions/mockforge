@@ -12,15 +12,6 @@
 ignore = [
     # See docs/security/thrift-advisory-2026-0435.md for the reviewed call path.
     { id = "RUSTSEC-2026-0435", reason = "thrift binary input allocation is unreachable: the sole consumer, opentelemetry-jaeger 0.21 agent exporter, sends one-way compact UDP messages and uses TNoopChannel for input; reassess on exporter/dependency changes" },
-    # quinn-proto (HTTP/3 / QUIC) — transitive via reqwest/hyper; no fix
-    # version published yet as of 2026-04.
-    { id = "RUSTSEC-2026-0037", reason = "quinn-proto DoS — transitive dep, no patched version available" },
-
-    # quinn-proto remote memory exhaustion (published 2026-06-22, fixed
-    # in >=0.11.15). Reaches mockforge-desktop only via Tauri's reqwest
-    # stack; no production server uses HTTP/3/QUIC. Clears once Tauri
-    # bumps its reqwest pin.
-    { id = "RUSTSEC-2026-0185", reason = "quinn-proto memory exhaustion — reaches only mockforge-desktop via Tauri reqwest; no server-side QUIC use" },
 
     # lopdf stack overflow on deeply nested PDF objects (published
     # 2026-06-21). Pulled in only through `printpdf` for mockforge-
@@ -41,45 +32,12 @@ ignore = [
     { id = "RUSTSEC-2026-0194", reason = "quick-xml quadratic runtime on duplicate attrs (DoS) — remaining <0.41 copies are azure-SDK (trusted XML) + transitive; no untrusted-XML path (#919)" },
     { id = "RUSTSEC-2026-0195", reason = "quick-xml unbounded namespace allocation (DoS) — remaining <0.41 copies are azure-SDK (trusted XML) + transitive; no untrusted-XML path (#919)" },
 
-    # wasmtime 36.x is pinned by mockforge-plugin-loader's current API
-    # surface. Every one of these needs a major-version bump to resolve,
-    # which is a tracked follow-up (see plugin-loader).
-    { id = "RUSTSEC-2026-0085", reason = "wasmtime flags lifting panic — blocked by wasmtime major bump in plugin-loader" },
-    { id = "RUSTSEC-2026-0086", reason = "wasmtime 64-bit tables host data leakage — blocked by wasmtime major bump" },
-    { id = "RUSTSEC-2026-0087", reason = "wasmtime f64x2.splat x86_64 segfault — blocked by wasmtime major bump" },
-    { id = "RUSTSEC-2026-0088", reason = "wasmtime pooling allocator instance leakage — blocked by wasmtime major bump" },
-    { id = "RUSTSEC-2026-0089", reason = "wasmtime Winch table.fill panic — blocked by wasmtime major bump" },
-    { id = "RUSTSEC-2026-0091", reason = "wasmtime string transcoding OOB write — blocked by wasmtime major bump" },
-    { id = "RUSTSEC-2026-0092", reason = "wasmtime UTF-16 misaligned transcoding panic — blocked by wasmtime major bump" },
-    { id = "RUSTSEC-2026-0093", reason = "wasmtime UTF-16 to latin1+utf16 OOB read — blocked by wasmtime major bump" },
-    { id = "RUSTSEC-2026-0094", reason = "wasmtime Winch table.grow return masking — blocked by wasmtime major bump" },
-    { id = "RUSTSEC-2026-0095", reason = "wasmtime Winch sandbox-escaping memory access — blocked by wasmtime major bump" },
-    { id = "RUSTSEC-2026-0096", reason = "wasmtime aarch64 Cranelift sandbox escape — blocked by wasmtime major bump" },
-    { id = "RUSTSEC-2026-0114", reason = "wasmtime oversize-table allocation panic (DoS) — fixed in 36.0.8 but pinned at 36.0.6 by plugin-loader; clears with same wasmtime major bump" },
-    { id = "RUSTSEC-2026-0149", reason = "wasmtime-wasi path_open(TRUNCATE) bypasses FilePerms::WRITE — same wasmtime 36.x pin as the rest of this group; clears with the wasmtime major bump in plugin-loader" },
-    { id = "RUSTSEC-2026-0188", reason = "wasmtime-wasi 36.0.11 advisory — published 2026-06; same wasmtime 36.x pin as the rest of this group; clears with the plugin-loader major bump" },
-
     # rustls-webpki pinned at multiple versions by transitive deps
     # (aws-sdk via rustls 0.21, rumqttc via rustls 0.22, axum-server via
     # rustls 0.23). Can't resolve without coordinated upstream bumps.
     { id = "RUSTSEC-2026-0098", reason = "rustls-webpki URI name constraints — pinned by transitive deps across 3 rustls majors" },
     { id = "RUSTSEC-2026-0099", reason = "rustls-webpki wildcard name constraints — pinned by transitive deps across 3 rustls majors" },
     { id = "RUSTSEC-2026-0104", reason = "rustls-webpki CRL parsing panic — pinned by transitive deps across 3 rustls majors" },
-
-    # rustls 0.21.12 has no patched 0.21 release. rustls 0.23 is at the
-    # fixed 0.23.46; the only 0.21 copy left is kube-client 0.87 in
-    # mockforge-k8s-operator (the operator's client to the Kubernetes API).
-    # Remove both once a kube major bump empties `cargo tree -i rustls@0.21.12` (#1232).
-
-    # zip < 9.0.0 extract() follows symlinks / keeps SUID bits. Our own crates
-    # use zip 9 and iterate entries with enclosed_name(); the only < 9 copy is
-    # zip 4.6.1 inside tauri-plugin-updater 2.14.0 (mockforge-desktop). Its
-    # extract() runs only on the Windows install path, after `install` has
-    # verified the package against the configured updater public key, so it
-    # only ever unpacks our own signed release. Remove once tauri ships zip >= 9.
-    { id = "RUSTSEC-2026-0367", reason = "zip < 9 SUID preservation — only zip 4.6.1 via tauri-plugin-updater, extracting signature-verified desktop updates; our crates use zip 9" },
-    { id = "RUSTSEC-2026-0368", reason = "zip < 9 symlink escape on extract — only zip 4.6.1 via tauri-plugin-updater, extracting signature-verified desktop updates; our crates use zip 9" },
-    { id = "RUSTSEC-2026-0369", reason = "zip < 9 permissions through symlinks on extract — only zip 4.6.1 via tauri-plugin-updater, extracting signature-verified desktop updates; our crates use zip 9" },
 
     # rkyv 0.7.46, reached only as an UNENABLED optional feature of
     # rust_decimal. This one is not reachable in anything we build, and
@@ -126,8 +84,6 @@ ignore = [
     # h2@0.3.27` goes empty), or if h2 ever backports to 0.3.x.
     { id = "RUSTSEC-2026-0258", reason = "h2 0.3.27 empty-DATA-frame DoS (LOW) — client-only via aws-sdk; 0.3.x is unpatched upstream (fix is 0.4.16+, and our 0.4 instance is bumped to 0.4.17)" },
 
-    { id = "RUSTSEC-2026-0235", reason = "rkyv OOB read — unenabled optional feature of rust_decimal, absent from the compiled graph (cargo tree -e normal finds 0); rust_decimal 1.42.1 (latest) still pins rkyv ^0.7.46 so there is no version to upgrade to" },
-
     # azure_core 0.21 writes the `authorization` header value to logs
     # (published 2026-08-15, fixed in >=0.22.0). The legacy azure_storage /
     # azure_storage_blobs / azure_identity line ends at 0.21 — there is no
@@ -149,35 +105,12 @@ ignore = [
     # client) and async-nats 0.43 (registry-server). Remove once those move to
     # rustls-webpki 0.103.
     { id = "RUSTSEC-2026-0382", reason = "rustls-webpki 0.102.8 distrusted emSign intermediates; no patched 0.102.x, pulled by rumqttc 0.25.1 (latest) and async-nats 0.43; 0.103 copies are patched" },
-    # zstd / zstd-safe stream-reuse data leak and uninitialized-memory
-    # advisories (published 2026-10; fixed in zstd >=0.14.3 / zstd-safe
-    # >=8.2.0, which also moves zstd-sys to 2.1.2). The request/proxy path
-    # (async-compression in mockforge-proxy/http) is bumped to the patched
-    # zstd 0.14.3 / zstd-safe 8.2.0. The copies that remain are zstd 0.13.3 /
-    # zstd-safe 7.2.4, which have no in-line patch and are pinned by
-    # wasmtime 36.x's internal cache (the same pin as the wasmtime-36 group
-    # above, and not the request path) plus mockforge-kafka. Clears with the
-    # wasmtime major bump; a mockforge-kafka zstd 0.14 bump is a tracked
-    # follow-up.
-    { id = "RUSTSEC-2026-0391", reason = "zstd stream-reuse data leak — request-path copy bumped to zstd 0.14.3; remaining 0.13.3 is wasmtime 36.x cache + mockforge-kafka, no 0.13 patch; clears with the wasmtime major bump" },
-    { id = "RUSTSEC-2026-0398", reason = "zstd-safe Seekable::decompress OOB Vec length — request-path copy bumped to zstd-safe 8.2.0; remaining 7.2.4 is wasmtime 36.x cache + mockforge-kafka, no 7.x patch; clears with the wasmtime major bump" },
-    { id = "RUSTSEC-2026-0403", reason = "zstd-safe uninitialized memory on legacy-frame decompression failure — request-path copy bumped to zstd-safe 8.2.0; remaining 7.2.4 is wasmtime 36.x cache + mockforge-kafka, no 7.x patch; clears with the wasmtime major bump" },
 
     # --- 2026-10-29 RustSec DB batch (fix/rustsec-audit-batch-20261029). Patch-
     # bumped pulldown-cmark 0.13.5, libz-sys 1.1.31 and event-listener 5.4.2 to
     # clear RUSTSEC-2026-0414/0418/0221; the rest below have no in-line fix
     # (unmaintained, a major bump the dependent doesn't allow yet, or the
     # wasmtime-36.x-pinned zstd-safe 7.2.4 copy).
-    { id = "RUSTSEC-2026-0395", reason = "zstd-safe use-after-free (CParameter::StableInBuffer) — only the wasmtime-36.x-pinned 7.2.4 copy; the request-path copy is 8.2.0; clears with the wasmtime major bump" },
-    { id = "RUSTSEC-2026-0396", reason = "zstd-safe Seekable NULL/OOB seek table — wasmtime-36.x-pinned 7.2.4 copy only; request path is 8.2.0; clears with the wasmtime major bump" },
-    { id = "RUSTSEC-2026-0397", reason = "zstd-safe OutBuffer::around_pos uninitialized memory — wasmtime-36.x-pinned 7.2.4 copy only; request path is 8.2.0" },
-    { id = "RUSTSEC-2026-0399", reason = "zstd-safe use-after-free via init_using_cdict — wasmtime-36.x-pinned 7.2.4 copy only; request path is 8.2.0" },
-    { id = "RUSTSEC-2026-0400", reason = "zstd-safe use-after-free of a dictionary after a one-shot call — wasmtime-36.x-pinned 7.2.4 copy only; request path is 8.2.0" },
-    { id = "RUSTSEC-2026-0401", reason = "zstd-safe OOB read in train_from_buffer on sample-size overflow — wasmtime-36.x-pinned 7.2.4 copy only; request path is 8.2.0" },
-    { id = "RUSTSEC-2026-0402", reason = "zstd-safe heap overflow in CCtx::try_clone (multithreaded) — wasmtime-36.x-pinned 7.2.4 copy only; request path is 8.2.0" },
-    { id = "RUSTSEC-2026-0404", reason = "zstd-safe double free in DCtx::try_clone — wasmtime-36.x-pinned 7.2.4 copy only; request path is 8.2.0" },
-    { id = "RUSTSEC-2026-0405", reason = "zstd-safe OOB read with out-of-range InBuffer::pos — wasmtime-36.x-pinned 7.2.4 copy only; request path is 8.2.0" },
-    { id = "RUSTSEC-2026-0406", reason = "zstd-safe use-after-free changing a multithreaded context — wasmtime-36.x-pinned 7.2.4 copy only; request path is 8.2.0" },
     { id = "RUSTSEC-2024-0429", reason = "glib VariantStrIter Iterator unsoundness — fix is glib 0.20 (major); 0.18.5 is pinned transitively, no in-line patch" },
     { id = "RUSTSEC-2026-0002", reason = "lru IterMut stacked-borrows violation — fixed 0.16.3 (the 0.16.4 copy is already past it); the remaining 0.12.5 copy has no 0.12 patch; transitive" },
     { id = "RUSTSEC-2026-0253", reason = "lru LruCache::pop use-after-free — fix is lru 0.18.2 (major bump); the 0.12.5/0.16.4 copies are pinned transitively" },
@@ -201,4 +134,5 @@ ignore = [
     { id = "RUSTSEC-2026-0370", reason = "zvariant unmaintained — transitive via zbus; no fix" },
     { id = "RUSTSEC-2026-0371", reason = "zbus_names unmaintained — transitive via zbus; no fix" },
     { id = "RUSTSEC-2026-0372", reason = "zvariant_derive unmaintained — transitive via zbus; no fix" },
+    { id = "RUSTSEC-2026-0459", reason = "C SQLite CVE in libsqlite3-sys 0.30 (medium); sqlx 0.8 pins ^0.30, fix needs the sqlx 0.9 upgrade (#1552). Low exposure: mockforge only opens its own SQLite stores (analytics, collab, federation) at operator-configured paths or in memory, via sqlx-parameterized queries; it never opens caller-supplied SQLite files or runs caller-supplied SQL" },
 ]
