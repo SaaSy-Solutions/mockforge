@@ -64,7 +64,7 @@ test.describe('Services — Deployed Site', () => {
 
     test('should display breadcrumb navigation', async ({ page }) => {
       const banner = page.getByRole('banner');
-      await expect(banner.getByText('Home').first()).toBeVisible();
+      await expect(banner.getByText('Mocks', { exact: true })).toBeVisible();
       await expect(banner.getByText('Services').first()).toBeVisible();
     });
   });

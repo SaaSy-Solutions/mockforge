@@ -77,11 +77,11 @@ test.describe('Import API Collections — Deployed Site', () => {
 
     test('should display breadcrumb navigation', async ({ page }) => {
       const banner = page.getByRole('banner');
-      const hasHome = await banner.getByText('Home').first()
+      const hasSection = await banner.getByText('Mocks', { exact: true }).first()
         .isVisible({ timeout: 3000 }).catch(() => false);
       const hasImport = await banner.getByText('Import').first()
         .isVisible({ timeout: 3000 }).catch(() => false);
-      expect(hasHome || hasImport || true).toBeTruthy();
+      expect(hasSection && hasImport).toBeTruthy();
     });
 
     test('should display the Upload File section by default', async ({ page }) => {

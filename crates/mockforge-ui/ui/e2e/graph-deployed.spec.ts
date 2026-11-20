@@ -58,8 +58,8 @@ test.describe('Graph — Deployed Site', () => {
 
     test('should display breadcrumb navigation', async ({ page }) => {
       const banner = page.getByRole('banner');
-      const hasHome = await banner
-        .getByText('Home')
+      const hasSection = await banner
+        .getByText('Flows', { exact: true })
         .isVisible({ timeout: 3000 })
         .catch(() => false);
       const hasGraph = await banner
@@ -67,12 +67,10 @@ test.describe('Graph — Deployed Site', () => {
         .isVisible({ timeout: 3000 })
         .catch(() => false);
 
-      // Breadcrumbs may or may not be present depending on layout wrapper
-      // At minimum, the banner should exist
+      // The breadcrumb renders section + page label; there is no "Home"
+      // crumb (#1051), so require both parts.
       await expect(banner).toBeVisible();
-      if (hasHome) {
-        expect(hasGraph).toBeTruthy();
-      }
+      expect(hasSection && hasGraph).toBeTruthy();
     });
 
     test('should render main content area with graph controls or canvas', async ({ page }) => {
