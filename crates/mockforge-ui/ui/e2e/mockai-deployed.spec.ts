@@ -64,9 +64,9 @@ test.describe('MockAI — Deployed Site', () => {
       const banner = page.getByRole('banner');
       const hasMockAI = await banner.getByText('MockAI')
         .isVisible({ timeout: 3000 }).catch(() => false);
-      const hasHome = await banner.getByText('Home')
+      const hasSection = await banner.getByText('AI', { exact: true })
         .isVisible({ timeout: 3000 }).catch(() => false);
-      expect(hasMockAI || hasHome).toBeTruthy();
+      expect(hasMockAI && hasSection).toBeTruthy();
     });
 
     test('should display the sidebar navigation', async ({ page }) => {

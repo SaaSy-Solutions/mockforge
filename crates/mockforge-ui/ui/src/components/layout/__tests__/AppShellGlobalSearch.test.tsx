@@ -9,6 +9,11 @@ vi.mock('../../auth/HelpSupport', () => ({ HelpSupport: () => null }));
 import { AppShell } from '../AppShell';
 import { I18nProvider } from '../../../i18n/I18nProvider';
 
+const cloudMode = vi.hoisted(() => ({ enabled: false }));
+vi.mock('../../../utils/cloudMode', () => ({
+  isCloudMode: () => cloudMode.enabled,
+}));
+
 function LocationProbe() {
   return <div data-testid="location">{useLocation().pathname}</div>;
 }
@@ -113,5 +118,45 @@ describe('AppShell sidebar', () => {
     expect(screen.queryByRole('link', { name: 'Chains' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /Flows/ }));
     expect(screen.getByRole('link', { name: 'Chains' })).toBeInTheDocument();
+  });
+
+  it('shows one Run locally link without a Local only section in cloud mode', () => {
+    cloudMode.enabled = true;
+    renderShell();
+    const runLocally = screen.getAllByRole('link', { name: 'Run locally' });
+    expect(runLocally).toHaveLength(1);
+    expect(runLocally[0]).toHaveAttribute('href', 'https://docs.mockforge.dev/getting-started/installation.html');
+    expect(screen.queryByRole('link', { name: /Run locally.*local only/i })).not.toBeInTheDocument();
+    expect(screen.queryByText('Local only')).not.toBeInTheDocument();
+    const input = openPalette();
+    fireEvent.change(input, { target: { value: 'smtp' } });
+    expect(screen.queryByRole('option', { name: /SMTP Mailbox/ })).not.toBeInTheDocument();
+    cloudMode.enabled = false;
+  });
+
+  it('offers Run locally in the cloud palette and opens the installation docs', () => {
+    cloudMode.enabled = true;
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+    renderShell();
+    const input = openPalette();
+    fireEvent.change(input, { target: { value: 'run locally' } });
+    const option = screen.getByRole('option', { name: 'Run locally' });
+    expect(option).toBeInTheDocument();
+    fireEvent.click(option);
+    expect(open).toHaveBeenCalledWith(
+      'https://docs.mockforge.dev/getting-started/installation.html',
+      '_blank',
+      'noopener,noreferrer',
+    );
+    open.mockRestore();
+    cloudMode.enabled = false;
+  });
+
+  it('keeps local protocol navigation unchanged outside cloud mode', () => {
+    cloudMode.enabled = false;
+    renderShell();
+    fireEvent.click(screen.getByRole('button', { name: /Protocols/ }));
+    expect(screen.getByRole('link', { name: 'SMTP Mailbox' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Run locally' })).not.toBeInTheDocument();
   });
 });

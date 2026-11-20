@@ -54,7 +54,7 @@ test.describe('Orchestration Execution — Deployed Site', () => {
 
     test('should display breadcrumb navigation', async ({ page }) => {
       const banner = page.getByRole('banner');
-      await expect(banner.getByText('Home').first()).toBeVisible();
+      await expect(banner.getByText('Flows', { exact: true }).first()).toBeVisible();
       await expect(banner.getByText('Orchestration Execution').first()).toBeVisible();
     });
 
