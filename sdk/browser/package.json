@@ -29,7 +29,7 @@
     "prepublishOnly": "npm run build && npm run test:unit",
     "typecheck": "tsc --noEmit",
     "test:runtime": "node tests/runtime.cjs",
-    "audit": "npm audit --audit-level=moderate"
+    "audit": "npm audit --omit=dev --audit-level=moderate"
   },
   "keywords": [
     "mock",

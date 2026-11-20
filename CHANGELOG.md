@@ -1,3 +1,72 @@
+## [0.3.248] - 2026-11-18
+
+0.3.247 was tagged but never published: its release check found that `mockforge cve` failed on Linux, so 0.3.248 ships its changes with the fix.
+
+### Security
+
+- **[DevX]** Update `libz-sys` to 1.1.33 for RUSTSEC-2026-0544 (heap buffer overflow). (#1630)
+- **[DevX]** Update `lettre` to 0.11.24 for six SMTP advisories, RUSTSEC-2026-0560 to RUSTSEC-2026-0565:
+  - STARTTLS response injection that lets a man-in-the-middle forge SMTP replies;
+  - SMTP command injection through missing dot-stuffing;
+  - mail for a quoted local part sent to a different address;
+  - unbounded reply buffering;
+  - two panics (denial of service).
+  This affects outbound mail from the SMTP mock, reporting, pipelines and the registry. (#1648)
+
+### Fixed
+
+- **[Reality]** `mockforge cve` works again. It passed every bundled CVE lab module to Python as one command-line argument, and once the bundle grew past Linux's 128 KiB per-argument limit, every `mockforge cve` command failed with "Argument list too long", reported as needing Python 3.11+. The modules now go to a private temporary directory, and a missing `python3` is reported only when it is really missing. (#1654)
+- **[Reality]** CVE lab `inconclusive` results explain themselves. When an unverified pack's lab starts but its baseline does not reproduce, the reason says this is a known state of the pack, not a problem with your target or setup, and names the verified packs that run end to end. When your target blocks the exploit with a status other than `--block-status`, the reason names the status it returned and suggests `--block-status <code>`. `report.json` gains `pack_verified`. (#1645, reported on #79)
+- **[Reality]** The managed CVE lab guide states each pack's real status, explains what the lab sends to your target (not a replay of the baseline), and explains that pass or fail is judged by what reaches the lab origin through your load balancer. It also says where an extra test case goes. (#1645, #1646, #1611)
+- **[Reality]** CVE labs deliver the generated Nuclei template into the runner container with create and copy instead of a host bind mount, so runs work when the engine cannot see the host path (Docker Desktop, podman machine and other remote or VM engines). (#1616)
+- **[Reality]** A CVE lab pack without a `verified` field is treated as unverified. (#1599)
+- **[Reality]** A failed main signature is never softened by signature-variant evidence: a run whose main signature fails reports `fail` even when a variant is inconclusive. (#1604)
+- **[DevX]** The `fuzz_openapi_parser` fuzz target compiles again, and all nine fuzz targets build. Three stale member lockfiles that pinned vulnerable dependencies are removed, and the fuzz lockfile is refreshed. (#1634, #1632)
+- **[DevX]** CI fixes:
+  - the browser SDK audit covers shipped dependencies only (#1636);
+  - the scheduled hosted-mocks smoke test skips with a notice while its secrets are unset (#1629);
+  - the load tests serve only HTTP, admin and metrics (#1617);
+  - the coverage job uses the shared build target directory (#1614);
+  - the image smoke test's egress check uses its own redirector and counts blocked requests correctly (#1640).
+  - the production smoke test runs on GitHub-hosted runners, so it no longer queues behind builds on the shared runners (#1652).
+- **[DevX]** Documentation copy fixes: the FAQ pricing claim, the canonical description and the protocol list. (#1565)
+
+### Added
+
+- **[Reality]** Every CVE lab run writes `sent_requests.jsonl` next to `report.json`. It holds one line per request the lab sends to its own origin or through `--target`: the correlation marker, method, path, redacted headers, a body hash and preview, and the response status or error. Joined with `report.json`'s `origin_observations`, it shows what was sent versus what arrived through your load balancer. The guide adds `tcpdump`/`tshark` commands for a byte-level capture. (#1647, reported on #79)
+- **[Reality]** Node2Shell CVE-2026-111497 pack (Node.js Brotli decoder out-of-bounds write) with an HTTP/2-capable recorder. It is unverified, because its pinned image has not yet reproduced the crash on a lab host, so it runs only with `--include-unverified`. (#1523)
+- **[Reality]** Signature variants for the CVE-2026-109619 `ini_set`, `php_value` and `php_admin` cases. (#1603)
+
+## [0.3.246] - 2026-11-15
+
+### Security
+
+- **[Cloud]** The registry's showcase admin endpoints require a site administrator. (#1590)
+- **[DevX]** Update `quinn-proto` to 0.11.19 and `quinn-udp` to 0.5.16 for RUSTSEC-2026-0523, RUSTSEC-2026-0524 and RUSTSEC-2026-0538. (#1580)
+
+### Fixed
+
+- **[Reality]** `mockforge cve run --skip-tls-verify` against an HTTPS target no longer fails at the baseline with `flag provided but not defined: -insecure`. The pinned Nuclei 3.11.1 runner has no such flag and never verifies TLS certificates, so MockForge no longer passes one; `--skip-tls-verify` still governs MockForge's own control requests and is recorded in the report. A regression test runs the real pinned runner against a self-signed HTTPS server. (#1601, reported on #79)
+- **[Cloud]** The registry acknowledges Stripe webhooks that can never be acted on (no valid org, an unknown org, or an already-passed trial end) instead of answering a retryable 503 that Stripe would retry for days. (#1575)
+
+### Added
+
+- **[Reality]** CVE lab packs can declare more test cases as data (`extra_cases`), and must-be-blocked signature variants that run in the direct baseline and through the load balancer with a verdict per variant. (#1541, #1597)
+- **[Reality]** `mockforge cve list` surfaces each pack's digest-pinned images and whether this machine holds them; digest-pulled images do not appear in `docker images`. (#1542)
+- **[Reality]** PHP2Shell 2026 packs for CVE-2026-109618 and CVE-2026-109619, with signature variants for the `PHP_SESSION_UPLOAD_PROGRESS` placements reported on #79. Both packs are unverified (their trigger has not reproduced on a lab host yet), so they run only with `--include-unverified`. (#1524, #1597)
+- **[DevX]** CI reclaims oversized runner build targets, with a 25G default cap. (#1581, #1586)
+
+## [0.3.245] - 2026-11-13
+
+0.3.244 was tagged but never published (its release build ran out of disk), so 0.3.245 ships its changes.
+
+### Fixed
+
+- **[Contracts]** Generated mock responses honour the schema's constraints: string `enum`, `format` and length limits; integer and number `enum`, bounds (including exclusive bounds) and `multipleOf`; and boolean `enum`. This applies inside objects, arrays, `$ref` and `allOf`/`oneOf`/`anyOf`. Constrained ids no longer get the `_001` suffix. Unconstrained values are unchanged. (#1558)
+- **[Reality]** When a CVE lab's Nuclei step fails, the report and the printed reason now show the failing phase, the container's exit code and the end of its output, instead of an empty `docker command failed:`. (#1529)
+- **[DevX]** Releases no longer rebuild the workspace from scratch for the `cargo install` smoke test, and trim the runner's release build directory afterwards, so a release stops filling the shared CI disk. (#1570)
+- **[DevX]** CI fixes: the CLI tools bundle is regenerated, the example configuration image workflow uses the standard runner selection, and two unneeded qualifications in `mockforge-proxy` tests are removed.
+
 ## [0.3.243] - 2026-11-12
 
 ### Fixed

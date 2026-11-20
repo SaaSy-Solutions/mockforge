@@ -79,11 +79,11 @@ test.describe('Service Status — Deployed Site', () => {
 
     test('should display breadcrumb navigation', async ({ page }) => {
       const banner = page.getByRole('banner');
-      const hasHome = await banner.getByText('Home').first()
+      const hasSection = await banner.getByText('Observe', { exact: true }).first()
         .isVisible({ timeout: 3000 }).catch(() => false);
-      const hasStatus = await banner.getByText('Status').first()
+      const hasStatus = await banner.getByText('System Status').first()
         .isVisible({ timeout: 3000 }).catch(() => false);
-      expect(hasHome || hasStatus || true).toBeTruthy();
+      expect(hasSection && hasStatus).toBeTruthy();
     });
 
     test('should display the overall status card or loading/error state', async ({ page }) => {
