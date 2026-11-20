@@ -158,7 +158,10 @@ security-audit:
         cargo install cargo-deny --locked
 
     - name: Run RustSec advisory scan
-      run: cargo audit
+      # Audits every standalone Cargo.lock tracked by git (root, fuzz,
+      # example plugins, vendored signer, SigV4a SDK tests), using
+      # audit.toml as the single source of truth for ignored advisories.
+      run: python3 scripts/precommit/cargo_audit.py --all-lockfiles
 
     - name: Run license and source compliance check
       run: cargo deny check licenses sources bans

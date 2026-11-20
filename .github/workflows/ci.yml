@@ -530,8 +530,13 @@ jobs:
       # Delegate to scripts/precommit/cargo_audit.py so audit.toml is the
       # single source of truth for ignored advisories (the cargo-audit CLI
       # has no native config-file support). Keeps CI in sync with the
-      # pre-commit hook.
-      run: python3 scripts/precommit/cargo_audit.py
+      # pre-commit hook. --all-lockfiles extends the scan from the root
+      # workspace to every standalone Cargo.lock tracked by git (fuzz,
+      # example plugins, the vendored signer, the SigV4a SDK tests),
+      # refuses stray lockfiles that cargo ignores, and fails on stale
+      # locks. Needs only git plus the already-present cargo and
+      # cargo-audit: locate-project and metadata ship with cargo.
+      run: python3 scripts/precommit/cargo_audit.py --all-lockfiles
 
     - name: Run license and source compliance check
       run: cargo deny check licenses sources bans

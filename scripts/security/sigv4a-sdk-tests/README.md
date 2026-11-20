@@ -6,14 +6,16 @@ test credentials. It asserts ECDSA signing, a regionless scope, the region set a
 the session token. It makes no AWS requests.
 
 The existing Security Audit job runs this test and the vendored upstream signing
-suite with locked dependencies. The vendor's separate lockfile protects the
-upstream unit and MRAP regression tests; this fixture locks the SDK consumer.
-The application workspace lockfile continues to govern production consumers.
+suite with locked dependencies, and its `cargo_audit.py --all-lockfiles` scan
+audits this fixture's lockfile alongside the vendor's and the root workspace's.
+The vendor's separate lockfile protects the upstream unit and MRAP regression
+tests; this fixture locks the SDK consumer. The application workspace lockfile
+continues to govern production consumers.
 
 ```bash
 cargo test --locked --manifest-path vendor/aws-sigv4/Cargo.toml --all-features --lib --test crypto_dependencies --test sigv4a_mrap
 cargo test --locked --manifest-path scripts/security/sigv4a-sdk-tests/Cargo.toml
-python3 scripts/precommit/cargo_audit.py
+python3 scripts/precommit/cargo_audit.py --all-lockfiles
 cargo deny check licenses sources bans
 ```
 

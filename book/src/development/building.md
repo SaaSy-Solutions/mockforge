@@ -290,8 +290,15 @@ cargo fmt
 # Install cargo-audit
 cargo install cargo-audit
 
-# Audit dependencies for security vulnerabilities
-cargo audit
+# Audit every standalone Cargo.lock tracked by git (what CI does): the
+# root workspace plus the fuzz crate, example plugins, the vendored
+# signer and the SigV4a SDK tests. audit.toml supplies the ignored
+# advisories, stray member lockfiles fail the run, and stale lockfiles
+# are rejected.
+python3 scripts/precommit/cargo_audit.py --all-lockfiles
+
+# Audit only the root workspace lockfile (what the pre-commit hook does)
+python3 scripts/precommit/cargo_audit.py
 ```
 
 ## Documentation

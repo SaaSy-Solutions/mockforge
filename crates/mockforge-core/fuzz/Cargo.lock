@@ -1867,7 +1867,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-contracts"
-version = "0.3.246"
+version = "0.3.248"
 dependencies = [
  "async-trait",
  "bytes",
@@ -1893,7 +1893,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-core"
-version = "0.3.246"
+version = "0.3.248"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -1976,7 +1976,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-data"
-version = "0.3.246"
+version = "0.3.248"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2008,7 +2008,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-foundation"
-version = "0.3.246"
+version = "0.3.248"
 dependencies = [
  "async-trait",
  "chrono",
@@ -2031,7 +2031,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-intelligence"
-version = "0.3.246"
+version = "0.3.248"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2063,7 +2063,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-openapi"
-version = "0.3.246"
+version = "0.3.248"
 dependencies = [
  "async-trait",
  "axum",
@@ -2087,7 +2087,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-protocol"
-version = "0.3.246"
+version = "0.3.248"
 dependencies = [
  "async-trait",
  "chrono",

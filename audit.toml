@@ -1,7 +1,8 @@
 # Ignored advisories for `cargo audit`. Consumed by
 # `scripts/precommit/cargo_audit.py`, which reads this file and passes each
 # ID as `--ignore` to cargo-audit (the cargo-audit CLI has no native config
-# file support).
+# file support). Under `--all-lockfiles` every ignored ID applies to each
+# standalone lockfile the scan covers, not just the root workspace's.
 #
 # When adding an entry, include a short reason explaining why it can't be
 # fixed by upgrading. Periodically re-check: `scripts/precommit/cargo_audit.py`

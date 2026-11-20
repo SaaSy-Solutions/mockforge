@@ -338,7 +338,7 @@ m.download=download;m.remove_owned=remove;sys.argv=[helper,'prepare'];m.main()
 
     def test_scan_policies_and_job_limits_are_unchanged(self):
         self.assertIn('timeout-minutes: 30',JOB)
-        self.assertIn('run: python3 scripts/precommit/cargo_audit.py',step('Run RustSec advisory scan'))
+        self.assertIn('run: python3 scripts/precommit/cargo_audit.py --all-lockfiles',step('Run RustSec advisory scan'))
         self.assertIn('run: cargo deny check licenses sources bans',step('Run license and source compliance check'))
         cleanup=step('Clean up owned security tools on Hetzner')
         self.assertIn("if: always() && runner.environment == 'self-hosted' && steps.security-tools.outcome == 'success'",cleanup)
