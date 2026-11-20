@@ -149,7 +149,7 @@ class SecurityToolOwnershipTest(unittest.TestCase):
         self.assertLess(changes.index('Verify owned security tool setup and cleanup'), changes.index('Determine whether non-docs'))
         self.assertIn('python3 scripts/tests/test_owned_security_tools.py', changes)
         self.assertIn("if: runner.environment == 'github-hosted'", step('Install pinned security audit tools'))
-        self.assertIn('uses: taiki-e/install-action@v2.87.31', step('Install pinned security audit tools'))
+        self.assertIn('uses: taiki-e/install-action@v2.90.3', step('Install pinned security audit tools'))
         self.assertIn("if: runner.environment == 'self-hosted'", step('Prepare job-owned security audit tools on Hetzner'))
 
     @SKIP_OFF_LINUX_X64
