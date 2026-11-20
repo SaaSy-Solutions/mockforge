@@ -72,11 +72,13 @@ test.describe('API Explorer — Deployed Site', () => {
       await page.waitForTimeout(2000);
 
       const banner = page.getByRole('banner');
-      const hasHome = await banner
-        .getByText('Home')
+      // /api-explorer is unlisted in the sidebar, so the breadcrumb shows the
+      // page label only — there is no "Home" crumb (#1051).
+      const hasBreadcrumb = await banner
+        .getByText('API Explorer')
         .isVisible({ timeout: 3000 })
         .catch(() => false);
-      expect(hasHome).toBeTruthy();
+      expect(hasBreadcrumb).toBeTruthy();
     });
 
     test('should render content on the landed page', async ({ page }) => {

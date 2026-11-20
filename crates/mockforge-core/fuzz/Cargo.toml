@@ -20,6 +20,9 @@ path = ".."
 [dependencies.mockforge-data]
 path = "../../mockforge-data"
 
+[dependencies.mockforge-openapi]
+path = "../../mockforge-openapi"
+
 # Prevent this from interfering with workspaces
 [workspace]
 members = ["."]

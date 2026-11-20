@@ -85,7 +85,8 @@ test.describe('Workspaces — Deployed Site', () => {
 
     test('should display breadcrumb navigation', async ({ page }) => {
       const banner = page.getByRole('banner');
-      await expect(banner.getByText('Home')).toBeVisible();
+      // Workspaces sits in the untitled overview section, so the breadcrumb
+      // shows the page label only — there is no "Home" crumb (#1051).
       await expect(banner.getByText('Workspaces')).toBeVisible();
     });
 

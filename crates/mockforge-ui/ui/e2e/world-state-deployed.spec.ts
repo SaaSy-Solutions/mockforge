@@ -95,9 +95,9 @@ test.describe('World State — Deployed Site', () => {
       const banner = page.getByRole('banner');
       const hasBreadcrumb = await banner.getByText('World State')
         .isVisible({ timeout: 3000 }).catch(() => false);
-      const hasHomeBreadcrumb = await banner.getByText('Home')
+      const hasSection = await banner.getByText('Observe', { exact: true })
         .isVisible({ timeout: 3000 }).catch(() => false);
-      expect(hasBreadcrumb || hasHomeBreadcrumb || true).toBeTruthy();
+      expect(hasBreadcrumb && hasSection).toBeTruthy();
     });
 
     test('should not display loading state after page settles', async ({ page }) => {

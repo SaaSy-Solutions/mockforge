@@ -69,7 +69,7 @@ test.describe('Chains — Deployed Site', () => {
 
     test('should display breadcrumb navigation', async ({ page }) => {
       const banner = page.getByRole('banner');
-      await expect(banner.getByText('Home').first()).toBeVisible();
+      await expect(banner.getByText('Flows', { exact: true }).first()).toBeVisible();
       await expect(banner.getByText('Chains').first()).toBeVisible();
     });
   });

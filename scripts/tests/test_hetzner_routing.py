@@ -192,7 +192,10 @@ class HetznerRoutingTest(unittest.TestCase):
 
     def test_only_runner_health_monitor_stays_hosted(self):
         self.assertEqual(route(jobs('runner-health.yml')['check']), 'ubuntu-latest')
-        self.assertEqual(route(jobs('production-smoke.yml')['smoke']), HETZNER)
+        # Production smoke is curl/jq/github-script against the public API; it
+        # runs GitHub-hosted (free on this public repo) so monitoring never
+        # queues behind the shared Rust pool.
+        self.assertEqual(route(jobs('production-smoke.yml')['smoke']), 'ubuntu-latest')
         smoke = (WORKFLOWS / 'production-smoke.yml').read_text()
         self.assertIn('group: production-smoke\n  cancel-in-progress: false', smoke)
         # Docs verification does not compile Rust. It used to take a rust-pool
@@ -224,6 +227,7 @@ class HetznerRoutingTest(unittest.TestCase):
         allowed = {HETZNER, ROUTE}
         exceptions = {('runner-health.yml', 'check'): 'ubuntu-latest',
                       ('docs-check.yml', 'docs'): 'ubuntu-latest',
+                      ('production-smoke.yml', 'smoke'): 'ubuntu-latest',
                       ('release.yml', 'release-windows'): 'windows-latest',
                       ('release.yml', 'release'): RELEASE_HETZNER,
                       ('release.yml', 'publish'): RELEASE_HETZNER,
