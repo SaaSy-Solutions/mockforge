@@ -17,6 +17,7 @@ import sys
 import tempfile
 import threading
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -28,6 +29,11 @@ import cve_lab_exploits as exploits
 import cve_lab_nuclei as nuclei
 import cve_lab_evidence as evidence
 import cve_lab_transport as transport
+
+try:
+    import cve_lab_sent as sent
+except ImportError:
+    sent = None
 
 SPEC = importlib.util.spec_from_file_location(
     "managed_cve_lab", Path(__file__).resolve().parents[1] / "cve_lab.py"
@@ -42,6 +48,29 @@ def completed(stdout="", returncode=0):
 
 def completed_output(stdout="", stderr="", returncode=0):
     return subprocess.CompletedProcess([], returncode, stdout, stderr)
+
+
+# Run-level tests stub the --network=host namespace probe as shared, so they
+# never start a real container; HostNetworkTests cover the probe itself.
+SHARED_HOST_NETWORK = {"host": "net:[1]", "container": "net:[1]", "shared": True}
+
+
+@contextlib.contextmanager
+def linux_doctor_host():
+    """doctor's platform gate refuses non-Linux hosts; stub the platform and
+    engine-lookup checks so doctor tests stay OS-free and engine-free."""
+    with patch.object(
+        engine,
+        "platform",
+        SimpleNamespace(
+            system=lambda: "Linux",
+            machine=lambda: "amd64",
+            python_version=lambda: "3.11.9",
+        ),
+    ), patch.object(
+        engine, "shutil", SimpleNamespace(which=lambda name: "/usr/bin/" + name)
+    ):
+        yield
 
 
 class LifecycleTests(unittest.TestCase):
@@ -248,6 +277,61 @@ class InputTests(unittest.TestCase):
                 prepare.assert_not_called()
                 run.assert_not_called()
 
+    def test_pack_without_verified_field_counts_as_unverified(self):
+        # A pack that omits "verified" must behave exactly like one that
+        # declares "verified": False; silence no longer means verified.
+        synthetic = {
+            "CVE-2099-00001": {"catalog": {"cve": "CVE-2099-00001"}},
+            "CVE-2099-00002": {
+                "verified": False,
+                "catalog": {"cve": "CVE-2099-00002"},
+            },
+        }
+        with patch.dict(lab.PACKS, synthetic):
+            for cve in ("CVE-2099-00001", "CVE-2099-00002"):
+                with self.subTest(cve=cve):
+                    self.assertNotIn(cve, lab.verified_cves())
+                    self.assertIn(cve, lab.verified_cves(include_unverified=True))
+                    with self.assertRaisesRegex(
+                        ValueError, "pass --include-unverified"
+                    ):
+                        lab.require_verified(cve, include_unverified=False)
+                    lab.require_verified(cve, include_unverified=True)
+
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                self.assertEqual(lab.main(["list"]), 0)
+            packs = json.loads(output.getvalue())
+            self.assertNotIn("CVE-2099-00001", packs)
+            self.assertNotIn("CVE-2099-00002", packs)
+            self.assertIn("CVE-2025-29927", packs)
+
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                self.assertEqual(lab.main(["--include-unverified", "list"]), 0)
+            packs = json.loads(output.getvalue())
+            self.assertIn("CVE-2099-00001", packs)
+            self.assertIn("CVE-2099-00002", packs)
+
+            for action in ("run", "prepare"):
+                for cve in ("CVE-2099-00001", "CVE-2099-00002"):
+                    err = io.StringIO()
+                    with self.subTest(action=action, cve=cve), patch.object(
+                        lab, "prepare"
+                    ) as prepare, patch.object(lab, "run") as run, contextlib.redirect_stderr(err):
+                        args = [action, cve]
+                        if action == "run":
+                            args += ["--output-dir", "unused-output"]
+                        self.assertEqual(lab.main(args), 1)
+                        self.assertIn(
+                            f"{cve} is an unverified lab pack (its trigger has not "
+                            "reproduced on a lab host); pass --include-unverified to "
+                            "run it for development",
+                            err.getvalue(),
+                        )
+                        prepare.assert_not_called()
+                        run.assert_not_called()
+
     def test_include_unverified_lists_and_runs_development_pack(self):
         for flag_order in (
             ["--include-unverified", "list"],
@@ -390,6 +474,14 @@ class VerdictTests(unittest.TestCase):
     def test_unexpected_rejection_is_inconclusive(self):
         self.target["status"] = 502
         self.assertEqual(self.verdict(), "inconclusive")
+
+    def test_block_status_mismatch_reason_names_the_observed_status_and_fix(self):
+        self.target["status"] = 418
+        verdict, reason, _checks = self.outcome()
+        self.assertEqual(verdict, "inconclusive")
+        self.assertIn("418", reason)
+        self.assertIn("403", reason)
+        self.assertIn("--block-status 418", reason)
 
     def test_uncorrelated_origin_request_cannot_pass(self):
         self.records.append({"tokens": [None, None], "status": 200})
@@ -691,6 +783,14 @@ class Cve20244577VerdictTests(unittest.TestCase):
     def test_unexpected_rejection_is_inconclusive(self):
         self.target["status"] = 502
         self.assertEqual(self.verdict(), "inconclusive")
+
+    def test_block_status_mismatch_reason_names_the_observed_status_and_fix(self):
+        self.target["status"] = 418
+        verdict, reason, _checks = self.outcome()
+        self.assertEqual(verdict, "inconclusive")
+        self.assertIn("418", reason)
+        self.assertIn("403", reason)
+        self.assertIn("--block-status 418", reason)
 
     def test_uncorrelated_origin_request_cannot_pass(self):
         self.records.append({"tokens": [None, None], "status": 200})
@@ -1192,6 +1292,22 @@ class Node2ShellVerdictTests(unittest.TestCase):
         self.target["status"] = 502
         self.assertEqual(self.verdict(), "inconclusive")
 
+    def test_block_status_mismatch_reason_names_the_observed_status_and_fix(self):
+        self.target["status"] = 418
+        verdict, reason, _checks = self.outcome()
+        self.assertEqual(verdict, "inconclusive")
+        self.assertIn("418", reason)
+        self.assertIn("403", reason)
+        self.assertIn("--block-status 418", reason)
+
+    def test_block_status_mismatch_without_a_status_suggests_no_flag(self):
+        self.target["status"] = None
+        self.target["error"] = "connection reset by peer"
+        verdict, reason, _checks = self.outcome()
+        self.assertEqual(verdict, "inconclusive")
+        self.assertIn("no HTTP status", reason)
+        self.assertNotIn("--block-status", reason)
+
     def test_uncorrelated_origin_request_cannot_pass(self):
         self.records.append({"tokens": [None, None], "status": 200})
         self.assertEqual(self.verdict(), "inconclusive")
@@ -1564,6 +1680,270 @@ class Node2ShellTlsVerifyTests(unittest.TestCase):
             self.assertEqual((output / "target.log").read_text(), "debug output")
 
 
+class HostNetworkTests(unittest.TestCase):
+    """A --network=host container must share this machine's network, or the
+    run is refused up front with a plain reason - never a Nuclei failure."""
+
+    def engine_stub(self, images_present=(), probe_ns="net:[4026532806]"):
+        """A doctor-shaped docker CLI: doctor's local checks, by-digest
+        image inspects for the listed references, the namespace probe run,
+        and absent owned containers (so owned_remove is a no-op)."""
+
+        def stub(args, **_kwargs):
+            if args[1] == "version":
+                return completed("29.1.3\n")
+            if args[1] == "info":
+                return completed(json.dumps({"ServerVersion": "29.1.3"}))
+            if args[1] == "context":
+                return completed(
+                    json.dumps(
+                        [
+                            {
+                                "Endpoints": {
+                                    "docker": {"Host": "unix:///var/run/docker.sock"}
+                                }
+                            }
+                        ]
+                    )
+                )
+            if args[:3] == ["docker", "image", "inspect"]:
+                return completed() if args[3] in images_present else completed(returncode=1)
+            if args[:2] == ["docker", "run"]:
+                return completed(probe_ns + "\n")
+            if args[:2] == ["docker", "ps"]:
+                return completed("")
+            return completed(returncode=1)
+
+        return stub
+
+    def test_probe_compares_host_and_container_namespaces(self):
+        with patch.object(
+            engine, "host_netns", return_value="net:[4026532806]"
+        ), patch.object(
+            engine, "command", side_effect=self.engine_stub()
+        ) as command:
+            probe = engine.host_network_probe("docker", "runner@sha256:abc")
+        self.assertTrue(probe["shared"])
+        self.assertEqual(probe["host"], "net:[4026532806]")
+        self.assertEqual(probe["container"], "net:[4026532806]")
+        runs = [call.args[0] for call in command.call_args_list if call.args[0][1] == "run"]
+        self.assertEqual(len(runs), 1)
+        self.assertIn("--network=host", runs[0])
+        # A doctor probe must never download, and the runner image's
+        # entrypoint is Nuclei, so the namespace read overrides it.
+        self.assertIn("--pull=never", runs[0])
+        self.assertEqual(runs[0][runs[0].index("--entrypoint") + 1], "/bin/readlink")
+        self.assertIn("runner@sha256:abc", runs[0])
+
+    def test_probe_reports_a_mismatched_container_namespace(self):
+        with patch.object(
+            engine, "host_netns", return_value="net:[4026532806]"
+        ), patch.object(
+            engine, "command", side_effect=self.engine_stub(probe_ns="net:[4026532857]")
+        ):
+            probe = engine.host_network_probe("docker", "runner@sha256:abc")
+        self.assertFalse(probe["shared"])
+
+    def test_probe_failure_is_reported_not_a_scanner_failure(self):
+        base = self.engine_stub()
+
+        def stub(args, **_kwargs):
+            if args[1] == "run":
+                return completed_output(
+                    stderr="Cannot connect to the Docker daemon", returncode=1
+                )
+            return base(args, **_kwargs)
+
+        with patch.object(
+            engine, "host_netns", return_value="net:[4026532806]"
+        ), patch.object(engine, "command", side_effect=stub):
+            with self.assertRaisesRegex(
+                RuntimeError, "Cannot probe the engine's host network namespace"
+            ):
+                engine.host_network_probe("docker", "runner@sha256:abc")
+
+    def test_refusal_names_the_recorder_and_doc_guidance(self):
+        message = engine.host_network_refusal(
+            "192.168.2.10:18082",
+            {"host": "net:[4026532806]", "container": "net:[4026532857]"},
+        )
+        self.assertIn(
+            "containers started with --network=host on this engine don't share "
+            "this machine's network, so the scanner can't reach the recorder at "
+            "192.168.2.10:18082",
+            message,
+        )
+        self.assertIn("net:[4026532806]", message)
+        self.assertIn("net:[4026532857]", message)
+        self.assertIn("docs.mockforge.dev/user-guide/managed-cve-labs", message)
+
+    def test_run_refuses_a_mismatched_host_network_and_never_runs_nuclei(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as directory, linux_doctor_host(), patch.object(
+            engine, "host_netns", return_value="net:[4026532806]"
+        ), patch.object(
+            engine, "command", side_effect=self.engine_stub(probe_ns="net:[4026532857]")
+        ), patch.object(
+            lab, "probe"
+        ) as nuclei_probe, contextlib.redirect_stdout(
+            stdout
+        ), contextlib.redirect_stderr(
+            io.StringIO()
+        ):
+            output = Path(directory) / "out"
+            self.assertEqual(
+                lab.main(["run", lab.CVE, "--output-dir", str(output)]), 1
+            )
+            report = json.loads((output / "report.json").read_text())
+        nuclei_probe.assert_not_called()
+        self.assertEqual(report["verdict"], "inconclusive")
+        self.assertIn(
+            "containers started with --network=host on this engine don't share "
+            "this machine's network",
+            report["reason"],
+        )
+        self.assertIn(
+            "the scanner can't reach the recorder at 127.0.0.1:18082",
+            report["reason"],
+        )
+        self.assertIn("docs.mockforge.dev", report["reason"])
+        self.assertFalse(report["host_network"]["shared"])
+        self.assertEqual(report["host_network"]["host"], "net:[4026532806]")
+        self.assertEqual(report["host_network"]["container"], "net:[4026532857]")
+        self.assertNotIn("Nuclei exited", report["reason"])
+
+    def test_run_records_a_shared_network_probe_and_continues(self):
+        entries = [
+            {"role": "application", "image": "app@sha256:a", "status": "present"},
+            {"role": "runner", "image": "runner@sha256:b", "status": "present"},
+        ]
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+            lab, "prepare"
+        ), patch.object(
+            lab, "verify_images", return_value=entries
+        ), patch.object(
+            lab,
+            "host_network_probe",
+            return_value={"host": "net:[1]", "container": "net:[1]", "shared": True},
+        ), patch.object(
+            lab, "lab", side_effect=RuntimeError("mocked engine failure")
+        ), contextlib.redirect_stdout(
+            io.StringIO()
+        ), contextlib.redirect_stderr(
+            io.StringIO()
+        ):
+            output = Path(directory) / "out"
+            self.assertEqual(
+                lab.main(["run", lab.CVE, "--output-dir", str(output)]), 1
+            )
+            report = json.loads((output / "report.json").read_text())
+        self.assertTrue(report["host_network"]["shared"])
+        # The run proceeded past the probe; the failure is the mocked one.
+        self.assertEqual(report["reason"], "mocked engine failure")
+
+    def test_doctor_reports_pinned_images_and_a_shared_host_network(self):
+        pack = catalog.PACKS["CVE-2025-29927"]
+        stdout = io.StringIO()
+        with linux_doctor_host(), patch.object(
+            engine, "host_netns", return_value="net:[4026532806]"
+        ), patch.object(
+            engine,
+            "command",
+            side_effect=self.engine_stub(
+                images_present=(
+                    pack["catalog"]["application_image"],
+                    pack["catalog"]["runner_image"],
+                )
+            ),
+        ), contextlib.redirect_stdout(stdout):
+            self.assertEqual(lab.main(["doctor"]), 0)
+        report = json.loads(stdout.getvalue())
+        self.assertEqual(
+            report["images"]["CVE-2025-29927"],
+            [
+                {
+                    "role": "application",
+                    "image": pack["catalog"]["application_image"],
+                    "status": "present",
+                },
+                {
+                    "role": "runner",
+                    "image": pack["catalog"]["runner_image"],
+                    "status": "present",
+                },
+            ],
+        )
+        self.assertTrue(report["host_network"]["shared"])
+        self.assertEqual(report["host_network"]["host"], "net:[4026532806]")
+
+    def test_doctor_reports_missing_digests_and_skips_the_probe(self):
+        pack = catalog.PACKS["CVE-2025-29927"]
+        stdout = io.StringIO()
+        with linux_doctor_host(), patch.object(engine, "host_netns") as host_netns, patch.object(
+            engine,
+            "command",
+            side_effect=self.engine_stub(
+                images_present=(pack["catalog"]["application_image"],)
+            ),
+        ) as command, contextlib.redirect_stdout(stdout):
+            self.assertEqual(lab.main(["doctor"]), 0)
+        report = json.loads(stdout.getvalue())
+        listing = report["images"]["CVE-2025-29927"]
+        self.assertEqual(listing[0]["status"], "present")
+        self.assertEqual(listing[1]["status"], "missing")
+        # Without the runner image locally, doctor cannot probe and must not
+        # try (doctor never downloads): the check reports unknown instead.
+        self.assertIsNone(report["host_network"]["shared"])
+        self.assertIn("not present locally", report["host_network"]["reason"])
+        host_netns.assert_not_called()
+        self.assertEqual(
+            [call.args[0][1] for call in command.call_args_list if call.args[0][1] == "run"],
+            [],
+        )
+
+    def test_doctor_fails_with_the_plain_refusal_on_a_namespace_mismatch(self):
+        pack = catalog.PACKS["CVE-2025-29927"]
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with linux_doctor_host(), patch.object(
+            engine, "host_netns", return_value="net:[4026532806]"
+        ), patch.object(
+            engine,
+            "command",
+            side_effect=self.engine_stub(
+                images_present=(
+                    pack["catalog"]["application_image"],
+                    pack["catalog"]["runner_image"],
+                ),
+                probe_ns="net:[4026532857]",
+            ),
+        ), contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            self.assertEqual(lab.main(["doctor"]), 1)
+        report = json.loads(stdout.getvalue())
+        self.assertFalse(report["host_network"]["shared"])
+        self.assertIn(
+            "containers started with --network=host on this engine don't share "
+            "this machine's network",
+            stderr.getvalue(),
+        )
+        self.assertIn("127.0.0.1:18082", stderr.getvalue())
+        self.assertIn("docs.mockforge.dev", stderr.getvalue())
+
+    def test_doctor_without_packs_adds_no_images_or_probe(self):
+        with linux_doctor_host(), patch.object(engine, "host_netns") as host_netns, patch.object(
+            engine, "command", side_effect=self.engine_stub()
+        ) as command:
+            report = engine.doctor("docker")
+        self.assertEqual(report["engine"], "docker")
+        self.assertNotIn("images", report)
+        self.assertNotIn("host_network", report)
+        host_netns.assert_not_called()
+        self.assertEqual(
+            [call.args[0][1] for call in command.call_args_list],
+            ["version", "info", "context"],
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
 
@@ -1811,6 +2191,22 @@ class Php2Shell2026VerdictTests(unittest.TestCase):
     def test_blanket_block_of_the_ordinary_path_is_inconclusive(self):
         self.before["root_status"] = 403
         self.assertEqual(self.verdict(), "inconclusive")
+
+    def test_block_status_mismatch_reason_names_the_observed_status_and_fix(self):
+        self.target["status"] = 418
+        verdict, reason, _checks = self.outcome()
+        self.assertEqual(verdict, "inconclusive")
+        self.assertIn("418", reason)
+        self.assertIn("403", reason)
+        self.assertIn("--block-status 418", reason)
+
+    def test_block_status_mismatch_without_a_status_suggests_no_flag(self):
+        self.target["status"] = None
+        self.target["error"] = "connection reset"
+        verdict, reason, _checks = self.outcome()
+        self.assertEqual(verdict, "inconclusive")
+        self.assertIn("no HTTP status", reason)
+        self.assertNotIn("--block-status", reason)
 
     def test_uncorrelated_origin_request_cannot_pass(self):
         self.records.append({"tokens": [None, None], "status": 200})
@@ -2334,6 +2730,9 @@ class DataDrivenCaseTests(unittest.TestCase):
 
     def synthetic_pack(self):
         return {
+            # Packs default to unverified; this synthetic pack models a
+            # reviewed pack, so it declares verified explicitly.
+            "verified": True,
             "catalog": {
                 "schema_version": 1,
                 "pack_revision": 1,
@@ -2624,6 +3023,15 @@ class DataDrivenCaseTests(unittest.TestCase):
         target = {"token": "attack", "status": 502}
         verdict, _reason, _checks = self.outcome_for(pack, target=target)
         self.assertEqual(verdict, "inconclusive")
+
+    def test_data_driven_block_status_reason_names_observed_and_fix(self):
+        pack = self.synthetic_pack()
+        target = {"token": "attack", "status": 418}
+        verdict, reason, _checks = self.outcome_for(pack, target=target)
+        self.assertEqual(verdict, "inconclusive")
+        self.assertIn("418", reason)
+        self.assertIn("403", reason)
+        self.assertIn("--block-status 418", reason)
 
     def test_data_driven_classifier_is_inconclusive_when_the_baseline_marker_is_absent(
         self,
@@ -2967,6 +3375,8 @@ class SignatureVariantRunnerTests(unittest.TestCase):
             with tempfile.TemporaryDirectory() as directory, patch.object(
                 lab, "prepare"
             ), patch.object(lab, "verify_images", return_value=[]), patch.object(
+                lab, "host_network_probe", return_value=SHARED_HOST_NETWORK
+            ), patch.object(
                 lab, "lab", return_value=FakeLab()
             ), patch.object(lab, "receiver", side_effect=fake_receiver), patch.object(
                 lab, "control", side_effect=fake_controls
@@ -3315,6 +3725,38 @@ class SignatureVariantEvidenceTests(unittest.TestCase):
             if entry["check"] == "variant marker-in-query was blocked at the target"
         ][0]
         self.assertIn("connection refused", blocked["outcome"])
+
+    def test_variant_block_status_mismatch_names_observed_and_fix(self):
+        pack = self.pack()
+        baseline_variants = {
+            "marker-in-query": {"token": "bv-marker-in-query", "status": 200},
+        }
+        baseline_records = [
+            {"tokens": ["bv-marker-in-query"], "status": 200},
+        ]
+        target_variants = {
+            "marker-in-query": {"token": "tv-marker-in-query", "status": 200},
+        }
+        entries, _all_ok, _got_through, _verdicts = (
+            evidence.signature_variant_evidence(
+                pack,
+                baseline_variants,
+                target_variants,
+                baseline_records,
+                [],
+                403,
+            )
+        )
+        mismatch = [
+            entry
+            for entry in entries
+            if entry["check"]
+            == "variant marker-in-query response matched the configured "
+            "block status (403)"
+        ][0]
+        self.assertIn("200", mismatch["outcome"])
+        self.assertIn("403", mismatch["outcome"])
+        self.assertIn("--block-status 200", mismatch["outcome"])
 
     def test_variant_evidence_marks_a_missing_direct_receipt(self):
         pack = self.pack()
@@ -3964,6 +4406,581 @@ class ImageVerificationTests(unittest.TestCase):
             )
             report = json.loads((output / "report.json").read_text())
         self.assertEqual(report["image_verification"], entries)
+
+
+class UnverifiedRunReasonTests(unittest.TestCase):
+    """An inconclusive run explains itself: an unverified pack whose direct
+    baseline never completed is a known state of the pack, not a problem
+    with the target, and the report reason says so and names the verified
+    packs that run end to end."""
+
+    @staticmethod
+    def _lab_context():
+        @contextlib.contextmanager
+        def fake(*_args, **_kwargs):
+            yield "backend"
+        return fake
+
+    @staticmethod
+    def _receiver_context(records):
+        @contextlib.contextmanager
+        def fake(*_args, **_kwargs):
+            yield records
+        return fake
+
+    def _run_pack(
+        self,
+        cve,
+        pre=(),
+        post=(),
+        control=None,
+        probe=None,
+        baseline_exploits=None,
+        baseline_variants=None,
+        prepare_error=None,
+    ):
+        entries = [
+            {"role": "application", "image": "app@sha256:a", "status": "present"},
+            {"role": "runner", "image": "runner@sha256:b", "status": "present"},
+        ]
+        patches = [
+            patch.object(lab, "prepare", side_effect=prepare_error),
+            patch.object(lab, "verify_images", return_value=entries),
+            patch.object(lab, "host_network_probe", return_value=SHARED_HOST_NETWORK),
+            patch.object(lab, "lab", self._lab_context()),
+            patch.object(lab, "receiver", self._receiver_context([])),
+            patch.object(
+                lab,
+                "control",
+                side_effect=control
+                or RuntimeError("baseline control unreachable"),
+            ),
+        ]
+        if probe is not None:
+            patches.append(patch.object(lab, "probe", return_value=probe))
+        if baseline_exploits:
+            patches.append(patch.dict(lab.BASELINE_EXPLOITS, baseline_exploits))
+        if baseline_variants is not None:
+            patches.append(
+                patch.object(
+                    lab, "variant_baseline_steps", return_value=baseline_variants
+                )
+            )
+        with contextlib.ExitStack() as stack:
+            for patched in patches:
+                stack.enter_context(patched)
+            stdout = io.StringIO()
+            with tempfile.TemporaryDirectory() as directory, contextlib.redirect_stdout(
+                stdout
+            ), contextlib.redirect_stderr(io.StringIO()):
+                output = Path(directory) / "out"
+                exit_code = lab.main(
+                    list(pre)
+                    + ["run", cve]
+                    + list(post)
+                    + ["--output-dir", str(output)]
+                )
+                report = json.loads((output / "report.json").read_text())
+        return exit_code, report
+
+    def test_unverified_pack_inconclusive_names_known_state_and_runnable_packs(self):
+        exit_code, report = self._run_pack(
+            "CVE-2026-109618", pre=("--include-unverified",)
+        )
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(report["verdict"], "inconclusive")
+        self.assertIs(report["pack_verified"], False)
+        reason = report["reason"]
+        self.assertIn("baseline control unreachable", reason)
+        self.assertIn("unverified", reason)
+        self.assertIn("known state of the pack", reason)
+        # Verified and digest-pinned, so it runs end to end and is named.
+        self.assertIn("CVE-2025-29927", reason)
+        # Verified but its lab image is still pending review, so it is not
+        # named as a pack that runs end to end.
+        self.assertNotIn("CVE-2024-4577", reason)
+
+    def test_verified_pack_baseline_failure_keeps_the_plain_reason(self):
+        exit_code, report = self._run_pack("CVE-2025-29927")
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(report["verdict"], "inconclusive")
+        self.assertIs(report["pack_verified"], True)
+        self.assertEqual(report["reason"], "baseline control unreachable")
+
+    def test_unverified_pack_setup_failure_gets_no_known_state_note(self):
+        # A failure before the lab is up (engine, image pull, ports) is a
+        # setup problem; telling the user it is "not a problem with your
+        # target or setup" there would be wrong.
+        exit_code, report = self._run_pack(
+            "CVE-2026-109618",
+            pre=("--include-unverified",),
+            prepare_error=RuntimeError("image pull failed: engine unreachable"),
+        )
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(report["verdict"], "inconclusive")
+        self.assertIs(report["pack_verified"], False)
+        self.assertEqual(report["reason"], "image pull failed: engine unreachable")
+
+    def test_unverified_pack_target_phase_failure_gets_no_known_state_note(self):
+        # The unverified note covers only an uncompleted direct baseline;
+        # once the run reaches the target phase an inconclusive verdict is
+        # about the target or setup, so no known-state sentence is added.
+        def control(_pack, _origin, _run_id, phase, context=None):
+            if phase == "baseline-control":
+                return {"status": 200, "root_status": 200}
+            raise RuntimeError("target controls unreachable")
+
+        exit_code, report = self._run_pack(
+            "CVE-2026-109618",
+            pre=("--include-unverified",),
+            post=("--target", "http://lb.test"),
+            control=control,
+            probe={"token": "baseline", "status": 200, "marker": True},
+            baseline_exploits={
+                "modphp-oom": lambda *_args, **_kwargs: {"crash_confirmed": True}
+            },
+            baseline_variants=({}, []),
+        )
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(report["verdict"], "inconclusive")
+        self.assertIs(report["pack_verified"], False)
+        self.assertEqual(report["reason"], "target controls unreachable")
+
+
+class SentRequestsLogTests(unittest.TestCase):
+    """<output>/sent_requests.jsonl logs every request the lab sends, one
+    JSON line each - the send side that pairs with report.json's
+    origin_observations (what arrived)."""
+
+    def setUp(self):
+        if sent is None:
+            self.fail("cve_lab_sent module is required")
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+        class Backend(BaseHTTPRequestHandler):
+            def _reply(self):
+                length = int(self.headers.get("Content-Length") or 0)
+                if length:
+                    self.rfile.read(length)
+                # Next.js-pack control shape: /login is benign (200), the
+                # protected root redirects (307); anything else answers 200.
+                status = (
+                    307 if self.path == "/" or self.path.startswith("/?") else 200
+                )
+                self.send_response(status)
+                self.send_header("Content-Length", "2")
+                self.end_headers()
+                self.wfile.write(b"ok")
+
+            do_GET = _reply
+            do_POST = _reply
+
+            def log_message(self, *_args):
+                pass
+
+        self.backend = ThreadingHTTPServer(("127.0.0.1", 0), Backend)
+        threading.Thread(target=self.backend.serve_forever, daemon=True).start()
+        self.backend_port = self.backend.server_address[1]
+        self.backend_base = f"http://127.0.0.1:{self.backend_port}"
+
+    def tearDown(self):
+        self.backend.shutdown()
+        self.backend.server_close()
+        if sent is not None:
+            sent.close_sink()
+
+    @contextlib.contextmanager
+    def recorder(self):
+        with socket.socket() as reservation:
+            reservation.bind(("127.0.0.1", 0))
+            port = reservation.getsockname()[1]
+        with transport.receiver(
+            port, "127.0.0.1", self.backend_base
+        ) as records:
+            yield f"http://127.0.0.1:{port}", records
+
+    @staticmethod
+    def _lines(path):
+        return [json.loads(line) for line in path.read_text().splitlines()]
+
+    def test_control_and_request_write_one_line_each_with_redaction(self):
+        pack = {
+            "controls": {
+                "benign_path": "/login?__mockforge_cve={token}",
+                "ordinary_path": "/?__mockforge_cve={token}",
+            }
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            sink = Path(directory) / "sent_requests.jsonl"
+            with self.recorder() as (base, _records):
+                sent.open_sink(sink, origin=base)
+                status, _headers, _body = transport.request(
+                    base,
+                    "/login?__mockforge_cve=tok1",
+                    {"X-Mockforge-Cve": "tok1", "Authorization": "Bearer secret"},
+                )
+                outcome = transport.control(pack, base, "run1", "phase")
+            sent.close_sink()
+            lines = self._lines(sink)
+        self.assertEqual(status, 200)
+        origin_lines = [line for line in lines if line["destination"] == "origin"]
+        # One direct request plus the benign and root controls. The recorder
+        # also forwarded each to the backend, but those forwards are lab
+        # internals and are not logged as sent requests.
+        self.assertEqual(len(origin_lines), 3)
+        self.assertEqual(len(lines), 3)
+        self.assertEqual([line["method"] for line in origin_lines], ["GET"] * 3)
+        self.assertEqual([line["status"] for line in origin_lines], [200, 200, 307])
+        self.assertEqual([line["client"] for line in lines], ["python-http1"] * 3)
+        first = origin_lines[0]
+        self.assertEqual(first["marker"], "tok1")
+        self.assertEqual(first["path"], "/login?__mockforge_cve=tok1")
+        self.assertEqual(first["base"], base)
+        self.assertEqual(first["headers"]["Authorization"], "[redacted]")
+        self.assertEqual(first["headers"]["X-Mockforge-Cve"], "tok1")
+        self.assertEqual(origin_lines[1]["marker"], outcome["token"])
+        self.assertEqual(origin_lines[2]["marker"], outcome["root_token"])
+        self.assertEqual(len(set(line["base"] for line in lines)), 1)
+        self.assertEqual(
+            [line["seq"] for line in lines], list(range(1, len(lines) + 1))
+        )
+        for line in lines:
+            self.assertIsNone(line["error"])
+            self.assertIn("T", line["ts"])
+            self.assertIsInstance(line["elapsed_ms"], (int, float))
+            self.assertIsInstance(line["body_bytes"], int)
+
+    def test_no_sink_recording_is_a_noop(self):
+        sent.close_sink()
+        sent.record(base="http://x.test", method="GET", path="/")
+        with self.recorder() as (base, _records):
+            status, _headers, _body = transport.request(
+                base, "/x?__mockforge_cve=t", {"X-Mockforge-Cve": "t"}
+            )
+        self.assertEqual(status, 200)
+
+    def test_request_tolerant_and_post_sequence_log_bodies_and_errors(self):
+        body = b"multipart-ish payload"
+        with tempfile.TemporaryDirectory() as directory:
+            sink = Path(directory) / "sent_requests.jsonl"
+            sent.open_sink(sink, origin=self.backend_base)
+            outcome = exploits._request_tolerant(
+                "127.0.0.1",
+                self.backend_port,
+                "POST",
+                "/upload?__mockforge_cve=tok-body",
+                {"X-Mockforge-Cve": "tok-body"},
+                body,
+                5,
+            )
+            outcomes = exploits._post_sequence(
+                "127.0.0.1",
+                self.backend_port,
+                (
+                    ("/p?__mockforge_cve=seq-1", [("X-Mockforge-Cve", "seq-1")], b"one"),
+                    ("/p?__mockforge_cve=seq-2", [("X-Mockforge-Cve", "seq-2")], b"two"),
+                ),
+                5,
+            )
+            failed = exploits._request_tolerant(
+                "127.0.0.1",
+                1,
+                "GET",
+                "/x?__mockforge_cve=down",
+                {"X-Mockforge-Cve": "down"},
+                None,
+                2,
+            )
+            sent.close_sink()
+            lines = self._lines(sink)
+        self.assertIsNone(outcome["error"])
+        self.assertIsNone(outcomes[0]["error"])
+        self.assertIsNotNone(failed["error"])
+        self.assertEqual(len(lines), 4)
+        first = lines[0]
+        self.assertEqual(first["marker"], "tok-body")
+        self.assertEqual(first["destination"], "origin")
+        self.assertEqual(first["method"], "POST")
+        self.assertEqual(first["body_bytes"], len(body))
+        self.assertEqual(first["body_sha256"], hashlib.sha256(body).hexdigest())
+        self.assertEqual(first["body_preview"], body.decode("utf-8"))
+        self.assertEqual(first["status"], 200)
+        self.assertEqual(lines[1]["marker"], "seq-1")
+        self.assertEqual(lines[2]["marker"], "seq-2")
+        self.assertEqual([line["method"] for line in lines[1:3]], ["POST", "POST"])
+        last = lines[3]
+        self.assertEqual(last["marker"], "down")
+        self.assertIsNone(last["status"])
+        self.assertIsNotNone(last["error"])
+        self.assertEqual(last["destination"], "other")
+
+    def test_http2_request_records_the_logical_request(self):
+        with tempfile.TemporaryDirectory() as directory:
+            sink = Path(directory) / "sent_requests.jsonl"
+            with self.recorder() as (base, _records):
+                sent.open_sink(sink, origin=base)
+                url = transport.target_url(base)
+                result = http2_module.request(
+                    url.hostname,
+                    url.port,
+                    "POST",
+                    "/decode?__mockforge_cve=tok-h2",
+                    [
+                        ("content-type", "application/brotli"),
+                        ("x-mockforge-cve", "tok-h2"),
+                    ],
+                    b"payload-bytes",
+                    timeout=10,
+                )
+            sent.close_sink()
+            lines = self._lines(sink)
+        self.assertIsNone(result["error"])
+        h2_lines = [line for line in lines if line["client"] == "python-http2"]
+        self.assertEqual(len(h2_lines), 1)
+        line = h2_lines[0]
+        self.assertEqual(line["destination"], "origin")
+        self.assertEqual(line["marker"], "tok-h2")
+        self.assertEqual(line["method"], "POST")
+        self.assertEqual(line["status"], 200)
+        self.assertEqual(line["body_bytes"], len(b"payload-bytes"))
+        self.assertEqual(line["body_preview"], "payload-bytes")
+        self.assertEqual(line["headers"]["x-mockforge-cve"], "tok-h2")
+
+    def test_http2_connection_failure_still_raises_and_is_logged(self):
+        # Callers rely on a refused connection raising (run() reports it as
+        # the inconclusive reason); logging must not swallow it.
+        import socket
+
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            port = probe.getsockname()[1]
+        with tempfile.TemporaryDirectory() as directory:
+            sink = Path(directory) / "sent_requests.jsonl"
+            sent.open_sink(sink, origin=f"http://127.0.0.1:{port}")
+            try:
+                with self.assertRaises(OSError):
+                    http2_module.request(
+                        "127.0.0.1", port, "POST", "/decode?__mockforge_cve=tok-h2",
+                        [("x-mockforge-cve", "tok-h2")], b"payload", timeout=2,
+                    )
+            finally:
+                sent.close_sink()
+            lines = self._lines(sink)
+        self.assertEqual(len(lines), 1)
+        self.assertEqual(lines[0]["client"], "python-http2")
+        self.assertEqual(lines[0]["destination"], "origin")
+        self.assertIsNone(lines[0]["status"])
+        self.assertTrue(lines[0]["error"])
+
+    def test_nuclei_probe_records_the_template_request(self):
+        pack = catalog.PACKS["CVE-2025-29927"]
+        finding = (
+            json.dumps(
+                {
+                    "template-id": pack["probe"]["template_id"],
+                    "response": "HTTP/1.1 200 OK\r\n\r\nDashboard Content",
+                }
+            )
+            + "\n"
+        )
+
+        def fake_command(args, **_kwargs):
+            if args[1:3] == ["start", "-a"]:
+                return completed_output(stdout=finding, stderr="log")
+            return completed()
+
+        with tempfile.TemporaryDirectory() as directory:
+            sink = Path(directory) / "sent_requests.jsonl"
+            sent.open_sink(sink, origin="http://127.0.0.1:9")
+            with patch.object(nuclei, "owned_remove"), patch.object(
+                nuclei, "command", side_effect=fake_command
+            ):
+                result = nuclei.probe(
+                    "docker", "http://127.0.0.1:9", Path(directory),
+                    "baseline", "run1", pack,
+                )
+            sent.close_sink()
+            lines = self._lines(sink)
+        self.assertEqual(result["status"], 200)
+        self.assertEqual(len(lines), 1)
+        line = lines[0]
+        self.assertEqual(line["client"], "nuclei")
+        self.assertEqual(line["destination"], "origin")
+        self.assertEqual(line["marker"], "run1-baseline")
+        self.assertEqual(line["method"], "GET")
+        self.assertEqual(line["path"], "/?__mockforge_cve=run1-baseline")
+        self.assertEqual(line["headers"]["X-Mockforge-Cve"], "run1-baseline")
+        self.assertEqual(line["status"], 200)
+        self.assertIsNone(line["error"])
+
+    def test_nuclei_probe_failure_records_an_error_line(self):
+        pack = catalog.PACKS["CVE-2025-29927"]
+
+        def fake_command(args, **_kwargs):
+            if args[1:3] == ["start", "-a"]:
+                return completed_output(stdout="container failed", returncode=2)
+            return completed()
+
+        with tempfile.TemporaryDirectory() as directory:
+            sink = Path(directory) / "sent_requests.jsonl"
+            sent.open_sink(sink, target="http://lb.test")
+            with patch.object(nuclei, "owned_remove"), patch.object(
+                nuclei, "command", side_effect=fake_command
+            ):
+                with self.assertRaises(RuntimeError):
+                    nuclei.probe(
+                        "docker", "http://lb.test", Path(directory),
+                        "target", "run1", pack,
+                    )
+            sent.close_sink()
+            lines = self._lines(sink)
+        self.assertEqual(len(lines), 1)
+        line = lines[0]
+        self.assertEqual(line["client"], "nuclei")
+        self.assertEqual(line["destination"], "target")
+        self.assertEqual(line["marker"], "run1-target")
+        self.assertIsNone(line["status"])
+        self.assertIn("code 2", line["error"])
+
+    def test_destination_is_other_when_neither_origin_nor_target(self):
+        with tempfile.TemporaryDirectory() as directory:
+            sink = Path(directory) / "sent_requests.jsonl"
+            sent.open_sink(
+                sink, origin="http://127.0.0.1:1", target="http://target.test"
+            )
+            transport.request(
+                self.backend_base,
+                "/x?__mockforge_cve=o",
+                {"X-Mockforge-Cve": "o"},
+            )
+            sent.close_sink()
+            lines = self._lines(sink)
+        self.assertEqual(len(lines), 1)
+        self.assertEqual(lines[0]["destination"], "other")
+        self.assertEqual(lines[0]["base"], self.backend_base)
+
+    @staticmethod
+    def _lab_context(backend_base):
+        @contextlib.contextmanager
+        def fake(*_args, **_kwargs):
+            yield backend_base
+        return fake
+
+    def _run_lab(self, extra_args=()):
+        """An end-to-end run with only the engine steps and Nuclei's
+        subprocess mocked: the recorder, controls and probe paths all run for
+        real on loopback."""
+        entries = [
+            {"role": "application", "image": "app@sha256:a", "status": "present"},
+            {"role": "runner", "image": "runner@sha256:b", "status": "present"},
+        ]
+        finding = (
+            json.dumps(
+                {
+                    "template-id": "mockforge-nextjs-29927-observation",
+                    "response": "HTTP/1.1 200 OK\r\n\r\nDashboard Content",
+                }
+            )
+            + "\n"
+        )
+
+        def fake_command(args, **_kwargs):
+            if args[1:3] == ["start", "-a"]:
+                return completed_output(stdout=finding, stderr="log")
+            return completed()
+
+        with socket.socket() as reservation:
+            reservation.bind(("127.0.0.1", 0))
+            origin_port = reservation.getsockname()[1]
+        patches = [
+            patch.object(lab, "prepare"),
+            patch.object(lab, "verify_images", return_value=entries),
+            patch.object(lab, "host_network_probe", return_value=SHARED_HOST_NETWORK),
+            patch.object(lab, "lab", self._lab_context(self.backend_base)),
+            patch.object(nuclei, "owned_remove"),
+            patch.object(nuclei, "command", side_effect=fake_command),
+        ]
+        with contextlib.ExitStack() as stack:
+            for patched in patches:
+                stack.enter_context(patched)
+            stdout = io.StringIO()
+            with tempfile.TemporaryDirectory() as directory, contextlib.redirect_stdout(
+                stdout
+            ), contextlib.redirect_stderr(io.StringIO()):
+                output = Path(directory) / "out"
+                exit_code = lab.main(
+                    ["run", "CVE-2025-29927", "--origin-port", str(origin_port)]
+                    + list(extra_args)
+                    + ["--output-dir", str(output)]
+                )
+                report = json.loads((output / "report.json").read_text())
+                sent_path = output / "sent_requests.jsonl"
+                lines = self._lines(sent_path) if sent_path.exists() else None
+        return exit_code, report, lines, stdout.getvalue()
+
+    def test_run_writes_baseline_requests_to_the_origin(self):
+        exit_code, report, lines, stdout = self._run_lab()
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(report["verdict"], "baseline-confirmed")
+        self.assertEqual(report["sent_requests"], "sent_requests.jsonl")
+        self.assertIn("Sent requests: ", stdout)
+        self.assertIsNotNone(lines)
+        run_id = report["run_id"]
+        control_lines = [
+            line
+            for line in lines
+            if line["destination"] == "origin"
+            and line["marker"]
+            and line["marker"].startswith(run_id + "-baseline-control-")
+        ]
+        self.assertEqual(len(control_lines), 2)
+        self.assertTrue(
+            any(line["marker"].endswith("-root") for line in control_lines)
+        )
+        self.assertTrue(
+            any(
+                line["client"] == "nuclei"
+                and line["marker"] == run_id + "-baseline"
+                and line["destination"] == "origin"
+                for line in lines
+            )
+        )
+
+    def test_run_with_target_marks_target_requests(self):
+        exit_code, report, lines, _stdout = self._run_lab(
+            ["--target", self.backend_base]
+        )
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(report["sent_requests"], "sent_requests.jsonl")
+        self.assertIsNotNone(lines)
+        run_id = report["run_id"]
+        target_lines = [line for line in lines if line["destination"] == "target"]
+        self.assertTrue(
+            any(line["marker"] == run_id + "-target" for line in target_lines)
+        )
+        self.assertTrue(
+            any(
+                line["marker"]
+                and line["marker"].startswith(run_id + "-before-")
+                for line in target_lines
+            )
+        )
+        self.assertTrue(
+            any(
+                line["marker"]
+                and line["marker"].startswith(run_id + "-after-")
+                for line in target_lines
+            )
+        )
+        # The direct baseline still went to the origin, never the target.
+        self.assertTrue(
+            any(
+                line["marker"]
+                and line["marker"].startswith(run_id + "-baseline-control-")
+                and line["destination"] == "origin"
+                for line in lines
+            )
+        )
 
 
 if __name__ == "__main__":

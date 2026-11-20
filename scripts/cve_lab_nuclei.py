@@ -4,8 +4,10 @@ import hashlib
 import json
 import re
 import subprocess
+import time
 from cve_lab_catalog import LABEL
 from cve_lab_engine import command, owned_remove
+import cve_lab_sent as sent
 
 
 def template(pack, token):
@@ -57,6 +59,9 @@ def probe(engine, base, output, phase, run_id, pack, insecure=False):
     path = output / f"{phase}.yaml"
     path.write_text(template(pack, token))
     name = "mockforge-cve-client-" + token
+    started = time.monotonic()
+    status = None
+    error = None
     try:
         command(
             [
@@ -98,10 +103,10 @@ def probe(engine, base, output, phase, run_id, pack, insecure=False):
             command(
                 [engine, "cp", str(path), f"{name}:/tmp/{phase}.yaml"], timeout=90
             )
-        except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
+        except (OSError, RuntimeError, subprocess.TimeoutExpired) as copy_error:
             raise RuntimeError(
-                f"{phase}: failed to copy Nuclei template into container: {error}"
-            ) from error
+                f"{phase}: failed to copy Nuclei template into container: {copy_error}"
+            ) from copy_error
         result = command(
             [engine, "start", "-a", name], timeout=90, check=False
         )
@@ -132,11 +137,37 @@ def probe(engine, base, output, phase, run_id, pack, insecure=False):
         match = re.match(r"HTTP/\S+ (\d{3})", raw)
         if not match:
             raise RuntimeError(f"{phase}: Nuclei response evidence is missing")
+        status = int(match[1])
         return {
             "token": token,
-            "status": int(match[1]),
+            "status": status,
             "marker": probe["marker"] in raw,
             "response_sha256": hashlib.sha256(raw.encode()).hexdigest(),
         }
+    except Exception as exc:
+        error = str(exc)
+        raise
     finally:
+        # Remove the client container first: logging must never get in the
+        # way of cleanup.
         owned_remove(engine, name, run_id)
+        # Nuclei runs in a container, so the line records the request the
+        # generated template sends plus the status the result parsed out.
+        sent.record(
+            base=base,
+            method=probe["method"],
+            path=probe["path"].replace("{token}", token),
+            headers={
+                header: value.replace("{token}", token)
+                for header, value in probe["headers"].items()
+            },
+            body=(
+                probe["body"].replace("{token}", token)
+                if probe.get("body") is not None
+                else None
+            ),
+            status=status,
+            error=error,
+            elapsed_ms=(time.monotonic() - started) * 1000,
+            client="nuclei",
+        )

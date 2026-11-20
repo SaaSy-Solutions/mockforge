@@ -1,5 +1,8 @@
 import React, { lazy } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
+import { isCloudMode } from '../utils/cloudMode';
+import { localOnlyRouteExceptions, localOnlyRouteIds } from '../components/layout/navigation';
+import { useI18n } from '../i18n/I18nProvider';
 
 // Eagerly loaded pages (small, frequently used, or needed for initial render)
 import { VirtualBackendsPage } from '../pages/VirtualBackendsPage';
@@ -17,47 +20,107 @@ import { TimeTravelPage } from '../pages/TimeTravelPage';
 import { ProxyInspectorPage } from '../pages/ProxyInspectorPage';
 
 // Lazy-loaded pages
-const DashboardPage = lazy(() => import('../pages/DashboardPage').then(m => ({ default: m.DashboardPage })));
-const ServicesPage = lazy(() => import('../pages/ServicesPage').then(m => ({ default: m.ServicesPage })));
-const LogsPage = lazy(() => import('../pages/LogsPage').then(m => ({ default: m.LogsPage })));
-const MetricsPage = lazy(() => import('../pages/MetricsPage').then(m => ({ default: m.MetricsPage })));
-const VerificationPage = lazy(() => import('../pages/VerificationPage').then(m => ({ default: m.VerificationPage })));
-const ContractDiffPage = lazy(() => import('../pages/ContractDiffPage').then(m => ({ default: m.ContractDiffPage })));
-const IncidentDashboardPage = lazy(() => import('../pages/IncidentDashboardPage').then(m => ({ default: m.IncidentDashboardPage })));
-const FitnessFunctionsPage = lazy(() => import('../pages/FitnessFunctionsPage').then(m => ({ default: m.FitnessFunctionsPage })));
-const FixturesPage = lazy(() => import('../pages/FixturesPage').then(m => ({ default: m.FixturesPage })));
-const OverridesPage = lazy(() => import('../pages/OverridesPage').then(m => ({ default: m.OverridesPage })));
-const TestingPage = lazy(() => import('../pages/TestingPage').then(m => ({ default: m.TestingPage })));
-const ImportPage = lazy(() => import('../pages/ImportPage').then(m => ({ default: m.ImportPage })));
+const DashboardPage = lazy(() => import('../pages/DashboardPage').then((m) => ({ default: m.DashboardPage })));
+const ServicesPage = lazy(() => import('../pages/ServicesPage').then((m) => ({ default: m.ServicesPage })));
+const LogsPage = lazy(() => import('../pages/LogsPage').then((m) => ({ default: m.LogsPage })));
+const MetricsPage = lazy(() => import('../pages/MetricsPage').then((m) => ({ default: m.MetricsPage })));
+const VerificationPage = lazy(() =>
+  import('../pages/VerificationPage').then((m) => ({
+    default: m.VerificationPage,
+  })),
+);
+const ContractDiffPage = lazy(() =>
+  import('../pages/ContractDiffPage').then((m) => ({
+    default: m.ContractDiffPage,
+  })),
+);
+const IncidentDashboardPage = lazy(() =>
+  import('../pages/IncidentDashboardPage').then((m) => ({
+    default: m.IncidentDashboardPage,
+  })),
+);
+const FitnessFunctionsPage = lazy(() =>
+  import('../pages/FitnessFunctionsPage').then((m) => ({
+    default: m.FitnessFunctionsPage,
+  })),
+);
+const FixturesPage = lazy(() => import('../pages/FixturesPage').then((m) => ({ default: m.FixturesPage })));
+const OverridesPage = lazy(() => import('../pages/OverridesPage').then((m) => ({ default: m.OverridesPage })));
+const TestingPage = lazy(() => import('../pages/TestingPage').then((m) => ({ default: m.TestingPage })));
+const ImportPage = lazy(() => import('../pages/ImportPage').then((m) => ({ default: m.ImportPage })));
 const WorkspacesPage = lazy(() => import('../pages/WorkspacesPage'));
-const PlaygroundPage = lazy(() => import('../pages/PlaygroundPage').then(m => ({ default: m.PlaygroundPage })));
-const PluginsPage = lazy(() => import('../pages/PluginsPage').then(m => ({ default: m.PluginsPage })));
-const ChainsPage = lazy(() => import('../pages/ChainsPage').then(m => ({ default: m.ChainsPage })));
-const GraphPage = lazy(() => import('../pages/GraphPage').then(m => ({ default: m.GraphPage })));
-const WorldStatePage = lazy(() => import('../pages/WorldStatePage').then(m => ({ default: m.WorldStatePage })));
-const PerformancePage = lazy(() => import('../pages/PerformancePage').then(m => ({ default: m.default })));
-const ScenarioStateMachineEditor = lazy(() => import('../pages/ScenarioStateMachineEditor').then(m => ({ default: m.ScenarioStateMachineEditor })));
-const ScenarioStudioPage = lazy(() => import('../pages/ScenarioStudioPage').then(m => ({ default: m.ScenarioStudioPage })));
+const PlaygroundPage = lazy(() =>
+  import('../pages/PlaygroundPage').then((m) => ({
+    default: m.PlaygroundPage,
+  })),
+);
+const PluginsPage = lazy(() => import('../pages/PluginsPage').then((m) => ({ default: m.PluginsPage })));
+const ChainsPage = lazy(() => import('../pages/ChainsPage').then((m) => ({ default: m.ChainsPage })));
+const GraphPage = lazy(() => import('../pages/GraphPage').then((m) => ({ default: m.GraphPage })));
+const WorldStatePage = lazy(() =>
+  import('../pages/WorldStatePage').then((m) => ({
+    default: m.WorldStatePage,
+  })),
+);
+const PerformancePage = lazy(() => import('../pages/PerformancePage').then((m) => ({ default: m.default })));
+const ScenarioStateMachineEditor = lazy(() =>
+  import('../pages/ScenarioStateMachineEditor').then((m) => ({
+    default: m.ScenarioStateMachineEditor,
+  })),
+);
+const ScenarioStudioPage = lazy(() =>
+  import('../pages/ScenarioStudioPage').then((m) => ({
+    default: m.ScenarioStudioPage,
+  })),
+);
 const AnalyticsPage = lazy(() => import('../pages/AnalyticsPage'));
-const PillarAnalyticsPage = lazy(() => import('../pages/PillarAnalyticsPage').then(m => ({ default: m.PillarAnalyticsPage })));
-const HostedMocksPage = lazy(() => import('../pages/HostedMocksPage').then(m => ({ default: m.HostedMocksPage })));
-const ApiExplorerPage = lazy(() => import('../pages/ApiExplorerPage').then(m => ({ default: m.ApiExplorerPage })));
+const PillarAnalyticsPage = lazy(() =>
+  import('../pages/PillarAnalyticsPage').then((m) => ({
+    default: m.PillarAnalyticsPage,
+  })),
+);
+const HostedMocksPage = lazy(() =>
+  import('../pages/HostedMocksPage').then((m) => ({
+    default: m.HostedMocksPage,
+  })),
+);
+const ApiExplorerPage = lazy(() =>
+  import('../pages/ApiExplorerPage').then((m) => ({
+    default: m.ApiExplorerPage,
+  })),
+);
 
 // Observability & Monitoring
-const ObservabilityPage = lazy(() => import('../pages/ObservabilityPage').then(m => ({ default: m.ObservabilityPage })));
-const TracesPage = lazy(() => import('../pages/TracesPage').then(m => ({ default: m.TracesPage })));
+const ObservabilityPage = lazy(() =>
+  import('../pages/ObservabilityPage').then((m) => ({
+    default: m.ObservabilityPage,
+  })),
+);
+const TracesPage = lazy(() => import('../pages/TracesPage').then((m) => ({ default: m.TracesPage })));
 
 // Testing
 const TestGeneratorPage = lazy(() => import('../pages/TestGeneratorPage'));
 const TestExecutionDashboard = lazy(() => import('../pages/TestExecutionDashboard'));
 const IntegrationTestBuilder = lazy(() => import('../pages/IntegrationTestBuilder'));
-const ConformancePage = lazy(() => import('../pages/ConformancePage').then(m => ({ default: m.ConformancePage })));
+const ConformancePage = lazy(() =>
+  import('../pages/ConformancePage').then((m) => ({
+    default: m.ConformancePage,
+  })),
+);
 
 // Chaos & Resilience
-const ChaosPage = lazy(() => import('../pages/ChaosPage').then(m => ({ default: m.ChaosPage })));
-const ResiliencePage = lazy(() => import('../pages/ResiliencePage').then(m => ({ default: m.ResiliencePage })));
-const RecorderPage = lazy(() => import('../pages/RecorderPage').then(m => ({ default: m.RecorderPage })));
-const BehavioralCloningPage = lazy(() => import('../pages/BehavioralCloningPage').then(m => ({ default: m.BehavioralCloningPage })));
+const ChaosPage = lazy(() => import('../pages/ChaosPage').then((m) => ({ default: m.ChaosPage })));
+const ResiliencePage = lazy(() =>
+  import('../pages/ResiliencePage').then((m) => ({
+    default: m.ResiliencePage,
+  })),
+);
+const RecorderPage = lazy(() => import('../pages/RecorderPage').then((m) => ({ default: m.RecorderPage })));
+const BehavioralCloningPage = lazy(() =>
+  import('../pages/BehavioralCloningPage').then((m) => ({
+    default: m.BehavioralCloningPage,
+  })),
+);
 
 // Orchestration
 const OrchestrationBuilder = lazy(() => import('../pages/OrchestrationBuilder'));
@@ -70,80 +133,173 @@ const TemplateMarketplacePage = lazy(() => import('../pages/TemplateMarketplaceP
 const ScenarioMarketplacePage = lazy(() => import('../pages/ScenarioMarketplacePage'));
 
 // Community Portal
-const ShowcasePage = lazy(() => import('../pages/ShowcasePage').then(m => ({ default: m.ShowcasePage })));
-const LearningHubPage = lazy(() => import('../pages/LearningHubPage').then(m => ({ default: m.LearningHubPage })));
-
-// User Management
-const UserManagementPage = lazy(() => import('../pages/UserManagementPage').then(m => ({ default: m.UserManagementPage })));
+const ShowcasePage = lazy(() => import('../pages/ShowcasePage').then((m) => ({ default: m.ShowcasePage })));
+const LearningHubPage = lazy(() =>
+  import('../pages/LearningHubPage').then((m) => ({
+    default: m.LearningHubPage,
+  })),
+);
 
 // Notification Channels (cloud-only — incident dispatch destinations)
-const NotificationChannelsPage = lazy(() => import('../pages/NotificationChannelsPage').then(m => ({ default: m.NotificationChannelsPage })));
+const NotificationChannelsPage = lazy(() =>
+  import('../pages/NotificationChannelsPage').then((m) => ({
+    default: m.NotificationChannelsPage,
+  })),
+);
 
 // Cloud workspace snapshots (Time Travel #10)
-const CloudSnapshotsPage = lazy(() => import('../pages/CloudSnapshotsPage').then(m => ({ default: m.CloudSnapshotsPage })));
+const CloudSnapshotsPage = lazy(() =>
+  import('../pages/CloudSnapshotsPage').then((m) => ({
+    default: m.CloudSnapshotsPage,
+  })),
+);
 
 // Cloud incidents (org-wide #3)
-const CloudIncidentsPage = lazy(() => import('../pages/CloudIncidentsPage').then(m => ({ default: m.CloudIncidentsPage })));
+const CloudIncidentsPage = lazy(() =>
+  import('../pages/CloudIncidentsPage').then((m) => ({
+    default: m.CloudIncidentsPage,
+  })),
+);
 
 // Cloud test runs (#4) — org-wide history with SSE live stream
-const CloudTestRunsPage = lazy(() => import('../pages/CloudTestRunsPage').then(m => ({ default: m.CloudTestRunsPage })));
+const CloudTestRunsPage = lazy(() =>
+  import('../pages/CloudTestRunsPage').then((m) => ({
+    default: m.CloudTestRunsPage,
+  })),
+);
 
 // Cloud traces (#2) — cross-deployment OTLP search
-const CloudTracesPage = lazy(() => import('../pages/CloudTracesPage').then(m => ({ default: m.CloudTracesPage })));
+const CloudTracesPage = lazy(() =>
+  import('../pages/CloudTracesPage').then((m) => ({
+    default: m.CloudTracesPage,
+  })),
+);
 
 // Cloud chaos (#7) — campaign authoring + run history
-const CloudChaosPage = lazy(() => import('../pages/CloudChaosPage').then(m => ({ default: m.CloudChaosPage })));
+const CloudChaosPage = lazy(() =>
+  import('../pages/CloudChaosPage').then((m) => ({
+    default: m.CloudChaosPage,
+  })),
+);
 
 // Cloud flows (#9 + #14) — versioned scenario / state-machine / orchestration / chain definitions
-const CloudFlowsPage = lazy(() => import('../pages/CloudFlowsPage').then(m => ({ default: m.CloudFlowsPage })));
+const CloudFlowsPage = lazy(() =>
+  import('../pages/CloudFlowsPage').then((m) => ({
+    default: m.CloudFlowsPage,
+  })),
+);
 
 // Cloud contract & verification (#8) — monitored services + diff runs
-const CloudContractPage = lazy(() => import('../pages/CloudContractPage').then(m => ({ default: m.CloudContractPage })));
+const CloudContractPage = lazy(() =>
+  import('../pages/CloudContractPage').then((m) => ({
+    default: m.CloudContractPage,
+  })),
+);
 
 // Cloud recorder + behavioral cloning (#6)
-const CloudRecorderPage = lazy(() => import('../pages/CloudRecorderPage').then(m => ({ default: m.CloudRecorderPage })));
+const CloudRecorderPage = lazy(() =>
+  import('../pages/CloudRecorderPage').then((m) => ({
+    default: m.CloudRecorderPage,
+  })),
+);
 
 // Cloud behavioral cloning (#393) — clone-model-centric sibling of the local
 // BehavioralCloningPage, with live SSE training streams.
-const CloudBehavioralCloningPage = lazy(() => import('../pages/CloudBehavioralCloningPage').then(m => ({ default: m.CloudBehavioralCloningPage })));
+const CloudBehavioralCloningPage = lazy(() =>
+  import('../pages/CloudBehavioralCloningPage').then((m) => ({
+    default: m.CloudBehavioralCloningPage,
+  })),
+);
 
 // Cloud showcase admin (#12) — submit / publish / feature gallery entries
-const CloudShowcaseAdminPage = lazy(() => import('../pages/CloudShowcaseAdminPage').then(m => ({ default: m.CloudShowcaseAdminPage })));
+const CloudShowcaseAdminPage = lazy(() =>
+  import('../pages/CloudShowcaseAdminPage').then((m) => ({
+    default: m.CloudShowcaseAdminPage,
+  })),
+);
 
 // Cloud plugins (Phase 3) — manage plugins attached to hosted-mock deployments
-const CloudPluginsPage = lazy(() => import('../pages/CloudPluginsPage').then(m => ({ default: m.CloudPluginsPage })));
+const CloudPluginsPage = lazy(() =>
+  import('../pages/CloudPluginsPage').then((m) => ({
+    default: m.CloudPluginsPage,
+  })),
+);
 
 // Registry admin (cloud: Postgres via /api/v1/*, self-hosted: SQLite via /api/admin/registry/*)
-const RegistryLoginPage = lazy(() => import('../pages/RegistryLoginPage').then(m => ({ default: m.RegistryLoginPage })));
-const RegistryAdminPage = lazy(() => import('../pages/RegistryAdminPage').then(m => ({ default: m.RegistryAdminPage })));
-const RegistryInvitePage = lazy(() => import('../pages/RegistryInvitePage').then(m => ({ default: m.RegistryInvitePage })));
+const RegistryLoginPage = lazy(() =>
+  import('../pages/RegistryLoginPage').then((m) => ({
+    default: m.RegistryLoginPage,
+  })),
+);
+const RegistryAdminPage = lazy(() =>
+  import('../pages/RegistryAdminPage').then((m) => ({
+    default: m.RegistryAdminPage,
+  })),
+);
+const RegistryInvitePage = lazy(() =>
+  import('../pages/RegistryInvitePage').then((m) => ({
+    default: m.RegistryInvitePage,
+  })),
+);
 
 // MockAI
-const MockAIPage = lazy(() => import('../pages/MockAIPage').then(m => ({ default: m.MockAIPage })));
-const MockAIOpenApiGeneratorPage = lazy(() => import('../pages/MockAIOpenApiGeneratorPage').then(m => ({ default: m.MockAIOpenApiGeneratorPage })));
-const MockAIRulesPage = lazy(() => import('../pages/MockAIRulesPage').then(m => ({ default: m.MockAIRulesPage })));
+const MockAIPage = lazy(() => import('../pages/MockAIPage').then((m) => ({ default: m.MockAIPage })));
+const MockAIOpenApiGeneratorPage = lazy(() =>
+  import('../pages/MockAIOpenApiGeneratorPage').then((m) => ({
+    default: m.MockAIOpenApiGeneratorPage,
+  })),
+);
+const MockAIRulesPage = lazy(() =>
+  import('../pages/MockAIRulesPage').then((m) => ({
+    default: m.MockAIRulesPage,
+  })),
+);
 
 // Voice + LLM Interface
-const VoicePage = lazy(() => import('../pages/VoicePage').then(m => ({ default: m.VoicePage })));
+const VoicePage = lazy(() => import('../pages/VoicePage').then((m) => ({ default: m.VoicePage })));
 
 // AI Studio - Unified AI Copilot
-const AIStudioPage = lazy(() => import('../pages/AIStudioPage').then(m => ({ default: m.AIStudioPage })));
+const AIStudioPage = lazy(() => import('../pages/AIStudioPage').then((m) => ({ default: m.AIStudioPage })));
 
 // Protocol broker dashboards (self-hosted only)
-const SmtpMailboxPage = lazy(() => import('../pages/SmtpMailboxPage').then(m => ({ default: m.SmtpMailboxPage })));
-const MqttBrokerPage = lazy(() => import('../pages/MqttBrokerPage').then(m => ({ default: m.MqttBrokerPage })));
-const KafkaBrokerPage = lazy(() => import('../pages/KafkaBrokerPage').then(m => ({ default: m.KafkaBrokerPage })));
-const AmqpBrokerPage = lazy(() => import('../pages/AmqpBrokerPage').then(m => ({ default: m.AmqpBrokerPage })));
+const SmtpMailboxPage = lazy(() =>
+  import('../pages/SmtpMailboxPage').then((m) => ({
+    default: m.SmtpMailboxPage,
+  })),
+);
+const MqttBrokerPage = lazy(() =>
+  import('../pages/MqttBrokerPage').then((m) => ({
+    default: m.MqttBrokerPage,
+  })),
+);
+const KafkaBrokerPage = lazy(() =>
+  import('../pages/KafkaBrokerPage').then((m) => ({
+    default: m.KafkaBrokerPage,
+  })),
+);
+const AmqpBrokerPage = lazy(() =>
+  import('../pages/AmqpBrokerPage').then((m) => ({
+    default: m.AmqpBrokerPage,
+  })),
+);
 
 // Public / marketing pages (legal docs are routed in App.tsx, outside AuthGuard)
-const FAQPage = lazy(() => import('../pages/FAQPage').then(m => ({ default: m.FAQPage })));
-const SupportPage = lazy(() => import('../pages/SupportPage').then(m => ({ default: m.SupportPage })));
-const PricingPage = lazy(() => import('../pages/PricingPage').then(m => ({ default: m.PricingPage })));
-const EmailVerificationPage = lazy(() => import('../pages/EmailVerificationPage').then(m => ({ default: m.EmailVerificationPage })));
-const WaitlistPage = lazy(() => import('../pages/WaitlistPage').then(m => ({ default: m.WaitlistPage })));
+const FAQPage = lazy(() => import('../pages/FAQPage').then((m) => ({ default: m.FAQPage })));
+const SupportPage = lazy(() => import('../pages/SupportPage').then((m) => ({ default: m.SupportPage })));
+const PricingPage = lazy(() => import('../pages/PricingPage').then((m) => ({ default: m.PricingPage })));
+const EmailVerificationPage = lazy(() =>
+  import('../pages/EmailVerificationPage').then((m) => ({
+    default: m.EmailVerificationPage,
+  })),
+);
+const WaitlistPage = lazy(() => import('../pages/WaitlistPage').then((m) => ({ default: m.WaitlistPage })));
 
 // SSO callback — must be a public route (user is not yet authenticated on arrival)
-const SsoCallbackPage = lazy(() => import('../pages/SsoCallbackPage').then(m => ({ default: m.SsoCallbackPage })));
+const SsoCallbackPage = lazy(() =>
+  import('../pages/SsoCallbackPage').then((m) => ({
+    default: m.SsoCallbackPage,
+  })),
+);
 
 /**
  * ApiExplorerWrapper handles the special logic that was previously in the
@@ -165,16 +321,43 @@ function ApiExplorerWrapper() {
   );
 }
 
+const RUN_LOCALLY_DOCS_URL = 'https://docs.mockforge.dev/getting-started/installation.html';
+
+function LocalOnlyRoute({ routeId, children }: { routeId: string; children: React.ReactNode }) {
+  if (!isCloudMode() || !localOnlyRouteIds.has(routeId)) return <>{children}</>;
+  return <LocalOnlyNotice />;
+}
+
+function LocalOnlyNotice() {
+  const { t } = useI18n();
+  return (
+    <section aria-labelledby="local-only-title" className="mx-auto max-w-2xl space-y-4 p-8">
+      <h1 id="local-only-title" className="text-2xl font-semibold">{t('route.localOnly.title')}</h1>
+      <p>{t('route.localOnly.description')}</p>
+      <a href={RUN_LOCALLY_DOCS_URL} target="_blank" rel="noopener noreferrer" className="text-primary underline">
+        {t('nav.runLocally')}
+      </a>
+      <Link to="/dashboard" className="block text-primary underline">
+        {t('route.localOnly.back')}
+      </Link>
+    </section>
+  );
+}
+
+function localOnly(routeId: string, element: React.ReactNode) {
+  return <LocalOnlyRoute routeId={routeId}>{element}</LocalOnlyRoute>;
+}
+
 export interface RouteConfig {
   path: string;
   element: React.ReactNode;
 }
 
-export const routes: RouteConfig[] = [
+const routeTable: Array<RouteConfig & { navId?: string }> = [
   // Core
   { path: '/dashboard', element: <DashboardPage /> },
   { path: '/workspaces', element: <WorkspacesPage /> },
-  { path: '/playground', element: <PlaygroundPage /> },
+  { path: '/playground', navId: 'playground', element: <PlaygroundPage /> },
   { path: '/federation', element: <FederationPage /> },
 
   // Services & Data
@@ -183,45 +366,56 @@ export const routes: RouteConfig[] = [
   { path: '/fixtures', element: <FixturesPage /> },
   { path: '/overrides', element: <OverridesPage /> },
   { path: '/hosted-mocks', element: <HostedMocksPage /> },
-  { path: '/api-explorer', element: <ApiExplorerWrapper /> },
+  { path: '/api-explorer', navId: 'api-explorer', element: <ApiExplorerWrapper /> },
   { path: '/tunnels', element: <TunnelsPage /> },
 
   // Orchestration
   { path: '/chains', element: <ChainsPage /> },
   { path: '/graph', element: <GraphPage /> },
   { path: '/world-state', element: <WorldStatePage /> },
-  { path: '/performance', element: <PerformancePage /> },
+  { path: '/performance', navId: 'performance', element: <PerformancePage /> },
   { path: '/state-machine-editor', element: <ScenarioStateMachineEditor /> },
   { path: '/scenario-studio', element: <ScenarioStudioPage /> },
   { path: '/orchestration-builder', element: <OrchestrationBuilder /> },
-  { path: '/orchestration-execution', element: <OrchestrationExecutionView orchestrationId="default" /> },
+  {
+    path: '/orchestration-execution',
+    element: <OrchestrationExecutionView orchestrationId="default" />,
+  },
 
   // Observability & Monitoring
   { path: '/observability', element: <ObservabilityPage /> },
   { path: '/status', element: <StatusPage /> },
   { path: '/logs', element: <LogsPage /> },
-  { path: '/traces', element: <TracesPage /> },
-  { path: '/metrics', element: <MetricsPage /> },
-  { path: '/analytics', element: <AnalyticsPage /> },
+  { path: '/traces', navId: 'traces', element: <TracesPage /> },
+  { path: '/metrics', navId: 'metrics', element: <MetricsPage /> },
+  { path: '/analytics', navId: 'analytics', element: <AnalyticsPage /> },
   { path: '/pillar-analytics', element: <PillarAnalyticsPage /> },
   { path: '/verification', element: <VerificationPage /> },
-  { path: '/contract-diff', element: <ContractDiffPage /> },
-  { path: '/incidents', element: <IncidentDashboardPage /> },
-  { path: '/incident-dashboard', element: <IncidentDashboardPage /> },
+  { path: '/contract-diff', navId: 'contract-diff', element: <ContractDiffPage /> },
+  {
+    path: '/incidents',
+    navId: 'incidents',
+    element: <IncidentDashboardPage />,
+  },
+  {
+    path: '/incident-dashboard',
+    navId: 'incidents',
+    element: <IncidentDashboardPage />,
+  },
   { path: '/fitness-functions', element: <FitnessFunctionsPage /> },
 
   // Testing
   { path: '/testing', element: <TestingPage /> },
   { path: '/test-generator', element: <TestGeneratorPage /> },
-  { path: '/test-execution', element: <TestExecutionDashboard /> },
+  { path: '/test-execution', navId: 'test-execution', element: <TestExecutionDashboard /> },
   { path: '/integration-test-builder', element: <IntegrationTestBuilder /> },
   { path: '/conformance', element: <ConformancePage /> },
 
   // Chaos & Resilience
-  { path: '/chaos', element: <ChaosPage /> },
+  { path: '/chaos', navId: 'chaos', element: <ChaosPage /> },
   { path: '/resilience', element: <ResiliencePage /> },
-  { path: '/recorder', element: <RecorderPage /> },
-  { path: '/behavioral-cloning', element: <BehavioralCloningPage /> },
+  { path: '/recorder', navId: 'recorder', element: <RecorderPage /> },
+  { path: '/behavioral-cloning', navId: 'behavioral-cloning', element: <BehavioralCloningPage /> },
 
   // Import & Templates
   { path: '/import', element: <ImportPage /> },
@@ -233,13 +427,16 @@ export const routes: RouteConfig[] = [
   { path: '/learning-hub', element: <LearningHubPage /> },
 
   // Plugins
-  { path: '/plugins', element: <PluginsPage /> },
+  { path: '/plugins', navId: 'plugins', element: <PluginsPage /> },
   { path: '/cloud-plugins', element: <CloudPluginsPage /> },
   { path: '/plugin-registry', element: <PluginRegistryPage /> },
   { path: '/plugin-registry/moderation', element: <PluginModerationPage /> },
 
   // User Management
-  { path: '/user-management', element: <UserManagementPage /> },
+  {
+    path: '/user-management',
+    element: <Navigate to="/organization" replace />,
+  },
   { path: '/notification-channels', element: <NotificationChannelsPage /> },
   { path: '/cloud-snapshots', element: <CloudSnapshotsPage /> },
   { path: '/cloud-incidents', element: <CloudIncidentsPage /> },
@@ -249,7 +446,10 @@ export const routes: RouteConfig[] = [
   { path: '/cloud-flows', element: <CloudFlowsPage /> },
   { path: '/cloud-contract', element: <CloudContractPage /> },
   { path: '/cloud-recorder', element: <CloudRecorderPage /> },
-  { path: '/cloud-behavioral-cloning', element: <CloudBehavioralCloningPage /> },
+  {
+    path: '/cloud-behavioral-cloning',
+    element: <CloudBehavioralCloningPage />,
+  },
   { path: '/cloud-showcase-admin', element: <CloudShowcaseAdminPage /> },
 
   // Registry admin (cloud: Postgres, self-hosted: SQLite)
@@ -259,7 +459,10 @@ export const routes: RouteConfig[] = [
 
   // MockAI
   { path: '/mockai', element: <MockAIPage /> },
-  { path: '/mockai-openapi-generator', element: <MockAIOpenApiGeneratorPage /> },
+  {
+    path: '/mockai-openapi-generator',
+    element: <MockAIOpenApiGeneratorPage />,
+  },
   { path: '/mockai-rules', element: <MockAIRulesPage /> },
 
   // Voice + LLM Interface
@@ -281,13 +484,25 @@ export const routes: RouteConfig[] = [
   { path: '/time-travel', element: <TimeTravelPage /> },
 
   // Proxy Inspector
-  { path: '/proxy-inspector', element: <ProxyInspectorPage /> },
+  { path: '/proxy-inspector', navId: 'proxy-inspector', element: <ProxyInspectorPage /> },
 
   // Protocol broker dashboards (self-hosted)
-  { path: '/smtp-mailbox', element: <SmtpMailboxPage /> },
-  { path: '/mqtt-broker', element: <MqttBrokerPage /> },
-  { path: '/kafka-broker', element: <KafkaBrokerPage /> },
-  { path: '/amqp-broker', element: <AmqpBrokerPage /> },
+  {
+    path: '/smtp-mailbox',
+    element: localOnly('smtp-mailbox', <SmtpMailboxPage />),
+  },
+  {
+    path: '/mqtt-broker',
+    element: localOnly('mqtt-broker', <MqttBrokerPage />),
+  },
+  {
+    path: '/kafka-broker',
+    element: localOnly('kafka-broker', <KafkaBrokerPage />),
+  },
+  {
+    path: '/amqp-broker',
+    element: localOnly('amqp-broker', <AmqpBrokerPage />),
+  },
 
   // Public / marketing (render pre-auth via AuthGuard bypass)
   { path: '/faq', element: <FAQPage /> },
@@ -300,3 +515,16 @@ export const routes: RouteConfig[] = [
   // AuthGuard bypasses auth checks for /auth/sso/callback via PUBLIC_PREFIXES.
   { path: '/auth/sso/callback', element: <SsoCallbackPage /> },
 ];
+
+function IncidentRoute({ element }: { element: React.ReactNode }) {
+  return isCloudMode() ? <Navigate to="/cloud-incidents" replace /> : <>{element}</>;
+}
+
+export const routes: RouteConfig[] = routeTable.map(({ navId, path, element }) => ({
+  path,
+  element: navId === 'incidents'
+    ? <IncidentRoute element={element} />
+    : navId && localOnlyRouteIds.has(navId) && !localOnlyRouteExceptions.has(navId)
+      ? localOnly(navId, element)
+      : element,
+}));
