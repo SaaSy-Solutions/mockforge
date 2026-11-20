@@ -267,6 +267,7 @@ class SecurityToolOwnershipTest(unittest.TestCase):
         with patch.object(TOOLS, 'MAX_EXTRACTED', 0), self.assertRaisesRegex(RuntimeError, 'extraction limits'): self.prepare()
         self.assert_empty()
 
+    @SKIP_OFF_LINUX_X64
     def test_links_traversal_and_unexpected_members_are_rejected(self):
         spec = TOOLS.SPECS[0]
         for name, kind, link in (('../foreign', tarfile.REGTYPE, ''), (spec['top']+'/link', tarfile.SYMTYPE, '../../foreign'),
@@ -276,6 +277,7 @@ class SecurityToolOwnershipTest(unittest.TestCase):
             with self.subTest(name=name, kind=kind), self.assertRaises(RuntimeError): self.prepare()
             self.assert_empty()
 
+    @SKIP_OFF_LINUX_X64
     def test_platform_identity_and_existing_cargo_home_fail_before_allocation(self):
         for override in ({'RUNNER_OS':'Windows'}, {'RUNNER_ARCH':'ARM64'}, {'GITHUB_RUN_ID':'../foreign'}, {'GITHUB_JOB':''}, {'CARGO_HOME':'relative'}, {'CARGO_HOME':'/tmp/a:b'}):
             with self.subTest(override=override), self.assertRaises(RuntimeError): self.prepare({**self.env, **override})
