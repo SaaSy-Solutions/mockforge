@@ -215,7 +215,13 @@ class GuardRunnerCargoTargetsTest(unittest.TestCase):
 
     def run_guard(self, root=None, runner="runner-a", **env):
         target = self.root if root is None else Path(root)
-        full = {"PATH": os.environ["PATH"], "MOCKFORGE_RUNNER_TARGET_ROOT": str(target)}
+        # Default to ample free space (1 TiB) so size-cap tests never depend on
+        # the test host's disk; pressure tests set the override themselves.
+        full = {
+            "PATH": os.environ["PATH"],
+            "MOCKFORGE_RUNNER_TARGET_ROOT": str(target),
+            "MOCKFORGE_RUNNER_FREE_KB_OVERRIDE": str(1024 ** 3),
+        }
         if runner is not None:
             full["RUNNER_NAME"] = runner
         full.update(env)
@@ -236,6 +242,52 @@ class GuardRunnerCargoTargetsTest(unittest.TestCase):
         self.assertIn("size before guard", result.stdout)
         self.assertIn("under cap", result.stdout)
         self.assertTrue((own / "blob").exists())
+
+    def test_disk_pressure_reclaims_own_namespace_under_the_cap(self):
+        # Each runner can sit under the size cap while the shared filesystem
+        # runs out; below the free-space floor the guard reclaims its own
+        # class dirs so later headroom gates pass, and touches nothing else.
+        own = self.namespace() / "integration"
+        other_runner = self.namespace("runner-b") / "integration"
+        cargo_home = self.root / "cargo-mockforge-runner-a"
+        for path in (own, other_runner, cargo_home):
+            self.fill(path)
+        result = self.run_guard(
+            MOCKFORGE_RUNNER_TARGET_MAX_GB="25",
+            MOCKFORGE_RUNNER_MIN_FREE_GB="20",
+            MOCKFORGE_RUNNER_FREE_KB_OVERRIDE=str(5 * 1024 * 1024),
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("below the 20 GiB floor", result.stdout)
+        self.assertFalse(own.exists())
+        self.assertTrue(self.namespace().is_dir())
+        self.assertTrue((other_runner / "blob").exists())
+        self.assertTrue((cargo_home / "blob").exists())
+
+    def test_free_space_at_or_above_the_floor_keeps_the_warm_cache(self):
+        own = self.namespace() / "integration"
+        self.fill(own)
+        result = self.run_guard(
+            MOCKFORGE_RUNNER_MIN_FREE_GB="20",
+            MOCKFORGE_RUNNER_FREE_KB_OVERRIDE=str(20 * 1024 * 1024),
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("above the floor", result.stdout)
+        self.assertTrue((own / "blob").exists())
+
+    def test_unknown_free_space_never_triggers_reclamation(self):
+        own = self.namespace() / "integration"
+        self.fill(own)
+        result = self.run_guard(MOCKFORGE_RUNNER_FREE_KB_OVERRIDE="unknown")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("ignoring the disk-pressure floor", result.stderr)
+        self.assertTrue((own / "blob").exists())
+
+    def test_invalid_floor_is_an_error(self):
+        self.fill(self.namespace() / "integration")
+        result = self.run_guard(MOCKFORGE_RUNNER_MIN_FREE_GB="")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("MOCKFORGE_RUNNER_MIN_FREE_GB", result.stderr)
 
     def test_over_cap_removes_class_dirs_but_keeps_the_namespace(self):
         first = self.namespace() / "ci-test"
