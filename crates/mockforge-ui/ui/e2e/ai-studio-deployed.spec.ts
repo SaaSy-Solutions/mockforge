@@ -68,9 +68,9 @@ test.describe('AI Studio — Deployed Site', () => {
       const banner = page.getByRole('banner');
       const hasBreadcrumb = await banner.getByText('AI Studio')
         .isVisible({ timeout: 3000 }).catch(() => false);
-      const hasHomeBreadcrumb = await banner.getByText('Home')
+      const hasSection = await banner.getByText('AI', { exact: true })
         .isVisible({ timeout: 3000 }).catch(() => false);
-      expect(hasBreadcrumb || hasHomeBreadcrumb).toBeTruthy();
+      expect(hasBreadcrumb && hasSection).toBeTruthy();
     });
 
     test('should display usage stats widget or loading state', async ({ page }) => {

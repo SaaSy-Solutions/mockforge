@@ -102,15 +102,19 @@ jobs:
       - name: Verify build temporary-directory allocation and user quota
         run: python3 scripts/ci/check_temp_directory.py
 
-      - name: Check disk headroom before cache restore
-        run: python3 scripts/ci/check_rust_cache.py --workspace "$GITHUB_WORKSPACE"
-
+      # The guard runs before any headroom gate: under disk pressure it
+      # reclaims this runner's own target namespace (below its free-space
+      # floor), so the gate below measures the disk after reclamation instead
+      # of failing the job on space this runner could have freed.
       - name: Use runner-persistent cargo target
         # Replaces Swatinem/rust-cache: no target or registry tarballs in
         # GitHub cache storage. See scripts/ci/runner-cargo-target.sh.
         env:
           MOCKFORGE_RUNNER_TARGET_MAX_GB: ${{ vars.MOCKFORGE_RUNNER_TARGET_MAX_GB || '25' }}
         run: bash scripts/ci/guard-runner-cargo-targets.sh && bash scripts/ci/runner-cargo-target.sh integration >> "$GITHUB_ENV"
+
+      - name: Check disk headroom before cache restore
+        run: python3 scripts/ci/check_rust_cache.py --workspace "$GITHUB_WORKSPACE"
 
       # The warm target needs checking too. This guard never deletes a target
       # or follows its symlinks. When the warm dir fails it, this run builds in

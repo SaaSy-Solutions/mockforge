@@ -12,9 +12,18 @@ import sys
 import time
 import uuid
 from cve_lab_catalog import CATALOG, CVE, PACKS, validate_data_driven_pack
-from cve_lab_engine import doctor, prepare, lab, cleanup, verify_images
+from cve_lab_engine import (
+    cleanup,
+    doctor,
+    host_network_probe,
+    host_network_refusal,
+    lab,
+    prepare,
+    verify_images,
+)
 from cve_lab_transport import target_url, receiver, control, unverified_context
 from cve_lab_nuclei import probe
+import cve_lab_sent as sent
 import cve_lab_evidence as evidence
 from cve_lab_evidence import BASELINE_GATES, CLASSIFIERS, describe
 from cve_lab_exploits import (
@@ -35,13 +44,45 @@ def verified_cves(include_unverified=False):
     return tuple(
         cve
         for cve, pack in PACKS.items()
-        if include_unverified or pack.get("verified", True)
+        if include_unverified or pack.get("verified", False)
     )
 
 
 def require_verified(cve, include_unverified):
-    if not PACKS[cve].get("verified", True) and not include_unverified:
+    if not PACKS[cve].get("verified", False) and not include_unverified:
         raise ValueError(f"{cve} {UNVERIFIED_MESSAGE}")
+
+
+def _pack_images_runnable(pack_catalog):
+    """Whether a pack's images can carry a run end to end today: every image
+    digest-pinned and no pending/unreviewed image status."""
+    status = pack_catalog.get("image_status") or ""
+    if "pending" in status or "unreviewed" in status:
+        return False
+    return all(
+        "@sha256:" in pack_catalog.get(key, "")
+        for key in ("application_image", "runner_image")
+    )
+
+
+def verified_runnable_cves():
+    """Verified packs whose images are also runnable end to end."""
+    return [
+        cve
+        for cve, pack in PACKS.items()
+        if pack.get("verified", False) and _pack_images_runnable(pack["catalog"])
+    ]
+
+
+def unverified_baseline_note():
+    """Plain-language suffix explaining an unverified pack's inconclusive run."""
+    runnable = ", ".join(verified_runnable_cves()) or "none"
+    return (
+        "This pack is unverified: its reference baseline has not yet "
+        "reproduced the bug on a MockForge lab host, so this result is a "
+        "known state of the pack, not a problem with your target or setup. "
+        f"Verified packs that run end to end: {runnable}."
+    )
 
 
 def run_plan_lines(args):
@@ -101,6 +142,14 @@ def run(args):
     output = Path(args.output_dir).resolve()
     output.mkdir(parents=True, exist_ok=False)
     run_id = uuid.uuid4().hex
+    direct_host = (
+        "127.0.0.1" if args.listen_address == "0.0.0.0" else args.listen_address
+    )
+    sent.open_sink(
+        output / "sent_requests.jsonl",
+        origin=f"http://{direct_host}:{args.origin_port}",
+        target=args.target,
+    )
     report = {
         "schema_version": 1,
         "run_id": run_id,
@@ -108,7 +157,9 @@ def run(args):
         "target": args.target,
         "tls_verify": not args.skip_tls_verify,
         "verdict": "inconclusive",
+        "pack_verified": bool(pack.get("verified", False)),
         "runtime_patch_evidence": "unverified",
+        "sent_requests": "sent_requests.jsonl",
         "scope": "Selected CVE lab reproduction and request-blocking regression, not comprehensive CVE coverage",
     }
     (output / "ownership.json").write_text(
@@ -122,6 +173,13 @@ def run(args):
             "use this against an untrusted network.",
             flush=True,
         )
+    # The lab is up and the direct baseline is running against it: a failure
+    # from here until the target phase means the baseline did not reproduce.
+    # For an unverified pack that is a known state of the pack, which the
+    # report reason says plainly. Failures before this point (engine, image
+    # pulls, ports) are setup problems and get no such note.
+    direct_baseline_started = False
+    direct_baseline_complete = False
     try:
         prepare(args.engine, pack)
         image_verification = verify_images(args.engine, pack)
@@ -136,6 +194,21 @@ def run(args):
             # The reviewed lab application ships inside the pack and is
             # mounted read-only into the pinned image by lab().
             (output / name).write_text(content)
+        # The scanner container runs with --network=host and reaches the
+        # recorder listening in this process's network namespace. An engine
+        # whose "host" network is another namespace (snap, VM, LXD, a systemd
+        # unit with private networking) would only fail later inside Nuclei
+        # with no reason, so probe for that first and refuse plainly.
+        host_network = host_network_probe(
+            args.engine, pack["catalog"]["runner_image"]
+        )
+        report["host_network"] = host_network
+        if not host_network["shared"]:
+            raise RuntimeError(
+                host_network_refusal(
+                    f"{args.listen_address}:{args.origin_port}", host_network
+                )
+            )
         with lab(args.engine, run_id, output, pack) as backend:
             with receiver(
                 args.origin_port,
@@ -144,16 +217,12 @@ def run(args):
                 signature_header=pack["probe"].get("signature_header"),
                 max_body=(pack.get("exploit") or {}).get("max_forwarded_body"),
             ) as records:
-                direct_host = (
-                    "127.0.0.1"
-                    if args.listen_address == "0.0.0.0"
-                    else args.listen_address
-                )
                 origin = f"http://{direct_host}:{args.origin_port}"
                 print(
                     f"Lab ready. LB upstream: {args.listen_address}:{args.origin_port}",
                     flush=True,
                 )
+                direct_baseline_started = True
                 baseline_control = control(
                     pack, origin, run_id, "baseline-control", context=tls_context
                 )
@@ -194,6 +263,7 @@ def run(args):
                             "reproduce the reviewed corruption: "
                             + ", ".join(not_reproducing)
                         )
+                direct_baseline_complete = True
                 if args.target:
                     target_start = len(records)
                     before = control(pack, args.target, run_id, "before", context=tls_context)
@@ -300,11 +370,26 @@ def run(args):
         http.client.HTTPException,
         subprocess.TimeoutExpired,
     ) as exc:
-        report.update(verdict="inconclusive", reason=str(exc))
+        reason = str(exc)
+        if (
+            direct_baseline_started
+            and not direct_baseline_complete
+            and not report["pack_verified"]
+        ):
+            if not reason.endswith("."):
+                reason += "."
+            reason += " " + unverified_baseline_note()
+        report.update(verdict="inconclusive", reason=reason)
     finally:
-        (output / "report.json").write_text(json.dumps(report, indent=2) + "\n")
+        try:
+            (output / "report.json").write_text(
+                json.dumps(report, indent=2) + "\n"
+            )
+        finally:
+            sent.close_sink()
     print(describe(report))
     print(f"Report: {output / 'report.json'}")
+    print(f"Sent requests: {output / 'sent_requests.jsonl'}")
     return 0 if report["verdict"] in ("pass", "baseline-confirmed") else 1
 
 
@@ -387,7 +472,17 @@ def main(argv=None):
                 raise ValueError(f"{args.cve} {UNVERIFIED_MESSAGE}")
             require_verified(args.cve, args.include_unverified)
         if args.action == "doctor":
-            print(json.dumps(doctor(args.engine), indent=2))
+            report = doctor(args.engine, {cve: PACKS[cve] for cve in valid_cves})
+            print(json.dumps(report, indent=2))
+            host_network = report.get("host_network") or {}
+            if host_network.get("shared") is False:
+                print(
+                    host_network_refusal(
+                        f"127.0.0.1:{CATALOG['origin_port']}", host_network
+                    ),
+                    file=sys.stderr,
+                )
+                return 1
         elif args.action == "list":
             cves = verified_cves(args.include_unverified)
             print(json.dumps({cve: PACKS[cve]["catalog"] for cve in cves}, indent=2))

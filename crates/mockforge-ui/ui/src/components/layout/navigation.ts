@@ -111,7 +111,11 @@ export const navSections: NavSection[] = [
       { id: 'hosted-mocks', labelKey: 'tab.hostedMocks', icon: Cloud },
       { id: 'fixtures', labelKey: 'tab.fixtures', icon: FileJson },
       { id: 'overrides', labelKey: 'tab.overrides', icon: Replace },
-      { id: 'virtual-backends', labelKey: 'tab.virtualBackends', icon: Database },
+      {
+        id: 'virtual-backends',
+        labelKey: 'tab.virtualBackends',
+        icon: Database,
+      },
       { id: 'cloud-snapshots', labelKey: 'tab.cloudSnapshots', icon: Camera },
       { id: 'import', labelKey: 'tab.import', icon: Import },
       { id: 'federation', labelKey: 'tab.federation', icon: Share2 },
@@ -135,9 +139,21 @@ export const navSections: NavSection[] = [
     items: [
       { id: 'scenario-studio', labelKey: 'tab.scenarioStudio', icon: Film },
       { id: 'chains', labelKey: 'tab.chains', icon: Link2 },
-      { id: 'state-machine-editor', labelKey: 'tab.stateMachines', icon: GitBranch },
-      { id: 'orchestration-builder', labelKey: 'tab.orchestrationBuilder', icon: Workflow },
-      { id: 'orchestration-execution', labelKey: 'tab.orchestrationExecution', icon: PlayCircle },
+      {
+        id: 'state-machine-editor',
+        labelKey: 'tab.stateMachines',
+        icon: GitBranch,
+      },
+      {
+        id: 'orchestration-builder',
+        labelKey: 'tab.orchestrationBuilder',
+        icon: Workflow,
+      },
+      {
+        id: 'orchestration-execution',
+        labelKey: 'tab.orchestrationExecution',
+        icon: PlayCircle,
+      },
       { id: 'cloud-flows', labelKey: 'tab.cloudFlows', icon: Layers },
       { id: 'graph', labelKey: 'tab.graph', icon: Waypoints },
     ],
@@ -156,7 +172,11 @@ export const navSections: NavSection[] = [
       { id: 'performance', labelKey: 'tab.performance', icon: Activity },
       { id: 'world-state', labelKey: 'tab.worldState', icon: Globe },
       { id: 'incidents', labelKey: 'tab.incidents', icon: AlertTriangle },
-      { id: 'cloud-incidents', labelKey: 'tab.cloudIncidents', icon: AlertTriangle },
+      {
+        id: 'cloud-incidents',
+        labelKey: 'tab.cloudIncidents',
+        icon: AlertTriangle,
+      },
       { id: 'status', labelKey: 'tab.systemStatus', icon: HeartPulse },
     ],
   },
@@ -167,13 +187,25 @@ export const navSections: NavSection[] = [
       { id: 'testing', labelKey: 'tab.testing', icon: TestTube },
       { id: 'test-generator', labelKey: 'tab.testGenerator', icon: Code2 },
       { id: 'test-execution', labelKey: 'tab.testExecution', icon: PlayCircle },
-      { id: 'cloud-test-runs', labelKey: 'tab.cloudTestRuns', icon: PlayCircle },
-      { id: 'integration-test-builder', labelKey: 'tab.integrationTests', icon: Layers },
+      {
+        id: 'cloud-test-runs',
+        labelKey: 'tab.cloudTestRuns',
+        icon: PlayCircle,
+      },
+      {
+        id: 'integration-test-builder',
+        labelKey: 'tab.integrationTests',
+        icon: Layers,
+      },
       { id: 'conformance', labelKey: 'tab.conformance', icon: Shield },
       { id: 'verification', labelKey: 'tab.verification', icon: CheckCircle2 },
       { id: 'contract-diff', labelKey: 'tab.contractDiff', icon: GitCompare },
       { id: 'cloud-contract', labelKey: 'tab.cloudContract', icon: GitCompare },
-      { id: 'fitness-functions', labelKey: 'tab.fitnessFunctions', icon: HeartPulse },
+      {
+        id: 'fitness-functions',
+        labelKey: 'tab.fitnessFunctions',
+        icon: HeartPulse,
+      },
       { id: 'time-travel', labelKey: 'tab.timeTravel', icon: History },
     ],
   },
@@ -186,8 +218,16 @@ export const navSections: NavSection[] = [
       { id: 'resilience', labelKey: 'tab.resilience', icon: Shield },
       { id: 'recorder', labelKey: 'tab.recorder', icon: Radio },
       { id: 'cloud-recorder', labelKey: 'tab.cloudRecorder', icon: Radio },
-      { id: 'behavioral-cloning', labelKey: 'tab.behavioralCloning', icon: Copy },
-      { id: 'cloud-behavioral-cloning', labelKey: 'tab.cloudBehavioralCloning', icon: Copy },
+      {
+        id: 'behavioral-cloning',
+        labelKey: 'tab.behavioralCloning',
+        icon: Copy,
+      },
+      {
+        id: 'cloud-behavioral-cloning',
+        labelKey: 'tab.cloudBehavioralCloning',
+        icon: Copy,
+      },
     ],
   },
   {
@@ -196,7 +236,11 @@ export const navSections: NavSection[] = [
     items: [
       { id: 'ai-studio', labelKey: 'tab.aiStudio', icon: Sparkles },
       { id: 'mockai', labelKey: 'tab.mockai', icon: Brain },
-      { id: 'mockai-openapi-generator', labelKey: 'tab.mockaiOpenApiGenerator', icon: Code2 },
+      {
+        id: 'mockai-openapi-generator',
+        labelKey: 'tab.mockaiOpenApiGenerator',
+        icon: Code2,
+      },
       { id: 'mockai-rules', labelKey: 'tab.mockaiRules', icon: BarChart3 },
       { id: 'voice', labelKey: 'tab.voiceLlm', icon: Mic },
     ],
@@ -205,13 +249,25 @@ export const navSections: NavSection[] = [
     id: 'ecosystem',
     titleKey: 'nav.ecosystem',
     items: [
-      { id: 'template-marketplace', labelKey: 'tab.templateMarketplace', icon: Store },
-      { id: 'scenario-marketplace', labelKey: 'tab.scenarioMarketplace', icon: Store },
+      {
+        id: 'template-marketplace',
+        labelKey: 'tab.templateMarketplace',
+        icon: Store,
+      },
+      {
+        id: 'scenario-marketplace',
+        labelKey: 'tab.scenarioMarketplace',
+        icon: Store,
+      },
       { id: 'plugins', labelKey: 'tab.plugins', icon: Puzzle },
       { id: 'cloud-plugins', labelKey: 'tab.cloudPlugins', icon: Puzzle },
       { id: 'plugin-registry', labelKey: 'tab.pluginRegistry', icon: Package },
       { id: 'showcase', labelKey: 'tab.showcase', icon: Star },
-      { id: 'cloud-showcase-admin', labelKey: 'tab.cloudShowcaseAdmin', icon: Star },
+      {
+        id: 'cloud-showcase-admin',
+        labelKey: 'tab.cloudShowcaseAdmin',
+        icon: Star,
+      },
       { id: 'learning-hub', labelKey: 'tab.learningHub', icon: BookOpen },
     ],
   },
@@ -226,7 +282,11 @@ export const navSections: NavSection[] = [
       { id: 'api-tokens', labelKey: 'tab.apiTokens', icon: Key },
       { id: 'publisher-keys', labelKey: 'tab.publisherKeys', icon: Key },
       { id: 'byok', labelKey: 'tab.byok', icon: Lock },
-      { id: 'notification-channels', labelKey: 'tab.notificationChannels', icon: Bell },
+      {
+        id: 'notification-channels',
+        labelKey: 'tab.notificationChannels',
+        icon: Bell,
+      },
       // user-management retired (#15) — surface lives inside the
       // Organization page's Members / Roles / Activity tabs now.
     ],
@@ -240,13 +300,12 @@ export const helpNavItems: NavItem[] = [
 ];
 
 /** Pages reachable by URL but not listed in the sidebar (breadcrumb only). */
-const unlistedNavItems: NavItem[] = [
-  { id: 'api-explorer', labelKey: 'tab.apiExplorer', icon: Code2 },
-];
+const unlistedNavItems: NavItem[] = [{ id: 'api-explorer', labelKey: 'tab.apiExplorer', icon: Code2 }];
 
 // Cloud mode: only these ids are functional on the cloud app. Everything
 // else stays discoverable in a collapsed "Local only" group.
 const cloudNavItemIds = new Set([
+  'run-locally',
   'dashboard',
   'workspaces',
   'federation',
@@ -406,6 +465,20 @@ const navSearchKeywords: Record<string, string[]> = {
 
 export const isCloud = detectCloudMode();
 
+/** Route ids that require the local MockForge runtime in cloud mode. */
+export const localOnlyRouteIds = new Set(
+  [...navSections.flatMap((section) => section.items), ...unlistedNavItems]
+    .filter((item) => !cloudNavItemIds.has(item.id))
+    .map((item) => item.id)
+    .concat(['playground']),
+);
+
+/** Routes that remain reachable in cloud despite their local-only navigation item. */
+export const localOnlyRouteExceptions = new Set([
+  'analytics', // AnalyticsPage explains the cloud alternatives and links to them.
+  'api-explorer', // HostedMocksPage opens the explorer in cloud mode.
+]);
+
 function resolveItem(item: NavItem, sectionId: string, cloud: boolean): ResolvedNavItem {
   return {
     ...item,
@@ -416,11 +489,10 @@ function resolveItem(item: NavItem, sectionId: string, cloud: boolean): Resolved
 }
 
 /**
- * Sections as the sidebar renders them. In cloud mode, superseded items are
- * dropped and non-functional ones are moved into a trailing `local-only`
- * section instead of being sprinkled (disabled) through every group.
+ * Sections as the sidebar renders them. Cloud mode hides unsupported items;
+ * local mode preserves the existing section layout.
  */
-export function getNavSections(cloud: boolean = isCloud): ResolvedNavSection[] {
+export function getNavSections(cloud: boolean = detectCloudMode()): ResolvedNavSection[] {
   const isAdmin = useAuthStore.getState().user?.is_admin === true;
   const resolved = navSections.map((section) => ({
     ...section,
@@ -430,25 +502,34 @@ export function getNavSections(cloud: boolean = isCloud): ResolvedNavSection[] {
       .map((item) => resolveItem(item, section.id, cloud)),
   }));
 
-  const localOnly = resolved.flatMap((section) => section.items.filter((i) => i.localOnly));
+  if (!cloud) {
+    return navSections.map((section) => ({
+      ...section,
+      items: section.items.map((item) => resolveItem(item, section.id, false)),
+    }));
+  }
+
   const active = resolved
-    .map((section) => ({ ...section, items: section.items.filter((i) => !i.localOnly) }))
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((i) => !i.localOnly),
+    }))
     .filter((section) => section.items.length > 0);
 
-  if (localOnly.length > 0) {
-    active.push({ id: 'local-only', titleKey: 'nav.localOnly.section', items: localOnly });
-  }
   return active;
 }
 
-export function getHelpNavItems(cloud: boolean = isCloud): ResolvedNavItem[] {
-  return helpNavItems.map((item) => resolveItem(item, 'help', cloud));
+export function getHelpNavItems(cloud: boolean = detectCloudMode()): ResolvedNavItem[] {
+  const items = helpNavItems.map((item) => resolveItem(item, 'help', cloud));
+  return cloud
+    ? [...items, resolveItem({ id: 'run-locally', labelKey: 'nav.runLocally', icon: Server }, 'help', true)]
+    : items;
 }
 
 /** Every page the shell knows about, for breadcrumb/title lookup. */
 export function findNavItem(
   id: string,
-  cloud: boolean = isCloud,
+  cloud: boolean = detectCloudMode(),
 ): { item: ResolvedNavItem; section?: NavSection } | undefined {
   for (const section of navSections) {
     const item = section.items.find((i) => i.id === id);
@@ -460,9 +541,7 @@ export function findNavItem(
 
 export function matchesNavQuery(item: { id: string }, label: string, query: string): boolean {
   if (!query) return true;
-  const haystack = [label, item.id.replace(/-/g, ' '), ...(navSearchKeywords[item.id] ?? [])]
-    .join(' ')
-    .toLowerCase();
+  const haystack = [label, item.id.replace(/-/g, ' '), ...(navSearchKeywords[item.id] ?? [])].join(' ').toLowerCase();
   return query
     .toLowerCase()
     .split(/\s+/)

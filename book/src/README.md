@@ -5,7 +5,7 @@
 [![CI](https://github.com/SaaSy-Solutions/mockforge/actions/workflows/ci.yml/badge.svg)](https://github.com/SaaSy-Solutions/mockforge/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](https://github.com/SaaSy-Solutions/mockforge/blob/main/LICENSE)
 
-MockForge helps teams simulate realistic backend behavior so frontend, backend, and QA work can move in parallel without waiting on live services.
+MockForge is an open source mock API generator in Rust. It helps teams simulate realistic backend behavior so frontend, backend, and QA work can move in parallel without waiting on live services.
 
 Start with local open-source workflows, then add richer scenarios, protocol coverage, and team-facing tooling as your test surface grows.
 
@@ -14,7 +14,7 @@ Start with local open-source workflows, then add richer scenarios, protocol cove
 - Turning OpenAPI specs into usable mock services quickly
 - Unblocking frontend and integration work with realistic responses
 - Testing retries, fallbacks, and edge cases with scenario-aware behavior
-- Simulating more than plain REST when your stack includes gRPC, GraphQL, WebSockets, or SMTP
+- Simulating more than plain REST when your stack includes gRPC, GraphQL, WebSockets, Kafka, MQTT, AMQP, SMTP, FTP, TCP, or SOAP/XML over HTTP
 - Giving teams an admin surface and repeatable workflows instead of ad hoc fixture sprawl
 
 ## Start Here
@@ -62,7 +62,7 @@ cargo run -p mockforge-cli -- serve --config demo-config.yaml
 
 - **OpenAPI-first HTTP mocking** with custom responses and dynamic data
 - **Scenario-aware simulation** for stateful behavior, latency, and failure paths
-- **Multi-protocol coverage** across REST, gRPC, GraphQL, WebSockets, and additional protocols
+- **Multi-protocol coverage** across 10 protocols — REST, gRPC, GraphQL, WebSockets, Kafka, MQTT, AMQP, SMTP, FTP, and TCP — plus SOAP/XML over HTTP
 - **Admin UI and CLI workflows** for local development and team usage
 - **Extensibility** through plugins, templates, and deeper configuration
 
