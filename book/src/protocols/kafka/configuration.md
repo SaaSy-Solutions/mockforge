@@ -19,7 +19,9 @@ server:
 
     # Connection limits
     max_connections: 1000
-    # Largest request (bytes) the broker processes; larger ones are discarded (default 100 MiB)
+    # Largest request (bytes) the broker processes; a larger one (or a negative frame size)
+    # closes the connection (default 100 MiB). Within the limit the body is read incrementally
+    # under a deadline that scales with the declared size (10s base + 1s per started MiB, max 300s).
     max_request_bytes: 104857600
 
     # Topic management

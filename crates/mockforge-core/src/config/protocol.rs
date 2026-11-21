@@ -481,10 +481,12 @@ pub struct KafkaConfig {
     pub broker_id: i32,
     /// Maximum connections
     pub max_connections: usize,
-    /// Largest request frame (bytes) the broker buffers and processes. A larger request is read
-    /// off the socket and discarded, so the connection stays in sync, and the client gets no
-    /// response for it. The Java producer batches several partitions into a single Produce
-    /// request, which easily exceeds 10 MB. Override with `MOCKFORGE_KAFKA_MAX_REQUEST_BYTES`.
+    /// Largest request frame (bytes) the broker buffers and processes. A larger request closes
+    /// the connection, as real Kafka does, so the client gets an immediate error instead of a
+    /// silently stalled stream. The Java producer batches several partitions into a single
+    /// Produce request, which easily exceeds 10 MB. Within the limit the body is read
+    /// incrementally under a deadline that scales with the declared size (10s base + 1s per
+    /// started MiB, capped at 300s). Override with `MOCKFORGE_KAFKA_MAX_REQUEST_BYTES`.
     pub max_request_bytes: usize,
     /// Log retention time in milliseconds
     pub log_retention_ms: i64,

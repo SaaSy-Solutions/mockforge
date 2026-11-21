@@ -460,44 +460,78 @@ impl KafkaMockBroker {
             .await
             {
                 Ok(Ok(_)) => {
-                    let message_size = i32::from_be_bytes(size_buf) as usize;
+                    // The frame length is a signed i32. A negative value is a
+                    // corrupt or hostile stream, not a request: parsing it as
+                    // usize turned `FF FF FF FF` into ~4 GiB. Close instead of
+                    // trying to interpret it.
+                    let message_size = i32::from_be_bytes(size_buf);
+                    if message_size < 0 {
+                        self.metrics.record_error();
+                        tracing::warn!(
+                            "Negative request frame size {}; closing the connection",
+                            message_size
+                        );
+                        break;
+                    }
+                    let message_size = message_size as usize;
 
-                    // Validate message size (prevent DoS). Oversized requests used to be skipped
-                    // without reading their body, so the body bytes were parsed as the next size
-                    // header and the connection desynchronised (clients then fail with
-                    // `CorrelationIdMismatchException`). The Java producer batches several
-                    // partitions into one Produce request that easily exceeds 10 MB, so the limit
-                    // (`KafkaConfig::max_request_bytes`) defaults to 100 MiB and anything above it
-                    // is drained, keeping the stream in sync.
+                    // Validate message size (prevent DoS). As in real Kafka, a frame above
+                    // `KafkaConfig::max_request_bytes` (default 100 MiB) closes the connection:
+                    // the client gets an immediate error instead of a stalled stream. Draining
+                    // the body to keep the stream in sync was tried and removed — a client could
+                    // declare a huge frame and then never send it, and the drain had no deadline,
+                    // pinning the connection forever. The Java producer batches several
+                    // partitions into one Produce request that easily exceeds 10 MB, hence the
+                    // generous default.
                     if message_size > self.config.max_request_bytes {
                         self.metrics.record_error();
                         tracing::warn!(
-                            "Message size too large: {} bytes; discarding",
-                            message_size
+                            "Request frame of {} bytes exceeds max_request_bytes ({}); closing the connection",
+                            message_size,
+                            self.config.max_request_bytes
                         );
-                        let mut remaining = message_size;
-                        let mut sink = vec![0u8; 64 * 1024];
-                        while remaining > 0 {
-                            let n = remaining.min(sink.len());
-                            if socket.read_exact(&mut sink[..n]).await.is_err() {
-                                return Ok(());
-                            }
-                            remaining -= n;
-                        }
-                        continue;
+                        break;
                     }
 
-                    // Read message
-                    let mut message_buf = vec![0u8; message_size];
-                    if let Err(e) = tokio::time::timeout(
-                        std::time::Duration::from_secs(10),
-                        socket.read_exact(&mut message_buf),
+                    // Read the body incrementally. Pre-allocating the declared size
+                    // (`vec![0u8; message_size]`) let a 4-byte header trigger a ~100 MiB
+                    // allocation; `read_to_end` grows the buffer only as bytes arrive. The
+                    // deadline scales with the frame size (see `request_read_timeout`). A
+                    // timeout, an I/O error or a short read all close the connection —
+                    // parsing a partial buffer would desynchronise the stream.
+                    let mut message_buf = Vec::with_capacity(message_size.min(64 * 1024));
+                    let body_timeout = request_read_timeout(message_size);
+                    let read = tokio::time::timeout(
+                        body_timeout,
+                        (&mut socket).take(message_size as u64).read_to_end(&mut message_buf),
                     )
-                    .await
-                    {
-                        self.metrics.record_error();
-                        tracing::error!("Timeout reading message: {}", e);
-                        break;
+                    .await;
+                    match read {
+                        Ok(Ok(_)) if message_buf.len() == message_size => {}
+                        Ok(Ok(_)) => {
+                            // EOF before the whole frame arrived.
+                            self.metrics.record_error();
+                            tracing::warn!(
+                                "Client sent {} of {} frame bytes, then closed; closing the connection",
+                                message_buf.len(),
+                                message_size
+                            );
+                            break;
+                        }
+                        Ok(Err(e)) => {
+                            self.metrics.record_error();
+                            tracing::error!("Error reading request body: {}", e);
+                            break;
+                        }
+                        Err(_) => {
+                            self.metrics.record_error();
+                            tracing::warn!(
+                                "Timed out after {:?} reading a {} byte request body; closing the connection",
+                                body_timeout,
+                                message_size
+                            );
+                            break;
+                        }
                     }
 
                     // Parse request
@@ -1594,6 +1628,16 @@ fn get_api_key_from_request(request: &KafkaRequest) -> i16 {
     request.api_key
 }
 
+/// Deadline for reading one request body: 10s base plus 1s per started MiB of the declared
+/// frame size, capped at 300s. Scaling keeps a legitimate 100 MiB Produce request (the default
+/// `max_request_bytes`) readable over a slow link, where the old fixed 10s cut off large
+/// requests, while a stalled client still loses the connection within a bounded time instead
+/// of holding it forever.
+fn request_read_timeout(message_size: usize) -> std::time::Duration {
+    let mibs = message_size.div_ceil(1024 * 1024) as u64;
+    std::time::Duration::from_secs((10 + mibs).min(300))
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -2352,6 +2396,19 @@ mod tests {
         let message_size: usize = 11 * 1024 * 1024; // 11MB
         let limit: usize = 10 * 1024 * 1024; // 10MB
         assert!(message_size > limit);
+    }
+
+    // ==================== Request Read Timeout Tests ====================
+
+    #[test]
+    fn test_request_read_timeout_scales_with_size() {
+        // 10s base below 1 MiB, +1s per *started* MiB ...
+        assert_eq!(request_read_timeout(0), std::time::Duration::from_secs(10));
+        assert_eq!(request_read_timeout(1024 * 1024 - 1), std::time::Duration::from_secs(11));
+        assert_eq!(request_read_timeout(1024 * 1024), std::time::Duration::from_secs(11));
+        assert_eq!(request_read_timeout(100 * 1024 * 1024), std::time::Duration::from_secs(110));
+        // ... capped at 300s.
+        assert_eq!(request_read_timeout(usize::MAX), std::time::Duration::from_secs(300));
     }
 
     // ==================== Response Size Serialization Tests ====================
