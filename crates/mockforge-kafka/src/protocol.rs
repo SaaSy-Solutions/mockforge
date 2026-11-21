@@ -5,6 +5,11 @@
 
 use std::collections::HashMap;
 
+use crate::init_producer_id::{
+    INIT_PRODUCER_ID_FIRST_FLEXIBLE_VERSION, INIT_PRODUCER_ID_MAX_VERSION,
+    INIT_PRODUCER_ID_MIN_VERSION,
+};
+
 /// A topic the broker wants to advertise in its Metadata response.
 ///
 /// Kept intentionally narrow (name + partition count) so the protocol layer
@@ -186,6 +191,15 @@ impl KafkaProtocolHandler {
                 max_version: 6,
             },
         ); // DeleteTopics
+           // InitProducerId: v0-v1 classic, v2-v4 flexible (see init_producer_id.rs). The Java
+           // idempotent producer requires this API before it sends its first Produce.
+        api_versions.insert(
+            22,
+            ApiVersion {
+                min_version: INIT_PRODUCER_ID_MIN_VERSION,
+                max_version: INIT_PRODUCER_ID_MAX_VERSION,
+            },
+        ); // InitProducerId
         api_versions.insert(
             32,
             ApiVersion {
@@ -289,6 +303,7 @@ impl KafkaProtocolHandler {
             18 => KafkaRequestType::ApiVersions,
             19 => KafkaRequestType::CreateTopics,
             20 => KafkaRequestType::DeleteTopics,
+            22 => KafkaRequestType::InitProducerId,
             32 => KafkaRequestType::DescribeConfigs,
             _ => KafkaRequestType::ApiVersions, // Default to ApiVersions for unsupported APIs
         };
@@ -487,6 +502,7 @@ pub enum KafkaRequestType {
     ApiVersions,
     CreateTopics,
     DeleteTopics,
+    InitProducerId,
     DescribeConfigs,
 }
 
@@ -551,6 +567,7 @@ fn is_flexible_request(api_key: i16, api_version: i16) -> bool {
         18 => 3, // ApiVersions
         19 => 5, // CreateTopics
         20 => 4, // DeleteTopics
+        22 => INIT_PRODUCER_ID_FIRST_FLEXIBLE_VERSION, // InitProducerId
         32 => 4, // DescribeConfigs
         _ => return false,
     };
@@ -763,11 +780,13 @@ mod tests {
                 KafkaRequestType::ApiVersions => "ApiVersions",
                 KafkaRequestType::CreateTopics => "CreateTopics",
                 KafkaRequestType::DeleteTopics => "DeleteTopics",
+                KafkaRequestType::InitProducerId => "InitProducerId",
                 KafkaRequestType::DescribeConfigs => "DescribeConfigs",
             }
         }
         let cases = [
             (0i16, "Produce"),
+            (22, "InitProducerId"),
             (2, "ListOffsets"),
             (1, "Fetch"),
             (3, "Metadata"),
@@ -1152,6 +1171,7 @@ mod tests {
             (18, 0, 4), // ApiVersions
             (19, 0, 7), // CreateTopics
             (20, 0, 6), // DeleteTopics
+            (22, 0, 4), // InitProducerId (v2+ flexible)
             (32, 0, 4), // DescribeConfigs
             (49, 0, 4), // DescribeConfigs (alternative)
         ];
@@ -1231,12 +1251,12 @@ mod tests {
         // entries (bumped from 11 when ListOffsets (key 2) was added);
         // varint(12 + 1) = 0x0D in a single byte.
         let n = handler.api_versions.len() as u32;
-        // 18 registered API keys after adding LeaveGroup (13) so
-        // librdkafka can send LeaveGroup on close and the coordinator
-        // evicts the member cleanly.
-        // varint(18 + 1) = 0x13.
-        assert_eq!(n, 18);
-        assert_eq!(data[6], 0x13);
+        // 19 registered API keys: 18 plus InitProducerId (22), which the Java idempotent
+        // producer needs before its first Produce. (LeaveGroup (13) was added earlier so
+        // librdkafka can send it on close and the coordinator evicts the member cleanly.)
+        // varint(19 + 1) = 0x14.
+        assert_eq!(n, 19);
+        assert_eq!(data[6], 0x14);
 
         // Each entry: api_key(i16) + min(i16) + max(i16) + tag_buffer(0x00) = 7 bytes.
         let entries_start = 7;
