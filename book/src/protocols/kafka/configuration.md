@@ -19,6 +19,10 @@ server:
 
     # Connection limits
     max_connections: 1000
+    # Largest request (bytes) the broker processes; a larger one (or a negative frame size)
+    # closes the connection (default 100 MiB). Within the limit the body is read incrementally
+    # under a deadline that scales with the declared size (10s base + 1s per started MiB, max 300s).
+    max_request_bytes: 104857600
 
     # Topic management
     auto_create_topics: true
@@ -41,6 +45,7 @@ All configuration options can be overridden with environment variables:
 export MOCKFORGE_KAFKA_PORT=9093
 export MOCKFORGE_KAFKA_HOST=127.0.0.1
 export # Configure via kafka.max_connections in YAML; max_connections=500
+export MOCKFORGE_KAFKA_MAX_REQUEST_BYTES=104857600
 ```
 
 ## Advanced Configuration
