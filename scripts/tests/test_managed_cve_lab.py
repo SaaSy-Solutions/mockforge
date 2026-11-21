@@ -2046,14 +2046,33 @@ class Php2Shell2026PackTests(unittest.TestCase):
     def test_producer_body_exceeds_the_reviewed_memory_limit(self):
         import cve_lab_payloads as payloads
 
-        # memory_limit=16M in the reviewed lab configuration; the parsed
-        # part headers must exceed it to reach the OOM bail-out.
+        # memory_limit=16M in the reviewed lab configuration; the accumulated
+        # field VALUES must exceed it to reach the OOM bail-out.
         self.assertGreater(len(payloads.oom_body()), 16 * 1024 * 1024)
         self.assertGreater(len(payloads.oom_body_with_progress()), 16 * 1024 * 1024)
         self.assertLess(len(payloads.oom_body()), 48 * 1024 * 1024)
         self.assertIn(b"PHP_SESSION_UPLOAD_PROGRESS", payloads.oom_body_with_progress())
         self.assertIn(b"PHP_SESSION_UPLOAD_PROGRESS", payloads.consumer_body())
         self.assertNotIn(b"PHP_SESSION_UPLOAD_PROGRESS", payloads.oom_body())
+
+    def test_producer_padding_is_a_form_field_value_not_a_part_header(self):
+        # Regression for issue #1620: an earlier trigger carried its padding in
+        # a custom multipart part-header line (``X-Lab-Padding-N:``), which
+        # PHP's rfc1867 parser does not accumulate into memory, so the request
+        # parsed cleanly to ``200 upload processed`` and never reached the OOM
+        # bail-out the vulnerability needs (confirmed live on the pinned
+        # php:8.4.26-apache image). The reviewed trigger must instead carry its
+        # padding as form-FIELD VALUES - the only placement PHP accumulates
+        # into $_POST during the parse. File uploads stream to disk and do not
+        # count against memory_limit, so no part may declare a ``filename``.
+        import cve_lab_payloads as payloads
+
+        body = payloads.oom_body()
+        self.assertNotIn(b"X-Lab-Padding", body)
+        self.assertNotIn(b"filename=", body)
+        # The padding appears as a field value: a long run of the pad byte
+        # immediately after a form-data disposition's blank-line separator.
+        self.assertIn(b'name="labfield0"\r\n\r\n' + b"A" * 1024, body)
 
     def test_probe_template_observes_a_healthy_request(self):
         for pack in self.packs:
@@ -3872,7 +3891,7 @@ class Php2Shell2026SignatureVariantTests(unittest.TestCase):
         for variant in variants:
             self.assertEqual(variant["expect"], "blocked")
             self.assertIn("reproduces_directly", variant)
-        self.assertEqual(self.pack["catalog"]["pack_revision"], 2)
+        self.assertEqual(self.pack["catalog"]["pack_revision"], 3)
 
     def test_variants_cover_uri_query_header_and_body_positions(self):
         from urllib.parse import parse_qs, urlsplit
@@ -4014,7 +4033,7 @@ class Php2Shell109619SignatureVariantTests(unittest.TestCase):
         for variant in variants:
             self.assertEqual(variant["expect"], "blocked")
             self.assertIn("reproduces_directly", variant)
-        self.assertEqual(self.pack["catalog"]["pack_revision"], 2)
+        self.assertEqual(self.pack["catalog"]["pack_revision"], 3)
 
     def test_variants_cover_body_query_and_path_positions(self):
         from urllib.parse import parse_qs, urlsplit
