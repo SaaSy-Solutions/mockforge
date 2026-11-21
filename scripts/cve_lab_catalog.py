@@ -342,11 +342,19 @@ http.createServer((req, res) => {
     "CVE-2026-109618": {
         # Reviewer evidence on PR #1524: trigger returned "200 upload processed"
         # with no crash marker on Docker 29.1.4 / PHP 8.4.26 / Apache 2.4.69 at
-        # 418c289e, so this pack remains hidden until it reproduces on a lab host.
+        # 418c289e. Diagnosed on the pinned php:8.4.26-apache image (issue
+        # #1620): rev 2's padding rode custom part-header lines, which PHP's
+        # rfc1867 parser discards, so memory_limit was never approached and the
+        # OOM bail-out was never reached. Rev 3 carries the padding as form-FIELD
+        # VALUES, which PHP accumulates into $_POST, so the body now raises
+        # "Allowed memory size ... exhausted ... in Unknown on line 0" during the
+        # parse (verified live). 8.4.26 still answers that bail-out cleanly (no
+        # segfault), so the pack stays hidden until the specific corruption is
+        # reproduced on a lab host; see #1620 for the finish plan.
         "verified": False,
         "catalog": {
             "schema_version": 1,
-            "pack_revision": 2,
+            "pack_revision": 3,
             "cve": "CVE-2026-109618",
             "title": "PHP2Shell 2026: PHP core OOM request-lifecycle corruption (mod_php)",
             "platform": "Linux, local Docker/Podman engine, amd64",
@@ -494,11 +502,16 @@ http.createServer((req, res) => {
     },
     "CVE-2026-109619": {
         # Reviewer evidence on PR #1524: trigger did not reproduce on Docker
-        # 29.1.4 / PHP 8.4.26 / Apache 2.4.69 at 418c289e; see PR #1524.
+        # 29.1.4 / PHP 8.4.26 / Apache 2.4.69 at 418c289e; see PR #1524. Rev 3
+        # shares the 109618 producer fix: the oversized producer now reaches the
+        # OOM bail-out during the parse via field-value accumulation (verified
+        # live). On 8.4.26 the producer OOM followed by the same-worker consumer
+        # still does not crash the later request, so this pack also stays hidden
+        # pending the specific same-worker corruption on a lab host; see #1620.
         "verified": False,
         "catalog": {
             "schema_version": 1,
-            "pack_revision": 2,
+            "pack_revision": 3,
             "cve": "CVE-2026-109619",
             "title": "PHP2Shell 2026: PHP core same-worker use-after-free (mod_php)",
             "platform": "Linux, local Docker/Podman engine, amd64",
