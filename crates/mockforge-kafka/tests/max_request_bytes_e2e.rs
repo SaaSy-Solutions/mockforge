@@ -192,7 +192,9 @@ async fn request_one_byte_over_the_limit_closes_the_connection() {
 
     // Pad so the frame size lands exactly one byte past the limit.
     let payload = payload_of_frame_size(61, limit + 1);
-    stream.write_all(&frame(&payload)).await.unwrap();
+    // The broker may reset the connection while we are still writing the
+    // oversized frame; a failed write is the same "closed" outcome we assert.
+    let _ = stream.write_all(&frame(&payload)).await;
     assert!(
         closes_within(&mut stream, Duration::from_secs(2)).await,
         "a frame of max_request_bytes + 1 must close the connection within 2s"

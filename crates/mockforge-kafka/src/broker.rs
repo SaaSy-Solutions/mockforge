@@ -739,18 +739,16 @@ impl KafkaMockBroker {
             return Ok(KafkaResponse::Preserialized(body));
         }
 
-        let body_slice = message_buf.get(request.body_offset..).ok_or_else(|| {
-            mockforge_core::Error::internal("produce request body_offset past end of buffer")
-        })?;
+        let body_slice = message_buf
+            .get(request.body_offset..)
+            .ok_or_else(|| Error::internal("produce request body_offset past end of buffer"))?;
 
         let parsed = if is_flexible {
-            parse_produce_v9(body_slice).map_err(|e| {
-                mockforge_core::Error::internal(format!("failed to parse Produce v9: {e}"))
-            })?
+            parse_produce_v9(body_slice)
+                .map_err(|e| Error::internal(format!("failed to parse Produce v9: {e}")))?
         } else {
-            parse_produce_v3_v8(body_slice).map_err(|e| {
-                mockforge_core::Error::internal(format!("failed to parse Produce v{version}: {e}"))
-            })?
+            parse_produce_v3_v8(body_slice)
+                .map_err(|e| Error::internal(format!("failed to parse Produce v{version}: {e}")))?
         };
 
         let append_time_ms = chrono::Utc::now().timestamp_millis();
@@ -841,9 +839,7 @@ impl KafkaMockBroker {
                 // Re-acquire the lock for the actual produce.
                 let mut topics_guard = self.topics.write().await;
                 let topic_entry = topics_guard.get_mut(&topic_data.name).ok_or_else(|| {
-                    mockforge_core::Error::internal(
-                        "topic disappeared between fault check and produce",
-                    )
+                    Error::internal("topic disappeared between fault check and produce")
                 })?;
 
                 let mut base_offset: i64 = -1;
@@ -963,18 +959,16 @@ impl KafkaMockBroker {
             return Ok(KafkaResponse::Preserialized(body));
         }
 
-        let body_slice = message_buf.get(request.body_offset..).ok_or_else(|| {
-            mockforge_core::Error::internal("fetch request body_offset past end of buffer")
-        })?;
+        let body_slice = message_buf
+            .get(request.body_offset..)
+            .ok_or_else(|| Error::internal("fetch request body_offset past end of buffer"))?;
 
         let parsed = if is_flexible {
-            parse_fetch_v12(body_slice).map_err(|e| {
-                mockforge_core::Error::internal(format!("failed to parse Fetch v12: {e}"))
-            })?
+            parse_fetch_v12(body_slice)
+                .map_err(|e| Error::internal(format!("failed to parse Fetch v12: {e}")))?
         } else {
-            parse_fetch_v4_v11(version, body_slice).map_err(|e| {
-                mockforge_core::Error::internal(format!("failed to parse Fetch v{version}: {e}"))
-            })?
+            parse_fetch_v4_v11(version, body_slice)
+                .map_err(|e| Error::internal(format!("failed to parse Fetch v{version}: {e}")))?
         };
 
         let topics_guard = self.topics.read().await;
@@ -1144,13 +1138,12 @@ impl KafkaMockBroker {
             return Ok(KafkaResponse::Preserialized(body));
         }
 
-        let body_slice = message_buf.get(request.body_offset..).ok_or_else(|| {
-            mockforge_core::Error::internal("listoffsets body_offset past end of buffer")
-        })?;
+        let body_slice = message_buf
+            .get(request.body_offset..)
+            .ok_or_else(|| Error::internal("listoffsets body_offset past end of buffer"))?;
 
-        let parsed = parse_listoffsets_v7(body_slice).map_err(|e| {
-            mockforge_core::Error::internal(format!("failed to parse ListOffsets v7: {e}"))
-        })?;
+        let parsed = parse_listoffsets_v7(body_slice)
+            .map_err(|e| Error::internal(format!("failed to parse ListOffsets v7: {e}")))?;
 
         let topics_guard = self.topics.read().await;
         let mut topic_responses = Vec::with_capacity(parsed.topics.len());
@@ -1231,12 +1224,11 @@ impl KafkaMockBroker {
             );
             return Ok(KafkaResponse::Preserialized(body));
         }
-        let body_slice = message_buf.get(request.body_offset..).ok_or_else(|| {
-            mockforge_core::Error::internal("find_coordinator body_offset past buffer end")
-        })?;
-        let _parsed = parse_find_coordinator_v2(body_slice).map_err(|e| {
-            mockforge_core::Error::internal(format!("FindCoordinator v2 parse: {e}"))
-        })?;
+        let body_slice = message_buf
+            .get(request.body_offset..)
+            .ok_or_else(|| Error::internal("find_coordinator body_offset past buffer end"))?;
+        let _parsed = parse_find_coordinator_v2(body_slice)
+            .map_err(|e| Error::internal(format!("FindCoordinator v2 parse: {e}")))?;
         let body = serialize_find_coordinator_v2_response(
             request.correlation_id,
             &self.config.host,
@@ -1260,11 +1252,11 @@ impl KafkaMockBroker {
             tracing::warn!("rejecting JoinGroup v{} (only v5 supported)", request.api_version);
             return Ok(KafkaResponse::Preserialized(body));
         }
-        let body_slice = message_buf.get(request.body_offset..).ok_or_else(|| {
-            mockforge_core::Error::internal("join_group body_offset past buffer end")
-        })?;
+        let body_slice = message_buf
+            .get(request.body_offset..)
+            .ok_or_else(|| Error::internal("join_group body_offset past buffer end"))?;
         let parsed = parse_join_group_v5(body_slice)
-            .map_err(|e| mockforge_core::Error::internal(format!("JoinGroup v5 parse: {e}")))?;
+            .map_err(|e| Error::internal(format!("JoinGroup v5 parse: {e}")))?;
 
         let protocols: Vec<(String, Vec<u8>)> =
             parsed.protocols.iter().map(|p| (p.name.clone(), p.metadata.clone())).collect();
@@ -1305,11 +1297,11 @@ impl KafkaMockBroker {
             tracing::warn!("rejecting SyncGroup v{} (only v3 supported)", request.api_version);
             return Ok(KafkaResponse::Preserialized(body));
         }
-        let body_slice = message_buf.get(request.body_offset..).ok_or_else(|| {
-            mockforge_core::Error::internal("sync_group body_offset past buffer end")
-        })?;
+        let body_slice = message_buf
+            .get(request.body_offset..)
+            .ok_or_else(|| Error::internal("sync_group body_offset past buffer end"))?;
         let parsed = parse_sync_group_v3(body_slice)
-            .map_err(|e| mockforge_core::Error::internal(format!("SyncGroup v3 parse: {e}")))?;
+            .map_err(|e| Error::internal(format!("SyncGroup v3 parse: {e}")))?;
 
         let pairs: Vec<(String, Vec<u8>)> =
             parsed.assignments.into_iter().map(|a| (a.member_id, a.assignment)).collect();
@@ -1336,11 +1328,11 @@ impl KafkaMockBroker {
             tracing::warn!("rejecting Heartbeat v{} (only v3 supported)", request.api_version);
             return Ok(KafkaResponse::Preserialized(body));
         }
-        let body_slice = message_buf.get(request.body_offset..).ok_or_else(|| {
-            mockforge_core::Error::internal("heartbeat body_offset past buffer end")
-        })?;
+        let body_slice = message_buf
+            .get(request.body_offset..)
+            .ok_or_else(|| Error::internal("heartbeat body_offset past buffer end"))?;
         let parsed = parse_heartbeat_v3(body_slice)
-            .map_err(|e| mockforge_core::Error::internal(format!("Heartbeat v3 parse: {e}")))?;
+            .map_err(|e| Error::internal(format!("Heartbeat v3 parse: {e}")))?;
 
         let err = self
             .group_coordinator
@@ -1374,14 +1366,11 @@ impl KafkaMockBroker {
             );
             return Ok(KafkaResponse::Preserialized(body));
         }
-        let body_slice = message_buf.get(request.body_offset..).ok_or_else(|| {
-            mockforge_core::Error::internal("leave_group body_offset past buffer end")
-        })?;
+        let body_slice = message_buf
+            .get(request.body_offset..)
+            .ok_or_else(|| Error::internal("leave_group body_offset past buffer end"))?;
         let parsed = parse_leave_group(request.api_version, body_slice).map_err(|e| {
-            mockforge_core::Error::internal(format!(
-                "LeaveGroup v{} parse: {e}",
-                request.api_version
-            ))
+            Error::internal(format!("LeaveGroup v{} parse: {e}", request.api_version))
         })?;
 
         {
@@ -1414,11 +1403,11 @@ impl KafkaMockBroker {
             tracing::warn!("rejecting OffsetCommit v{} (only v7 supported)", request.api_version);
             return Ok(KafkaResponse::Preserialized(body));
         }
-        let body_slice = message_buf.get(request.body_offset..).ok_or_else(|| {
-            mockforge_core::Error::internal("offset_commit body_offset past buffer end")
-        })?;
+        let body_slice = message_buf
+            .get(request.body_offset..)
+            .ok_or_else(|| Error::internal("offset_commit body_offset past buffer end"))?;
         let parsed = parse_offset_commit_v7(body_slice)
-            .map_err(|e| mockforge_core::Error::internal(format!("OffsetCommit v7 parse: {e}")))?;
+            .map_err(|e| Error::internal(format!("OffsetCommit v7 parse: {e}")))?;
 
         {
             let mut coord = self.group_coordinator.write().await;
@@ -1457,11 +1446,11 @@ impl KafkaMockBroker {
             tracing::warn!("rejecting OffsetFetch v{} (only v5 supported)", request.api_version);
             return Ok(KafkaResponse::Preserialized(body));
         }
-        let body_slice = message_buf.get(request.body_offset..).ok_or_else(|| {
-            mockforge_core::Error::internal("offset_fetch body_offset past buffer end")
-        })?;
+        let body_slice = message_buf
+            .get(request.body_offset..)
+            .ok_or_else(|| Error::internal("offset_fetch body_offset past buffer end"))?;
         let parsed = parse_offset_fetch_v5(body_slice)
-            .map_err(|e| mockforge_core::Error::internal(format!("OffsetFetch v5 parse: {e}")))?;
+            .map_err(|e| Error::internal(format!("OffsetFetch v5 parse: {e}")))?;
 
         let coord = self.group_coordinator.read().await;
         let topic_responses: Vec<OffsetFetchTopicResponse> = parsed
@@ -1541,7 +1530,7 @@ impl KafkaMockBroker {
         consumer_groups
             .commit_offsets(group_id, offsets)
             .await
-            .map_err(|e| mockforge_core::Error::from(e.to_string()))
+            .map_err(|e| Error::from(e.to_string()))
     }
 
     /// Test helper: Get committed offsets for a consumer group (only available in tests)
@@ -1569,7 +1558,7 @@ impl KafkaMockBroker {
         consumer_groups
             .join_group(group_id, member_id, client_id)
             .await
-            .map_err(|e| mockforge_core::Error::from(e.to_string()))?;
+            .map_err(|e| Error::from(e.to_string()))?;
         Ok(())
     }
 
@@ -1584,7 +1573,7 @@ impl KafkaMockBroker {
         consumer_groups
             .sync_group(group_id, assignments, &topics)
             .await
-            .map_err(|e| mockforge_core::Error::from(e.to_string()))?;
+            .map_err(|e| Error::from(e.to_string()))?;
         Ok(())
     }
 
