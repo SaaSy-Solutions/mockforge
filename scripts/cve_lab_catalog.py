@@ -851,3 +851,92 @@ def validate_data_driven_pack(pack):
 CVE = "CVE-2025-29927"
 CATALOG = PACKS[CVE]["catalog"]
 SIGNATURE = PACKS[CVE]["probe"]["headers"]["x-middleware-subrequest"]
+
+
+# Passive version-fingerprint packs. These are DETECTION ONLY: the detect
+# subcommand sends one ordinary read-only ``GET /`` and compares the version
+# the target itself announces in its response headers with the published
+# affected ranges. Nothing here reproduces a vulnerability, so no entry
+# carries an exploit, baseline_exploit or target_exploit field, and none is
+# run through the lab engine or the LB-regression path. ``fixed`` maps a
+# release line to the first release that contains the fix.
+DETECT_PACKS = {
+    "CVE-2026-109618": {
+        "catalog": {
+            "schema_version": 1,
+            "pack_revision": 1,
+            "cve": "CVE-2026-109618",
+            "title": "PHP2Shell 2026: PHP core request-lifecycle corruption (passive version check)",
+            "mode": "detect-only",
+            "references": [
+                "https://github.com/php/php-src/security/advisories/GHSA-w8hw-w9fx-j79w",
+                "https://www.php.net/releases/8.4/release-8.4.27.php",
+            ],
+            "coverage": (
+                "Version fingerprint only, from the Server and X-Powered-By headers. "
+                "It does not test the vulnerability. Distribution builds can backport "
+                "the fix without changing the version, and many sites hide the header."
+            ),
+        },
+        "probe": {"method": "GET", "path": "/?__mockforge_cve={token}"},
+        "fingerprint": {
+            "product": "php",
+            "fixed": {"8.5": "8.5.12", "8.4": "8.4.27", "8.3": "8.3.36", "8.2": "8.2.35"},
+            "disclosed": "2026-10-21",
+        },
+        "classifier": "version-fingerprint",
+    },
+    "CVE-2026-109619": {
+        "catalog": {
+            "schema_version": 1,
+            "pack_revision": 1,
+            "cve": "CVE-2026-109619",
+            "title": "PHP2Shell 2026: PHP core same-worker use-after-free (passive version check)",
+            "mode": "detect-only",
+            "references": [
+                "https://github.com/php/php-src/security/advisories/GHSA-w8hw-w9fx-j79w",
+                "https://www.php.net/releases/8.4/release-8.4.27.php",
+            ],
+            "coverage": (
+                "Version fingerprint only, from the Server and X-Powered-By headers. "
+                "It does not test the vulnerability. Distribution builds can backport "
+                "the fix without changing the version, and many sites hide the header."
+            ),
+        },
+        "probe": {"method": "GET", "path": "/?__mockforge_cve={token}"},
+        "fingerprint": {
+            "product": "php",
+            "fixed": {"8.5": "8.5.12", "8.4": "8.4.27", "8.3": "8.3.36", "8.2": "8.2.35"},
+            "disclosed": "2026-10-21",
+        },
+        "classifier": "version-fingerprint",
+    },
+    "CVE-2026-111497": {
+        "catalog": {
+            "schema_version": 1,
+            "pack_revision": 1,
+            "cve": "CVE-2026-111497",
+            "title": "Node2Shell: Node.js Brotli decoder out-of-bounds write (passive version check)",
+            "mode": "detect-only",
+            "references": [
+                "https://github.com/advisories/GHSA-9v8h-qqgm-4m35",
+                "https://nodejs.org/en/blog/vulnerability/october-2026-security-releases",
+            ],
+            "coverage": (
+                "Version fingerprint only. Node.js rarely announces its version to "
+                "remote clients, so the usual result is unknown. A version is read "
+                "only when the application leaks it in a header such as X-Powered-By. "
+                "It does not test the vulnerability."
+            ),
+        },
+        "probe": {"method": "GET", "path": "/?__mockforge_cve={token}"},
+        "fingerprint": {
+            "product": "node",
+            "fixed": {"22": "22.23.4", "24": "24.22.1", "26": "26.12.1"},
+            # Majors below the newest fixed line that are not listed in
+            # ``fixed`` (25, 23, 20 and earlier) are end of life with no fix.
+            "unfixed_below_major": 27,
+        },
+        "classifier": "version-fingerprint",
+    },
+}
