@@ -41,6 +41,7 @@ mod kafka_commands;
 #[allow(dead_code)]
 mod logs_commands;
 mod management_auth;
+mod mcp_contract_commands;
 mod mcp_server;
 mod mockai_commands;
 mod mod_commands;
@@ -1185,6 +1186,19 @@ enum Commands {
     ///   mockforge validate-spec ./specs/openapi.json --format json
     #[command(verbatim_doc_comment)]
     ValidateSpec(validate_spec_commands::ValidateSpecArgs),
+
+    /// Pin what an MCP tool server declares, and fail when it changes
+    ///
+    /// `pin` records a server's instructions and tools in a contract file.
+    /// `check` asks the server again and reports every difference. Exits 0
+    /// when nothing changed, 1 when something did, and 2 when the server
+    /// could not be asked.
+    ///
+    /// Examples:
+    ///   mockforge mcp-contract pin --url https://mcp.example.com/mcp --output acme-mcp.json
+    ///   mockforge mcp-contract check --contract acme-mcp.json
+    #[command(verbatim_doc_comment)]
+    McpContract(mcp_contract_commands::McpContractArgs),
 
     /// API governance and safety features
     ///
@@ -2929,6 +2943,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         validate_spec_commands::handle_validate_spec_command(args).await?;
         return Ok(());
     }
+    // A contract check is a CI gate: it prints its own document and exits by
+    // verdict, before telemetry or analytics are initialized.
+    if let Commands::McpContract(args) = cli.command {
+        mcp_contract_commands::handle_mcp_contract_command(args).await?;
+        return Ok(());
+    }
     if let Commands::Cve { args } = cli.command {
         return tools_commands::cve(args).map_err(Into::into);
     }
@@ -3010,6 +3030,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     match cli.command {
         Commands::Cve { .. } => unreachable!("cve handled before service initialization"),
         Commands::Tools { .. } => unreachable!("tools handled before service initialization"),
+        Commands::McpContract(_) => {
+            unreachable!("mcp-contract handled before service initialization")
+        }
         Commands::Serve(args) => {
             // Issue #79 round 15 — `--shadow` is a thin alias for the
             // env var the server reads at request time. Set it before
