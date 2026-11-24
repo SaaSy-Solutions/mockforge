@@ -1,3 +1,9 @@
+## [Unreleased]
+
+### Added
+
+- **[Reality]** CVE lab runs against an operator `--target` require an authorization attestation (`--i-am-authorized`, `MOCKFORGE_CVE_AUTHORIZED=1`, or an interactive confirmation) and record it in `report.json`. (#1682)
+
 ## [0.3.249] - 2026-11-23
 
 ### Security

@@ -20,6 +20,9 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
+# Target runs need an authorization attestation; these tests use local fixtures.
+os.environ.setdefault("MOCKFORGE_CVE_AUTHORIZED", "1")
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import cve_lab_catalog as catalog
 import cve_lab_engine as engine

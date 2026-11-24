@@ -23,6 +23,7 @@ from cve_lab_engine import (
 )
 from cve_lab_transport import target_url, receiver, control, unverified_context
 from cve_lab_nuclei import probe
+from cve_lab_authz import require_authorization
 import cve_lab_sent as sent
 import cve_lab_evidence as evidence
 from cve_lab_evidence import BASELINE_GATES, CLASSIFIERS, describe
@@ -134,6 +135,11 @@ def run(args):
     ):
         validate_data_driven_pack(pack)
     target_url(args.target) if args.target else None
+    authorization = (
+        require_authorization(args.target, assume_yes=args.i_am_authorized)
+        if args.target
+        else None
+    )
     ipaddress.IPv4Address(args.listen_address)
     if not 1 <= args.origin_port <= 65535 or not 400 <= args.block_status <= 599:
         raise ValueError("origin-port must be 1..65535; block-status must be 400..599")
@@ -155,6 +161,7 @@ def run(args):
         "run_id": run_id,
         "pack": pack["catalog"],
         "target": args.target,
+        "authorization": authorization,
         "tls_verify": not args.skip_tls_verify,
         "verdict": "inconclusive",
         "pack_verified": bool(pack.get("verified", False)),
@@ -440,6 +447,12 @@ def main(argv=None):
         action="store_true",
         help="Accept self-signed or otherwise unverified certificates on --target "
         "(explicit opt-in for lab test targets; verification is on by default)",
+    )
+    runner.add_argument(
+        "--i-am-authorized",
+        action="store_true",
+        help="Attest you are authorized to test --target (or set "
+        "MOCKFORGE_CVE_AUTHORIZED=1); recorded in report.json",
     )
     runner.add_argument(
         "--output-dir", required=True, help="New report directory, never overwritten"
