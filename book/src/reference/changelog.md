@@ -1,3 +1,9 @@
+## [Unreleased]
+
+### Fixed
+
+- **[Reality]** `mockforge cve run` no longer returns inconclusive on every host. The network-namespace probe called `/bin/readlink`, which the pinned Nuclei runner image does not have (its busybox installs `readlink` at `/usr/bin/readlink`), so the probe failed with an OCI "no such file" error. It now runs `/bin/busybox readlink`.
+
 ## [0.3.249] - 2026-11-23
 
 ### Security
