@@ -1737,8 +1737,12 @@ class HostNetworkTests(unittest.TestCase):
         # A doctor probe must never download, and the runner image's
         # entrypoint is Nuclei, so the namespace read overrides it.
         self.assertIn("--pull=never", runs[0])
-        self.assertEqual(runs[0][runs[0].index("--entrypoint") + 1], "/bin/readlink")
+        # readlink is a busybox applet at /usr/bin/readlink in the pinned runner
+        # image, so the probe goes through /bin/busybox.
+        self.assertEqual(runs[0][runs[0].index("--entrypoint") + 1], "/bin/busybox")
         self.assertIn("runner@sha256:abc", runs[0])
+        image_at = runs[0].index("runner@sha256:abc")
+        self.assertEqual(runs[0][image_at + 1 :], ["readlink", "/proc/self/ns/net"])
 
     def test_probe_reports_a_mismatched_container_namespace(self):
         with patch.object(
