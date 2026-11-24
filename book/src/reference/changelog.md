@@ -1,5 +1,14 @@
 ## [Unreleased]
 
+### Security
+
+- **[DevX]** Update `brotli` to 9.1.3 and `brotli-decompressor` to 6.4.0. The decompressor now rejects a block switch that the stream made impossible with a format error, matching the C decoder's fix for CVE-2026-111497 (Node2Shell), instead of reporting that it needs more input. The Rust decoder already bounds-checked the buffer involved, so this was not memory-unsafe in MockForge.
+
+### Added
+
+- **[Reality]** `mockforge cve detect` runs a passive, detection-only version check for the PHP2Shell (CVE-2026-109618, CVE-2026-109619) and Node2Shell (CVE-2026-111497) advisories. It sends one read-only `GET /`, compares the announced PHP or Node.js version with the fixed releases, and reports likely-affected, not-affected or unknown. Node.js usually reports unknown because it rarely announces its version.
+- **[Reality]** New managed CVE lab pack for CVE-2026-33017: one reviewed request against the pinned Langflow 1.8.1 image reproduces unauthenticated code execution through the public flow build, verified on a lab host.
+
 ### Fixed
 
 - **[Reality]** CVE labs materialize a single-file lab app shipped as `application_script` to its mount host path, so Node-style packs start instead of the runtime mounting an empty directory and the app failing with MODULE_NOT_FOUND. (#1620)
@@ -7,11 +16,6 @@
 - **[Reality]** The Node.js Node2Shell pack (CVE-2026-111497) reproduced on a lab host with its pinned image, so it is verified and listed by default.
 - **[Reality]** Lab scanner templates send a request body as a string. The pinned runner rejected the list form, so no pack with a request body could run.
 - **[DevX]** The CLI tools bundle uses forward-slash keys on every platform, so a bundle generated on Windows matches the one CI checks.
-
-### Added
-
-- **[Reality]** `mockforge cve detect` runs a passive, detection-only version check for the PHP2Shell (CVE-2026-109618, CVE-2026-109619) and Node2Shell (CVE-2026-111497) advisories. It sends one read-only `GET /`, compares the announced PHP or Node.js version with the fixed releases, and reports likely-affected, not-affected or unknown. Node.js usually reports unknown because it rarely announces its version.
-- **[Reality]** New managed CVE lab pack for CVE-2026-33017: one reviewed request against the pinned Langflow 1.8.1 image reproduces unauthenticated code execution through the public flow build, verified on a lab host.
 
 ## [0.3.249] - 2026-11-23
 
