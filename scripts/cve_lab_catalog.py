@@ -894,7 +894,7 @@ DETECT_PACKS = {
             "title": "PHP2Shell 2026: PHP core same-worker use-after-free (passive version check)",
             "mode": "detect-only",
             "references": [
-                "https://github.com/php/php-src/security/advisories/GHSA-w8hw-w9fx-j79w",
+                "https://github.com/php/php-src/security/advisories/GHSA-6wmf-4rv5-p3rp",
                 "https://www.php.net/releases/8.4/release-8.4.27.php",
             ],
             "coverage": (
