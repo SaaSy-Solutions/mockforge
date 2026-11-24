@@ -850,12 +850,143 @@ def classify_data_driven(
     )
 
 
+# --- Passive version fingerprint (detection only) --------------------------
+#
+# Nothing below sends or builds an attack. The verdict comes only from the
+# version a target announces about itself in ordinary response headers.
+
+import re
+
+_PHP_VERSION = re.compile(r"\bPHP/(\d+)\.(\d+)\.(\d+)", re.IGNORECASE)
+_NODE_VERSION = re.compile(r"\bnode(?:\.js)?[/ ]v?(\d+)\.(\d+)\.(\d+)", re.IGNORECASE)
+_DISTRO_BUILD = re.compile(
+    r"\((debian|ubuntu|red hat|centos|rocky|almalinux|fedora|suse|alpine|amazon)",
+    re.IGNORECASE,
+)
+
+
+def _tuple(text):
+    return tuple(int(part) for part in text.split("."))
+
+
+def extract_version(product, headers):
+    """Return ((major, minor, patch), source_header) or (None, None).
+
+    Only headers the target chose to send are read: ``x-powered-by`` and
+    ``server`` for both products, plus ``x-node-version`` for Node.js.
+    """
+    pattern = _PHP_VERSION if product == "php" else _NODE_VERSION
+    names = ["x-powered-by", "server"]
+    if product == "node":
+        names.append("x-node-version")
+    for name in names:
+        value = headers.get(name) or ""
+        if name == "x-node-version":
+            bare = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)", value.strip())
+            if bare:
+                return tuple(int(g) for g in bare.groups()), name
+        match = pattern.search(value)
+        if match:
+            return tuple(int(g) for g in match.groups()), name
+    return None, None
+
+
+def compare_version(fingerprint, version):
+    """Compare a version with the published fixed releases.
+
+    Returns (verdict, note). Verdicts are ``likely-affected``,
+    ``not-affected`` and ``unknown``.
+    """
+    major, minor, _patch = version
+    fixed = fingerprint["fixed"]
+    shown = ".".join(str(p) for p in version)
+    if fingerprint["product"] == "php":
+        line = f"{major}.{minor}"
+        if line in fixed:
+            if version >= _tuple(fixed[line]):
+                return "not-affected", f"PHP {shown} is at or above the fixed release {fixed[line]}"
+            return "likely-affected", f"PHP {shown} is below the fixed release {fixed[line]}"
+        newest = max(_tuple(v) for v in fixed.values())
+        if (major, minor) > newest[:2]:
+            return "not-affected", f"PHP {shown} is newer than every fixed release line"
+        return (
+            "unknown",
+            f"PHP {shown} is on a release line with no fixed release listed here "
+            "(an older end-of-life line); its affected range is not asserted",
+        )
+    # Node.js
+    line = str(major)
+    if line in fixed:
+        if version >= _tuple(fixed[line]):
+            return "not-affected", f"Node.js {shown} is at or above the fixed release {fixed[line]}"
+        return "likely-affected", f"Node.js {shown} is below the fixed release {fixed[line]}"
+    if major < fingerprint["unfixed_below_major"]:
+        return (
+            "likely-affected",
+            f"Node.js {shown} is on an end-of-life line (25, 23, 20 and earlier) "
+            "that has no fix",
+        )
+    return "not-affected", f"Node.js {shown} is newer than every fixed release line"
+
+
+def classify_version_fingerprint(pack, observation):
+    """Reach a verdict purely from version signals. Returns (verdict, reason, checks).
+
+    ``observation`` is the result of ``cve_lab_transport.version_probe``.
+    Limits stated plainly: a version header can be absent, spoofed or
+    stripped, and distribution packages backport fixes without changing the
+    version, so ``likely-affected`` is a prompt to check, not proof. For Node.js
+    the usual outcome is ``unknown`` because it rarely announces its version.
+    """
+    fingerprint = pack["fingerprint"]
+    product = fingerprint["product"]
+    label = "PHP" if product == "php" else "Node.js"
+    checks = []
+    if observation.get("error") or "headers" not in observation:
+        checks.append({"check": "target answered a plain GET /", "outcome": "not satisfied"})
+        return "unknown", f"the target could not be reached: {observation.get('error', 'no response')}", checks
+    checks.append({"check": "target answered a plain GET /", "outcome": "ok"})
+    headers = observation["headers"]
+    version, source = extract_version(product, headers)
+    if version is None:
+        hint = (
+            " Node.js rarely announces its version to remote clients, so this is the usual result."
+            if product == "node"
+            else " The header may be hidden (expose_php=Off or ServerTokens Prod)."
+        )
+        checks.append({"check": f"{label} version announced in response headers", "outcome": "not found"})
+        return "unknown", f"the target does not announce a {label} version.{hint} No confidence is implied.", checks
+    shown = ".".join(str(p) for p in version)
+    checks.append({"check": f"{label} version announced in response headers", "outcome": f"{shown} (from {source})"})
+    verdict, note = compare_version(fingerprint, version)
+    notes = [note]
+    if product == "php":
+        server = headers.get("server") or ""
+        if re.search(r"apache", server, re.IGNORECASE):
+            sapi = "Apache, so mod_php is possible (not confirmed)"
+        elif server:
+            sapi = "not Apache, so PHP is probably FPM or CGI rather than mod_php (not confirmed)"
+        else:
+            sapi = "server software not announced, SAPI cannot be inferred"
+        checks.append({"check": "SAPI hint from the Server header", "outcome": sapi})
+        if verdict == "likely-affected" and "apache" not in server.lower():
+            notes.append("the advisory concerns mod_php, so exposure may be lower than the version suggests")
+    if verdict == "likely-affected" and _DISTRO_BUILD.search(headers.get("server") or ""):
+        notes.append(
+            "this looks like a distribution build, which may have backported the fix without "
+            "changing the version"
+        )
+    return verdict, "; ".join(notes), checks
+
+
 CLASSIFIERS = {
     "decoder-crash": classify_decoder_crash,
     "middleware-bypass": _classify_middleware_bypass,
     "cgi-argument-injection": classify_php_cgi_argument_injection,
     "modphp-segfault": classify_modphp_segfault,
     "data-driven": classify_data_driven,
+    # Detection only; called as (pack, observation) by the detect subcommand.
+    "version-fingerprint": classify_version_fingerprint,
 }
 
 
