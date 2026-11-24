@@ -1,16 +1,12 @@
 ## [Unreleased]
 
-### Fixed
-
-- **[Reality]** CVE labs materialize a single-file lab app shipped as `application_script` to its mount host path, so Node-style packs start instead of the runtime mounting an empty directory and the app failing with MODULE_NOT_FOUND. (#1620)
-- **[Reality]** `mockforge cve run` no longer returns inconclusive on every host. The network-namespace probe called `/bin/readlink`, which the pinned Nuclei runner image does not have (its busybox installs `readlink` at `/usr/bin/readlink`), so the probe failed with an OCI "no such file" error. It now runs `/bin/busybox readlink`.
-
 ### Added
 
 - **[Reality]** `mockforge cve detect` runs a passive, detection-only version check for the PHP2Shell (CVE-2026-109618, CVE-2026-109619) and Node2Shell (CVE-2026-111497) advisories. It sends one read-only `GET /`, compares the announced PHP or Node.js version with the fixed releases, and reports likely-affected, not-affected or unknown. Node.js usually reports unknown because it rarely announces its version.
 
 ### Fixed
 
+- **[Reality]** CVE labs materialize a single-file lab app shipped as `application_script` to its mount host path, so Node-style packs start instead of the runtime mounting an empty directory and the app failing with MODULE_NOT_FOUND. (#1620)
 - **[Reality]** `mockforge cve run` no longer returns inconclusive on every host. The network-namespace probe called `/bin/readlink`, which the pinned Nuclei runner image does not have (its busybox installs `readlink` at `/usr/bin/readlink`), so the probe failed with an OCI "no such file" error. It now runs `/bin/busybox readlink`.
 
 ## [0.3.249] - 2026-11-23
