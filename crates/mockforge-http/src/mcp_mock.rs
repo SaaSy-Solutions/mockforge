@@ -19,18 +19,35 @@
 //! `prompts/get` are implemented, so a client that lists then reads/gets/calls
 //! generates substantially more request/response traffic to capture.
 //!
+//! Both eras of the protocol are answered, as the public servers of 2026 do.
+//! A request that carries the per-request metadata of revision 2026-07-28
+//! (`params._meta`, with `server/discover` in place of a handshake) is served
+//! on that revision, and the `Mcp-Method` and `MCP-Protocol-Version` headers
+//! are checked against the body as the revision requires. A request without
+//! that metadata gets the `initialize` handshake that earlier revisions use.
+//!
 //! Mounted by `mockforge serve --mcp-mock`.
 
 use axum::{
-    extract::State, http::StatusCode, response::IntoResponse, response::Response, routing::post,
-    Json, Router,
+    extract::State, http::{HeaderMap, StatusCode}, response::IntoResponse, response::Response,
+    routing::post, Json, Router,
 };
 use serde_json::{json, Value};
 
-/// Protocol version this mock advertises. Matches the MCP spec revision the
-/// reference clients negotiate; clients that send a different version still
-/// work because we echo a fixed supported version.
-const PROTOCOL_VERSION: &str = "2024-11-05";
+/// The protocol revision this mock serves when a request carries the
+/// per-request metadata of revision 2026-07-28.
+const MODERN_PROTOCOL: &str = "2026-07-28";
+
+/// The protocol revision this mock advertises on the `initialize` handshake
+/// that earlier revisions use. Matches the MCP spec revision the reference
+/// clients negotiate; clients that send a different version still work
+/// because we echo a fixed supported version.
+const LEGACY_PROTOCOL: &str = "2024-11-05";
+
+/// `_meta` keys that revision 2026-07-28 requires on every request.
+const VERSION_KEY: &str = "io.modelcontextprotocol/protocolVersion";
+const CAPABILITIES_KEY: &str = "io.modelcontextprotocol/clientCapabilities";
+const SERVER_INFO_KEY: &str = "io.modelcontextprotocol/serverInfo";
 
 /// A single mock tool in the catalog.
 #[derive(Clone, Debug)]
@@ -297,93 +314,255 @@ pub fn router(config: McpMockConfig) -> Router {
 /// JSON-RPC error codes (subset of the spec) we may return.
 const METHOD_NOT_FOUND: i64 = -32601;
 const INVALID_REQUEST: i64 = -32600;
+/// JSON-RPC invalid-params error code, returned for an unknown resource uri
+/// or prompt name, and for a request missing what its revision requires.
+const INVALID_PARAMS: i64 = -32602;
+/// Revision 2026-07-28: an HTTP header does not match the request body.
+const HEADER_MISMATCH: i64 = -32020;
+/// Revision 2026-07-28: the requested protocol revision is not supported.
+const UNSUPPORTED_VERSION: i64 = -32022;
 
-async fn handle_rpc(State(config): State<McpMockConfig>, Json(req): Json<Value>) -> Response {
+async fn handle_rpc(
+    State(config): State<McpMockConfig>,
+    headers: HeaderMap,
+    Json(req): Json<Value>,
+) -> Response {
     // Notifications have no `id`; per JSON-RPC the server must not reply with a
     // result. MCP sends `notifications/initialized` after `initialize`.
-    let id = req.get("id").cloned();
-    let method = req.get("method").and_then(|m| m.as_str()).unwrap_or("");
-    let params = req.get("params").cloned().unwrap_or(Value::Null);
-
-    if id.is_none() {
+    let Some(id) = req.get("id").cloned() else {
         // Notification: acknowledge with 202 and no body.
         return StatusCode::ACCEPTED.into_response();
-    }
-    let id = id.unwrap();
+    };
+    let method = req.get("method").and_then(|m| m.as_str()).unwrap_or("");
+    let params = req.get("params").cloned().unwrap_or(Value::Null);
 
     if req.get("jsonrpc").and_then(|v| v.as_str()) != Some("2.0") {
         return Json(error_response(id, INVALID_REQUEST, "jsonrpc must be \"2.0\""))
             .into_response();
     }
 
+    // A request on the per-request protocol is recognised by its metadata, by
+    // the `Mcp-Method` header only that protocol sends, or by `server/discover`,
+    // which only it defines. A request with the header but without the
+    // metadata is still served on that protocol, so it is refused as malformed
+    // instead of being answered as though it were a handshake-era request.
+    let carries_version = params
+        .get("_meta")
+        .and_then(|meta| meta.get(VERSION_KEY))
+        .is_some_and(Value::is_string);
+    let names_method_in_header = headers.contains_key("mcp-method");
+    if carries_version || names_method_in_header || method == "server/discover" {
+        return modern(&config, &headers, id, method, &params);
+    }
+    legacy(&config, id, method, &params)
+}
+
+/// Answer a request on the `initialize` handshake that earlier revisions use.
+fn legacy(config: &McpMockConfig, id: Value, method: &str, params: &Value) -> Response {
     // Fallible lookups: an unknown uri / prompt name is INVALID_PARAMS, not a
     // successful empty result, so a client can tell "no such resource" apart
     // from "resource has no contents".
-    match method {
-        "resources/read" => {
-            return Json(match resources_read(&config, &params) {
-                Ok(r) => result_response(id, r),
-                Err((code, msg)) => error_response(id, code, &msg),
-            })
-            .into_response();
-        }
-        "prompts/get" => {
-            return Json(match prompts_get(&config, &params) {
-                Ok(r) => result_response(id, r),
-                Err((code, msg)) => error_response(id, code, &msg),
-            })
-            .into_response();
-        }
-        _ => {}
+    if let Some(found) = lookup(config, method, params) {
+        return Json(match found {
+            Ok(result) => result_response(id, result),
+            Err((code, message)) => error_response(id, code, &message),
+        })
+        .into_response();
     }
 
     let result = match method {
         "initialize" => Some(json!({
-            "protocolVersion": PROTOCOL_VERSION,
-            "capabilities": {
-                "tools": { "listChanged": false },
-                "resources": { "listChanged": false },
-                "prompts": { "listChanged": false },
-            },
+            "protocolVersion": LEGACY_PROTOCOL,
+            "capabilities": capabilities(),
             "serverInfo": { "name": config.server_name, "version": config.server_version },
         })),
-        "tools/list" => Some(json!({
-            "tools": config.tools.iter().map(|t| json!({
-                "name": t.name,
-                "description": t.description,
-                "inputSchema": t.input_schema,
-            })).collect::<Vec<_>>(),
-        })),
-        "tools/call" => Some(tools_call(&config, &params)),
-        "resources/list" => Some(json!({
-            "resources": config.resources.iter().map(|r| json!({
-                "uri": r.uri,
-                "name": r.name,
-                "description": r.description,
-                "mimeType": r.mime_type,
-            })).collect::<Vec<_>>(),
-        })),
+        "tools/list" => Some(json!({ "tools": tools(config) })),
+        "tools/call" => Some(tools_call(config, params)),
+        "resources/list" => Some(json!({ "resources": resources(config) })),
         "resources/templates/list" => Some(json!({ "resourceTemplates": [] })),
-        "prompts/list" => Some(json!({
-            "prompts": config.prompts.iter().map(|p| json!({
-                "name": p.name,
-                "description": p.description,
-                "arguments": p.arguments.iter().map(|a| json!({
-                    "name": a.name,
-                    "description": a.description,
-                    "required": a.required,
-                })).collect::<Vec<_>>(),
-            })).collect::<Vec<_>>(),
-        })),
+        "prompts/list" => Some(json!({ "prompts": prompts(config) })),
         "ping" => Some(json!({})),
         _ => None,
     };
 
     match result {
-        Some(r) => Json(result_response(id, r)).into_response(),
+        Some(result) => Json(result_response(id, result)).into_response(),
         None => Json(error_response(id, METHOD_NOT_FOUND, &format!("method not found: {method}")))
             .into_response(),
     }
+}
+
+/// Answer a request on the per-request protocol, revision 2026-07-28. There is
+/// no handshake: each request says which revision it speaks and who sends it.
+fn modern(config: &McpMockConfig, headers: &HeaderMap, id: Value, method: &str, params: &Value) -> Response {
+    let meta = params.get("_meta");
+    let version = meta.and_then(|meta| meta.get(VERSION_KEY)).and_then(Value::as_str);
+    let declares_capabilities = meta
+        .and_then(|meta| meta.get(CAPABILITIES_KEY))
+        .is_some_and(Value::is_object);
+    let Some(version) = version.filter(|_| declares_capabilities) else {
+        return bad_request(error_response(
+            id,
+            INVALID_PARAMS,
+            &format!("a request on {MODERN_PROTOCOL} carries `{VERSION_KEY}` and `{CAPABILITIES_KEY}` in params._meta"),
+        ));
+    };
+    if version != MODERN_PROTOCOL {
+        return bad_request(error_response_with_data(
+            id,
+            UNSUPPORTED_VERSION,
+            "Unsupported protocol version",
+            json!({ "supported": [MODERN_PROTOCOL], "requested": version }),
+        ));
+    }
+    if let Some(detail) = header_mismatch(headers, method, params, version) {
+        return bad_request(error_response(id, HEADER_MISMATCH, &format!("Header mismatch: {detail}")));
+    }
+    if let Some(found) = lookup(config, method, params) {
+        return match found {
+            Ok(result) => Json(result_response(id, complete(result))).into_response(),
+            Err((code, message)) => bad_request(error_response(id, code, &message)),
+        };
+    }
+
+    let result = match method {
+        "server/discover" => json!({
+            "resultType": "complete",
+            "supportedVersions": [MODERN_PROTOCOL],
+            "capabilities": capabilities(),
+            // The catalog can be reconfigured, so nothing here may be cached.
+            "ttlMs": 0,
+            "cacheScope": "private",
+            "_meta": {
+                SERVER_INFO_KEY: {
+                    "name": config.server_name,
+                    "version": config.server_version,
+                }
+            },
+        }),
+        "tools/list" => complete(json!({ "tools": tools(config) })),
+        "tools/call" => complete(tools_call(config, params)),
+        "resources/list" => complete(json!({ "resources": resources(config) })),
+        "resources/templates/list" => complete(json!({ "resourceTemplates": [] })),
+        "prompts/list" => complete(json!({ "prompts": prompts(config) })),
+        "ping" => complete(json!({})),
+        _ => {
+            // On this revision an unknown method is an HTTP 404, which tells a
+            // client it reached a modern server that lacks the method.
+            return (
+                StatusCode::NOT_FOUND,
+                Json(error_response(id, METHOD_NOT_FOUND, &format!("method not found: {method}"))),
+            )
+                .into_response();
+        }
+    };
+    Json(result_response(id, result)).into_response()
+}
+
+/// What is wrong with the headers a request on 2026-07-28 mirrors its method,
+/// revision and name into, or `None` when they match the body.
+fn header_mismatch(headers: &HeaderMap, method: &str, params: &Value, version: &str) -> Option<String> {
+    let header = |name: &str| headers.get(name).and_then(|value| value.to_str().ok());
+    match header("mcp-method") {
+        Some(seen) if seen == method => {}
+        Some(seen) => {
+            return Some(format!("Mcp-Method header value '{seen}' does not match body value '{method}'"));
+        }
+        None => return Some("Mcp-Method header is missing".to_string()),
+    }
+    match header("mcp-protocol-version") {
+        Some(seen) if seen == version => {}
+        Some(seen) => {
+            return Some(format!(
+                "MCP-Protocol-Version header value '{seen}' does not match body value '{version}'"
+            ));
+        }
+        None => return Some("MCP-Protocol-Version header is missing".to_string()),
+    }
+    // `Mcp-Name` carries the tool, resource or prompt a request is about.
+    if !matches!(method, "tools/call" | "resources/read" | "prompts/get") {
+        return None;
+    }
+    let name = params
+        .get("name")
+        .or_else(|| params.get("uri"))
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    // A value that is not plain ASCII travels encoded, behind a marker.
+    match header("mcp-name") {
+        Some(seen) if seen == name || seen.starts_with("=?base64?") => {}
+        Some(seen) => return Some(format!("Mcp-Name header value '{seen}' does not match body value '{name}'")),
+        None => return Some("Mcp-Name header is missing".to_string()),
+    }
+    None
+}
+
+/// `resources/read` and `prompts/get`, whose failures are errors rather than
+/// results. `None` for every other method.
+fn lookup(config: &McpMockConfig, method: &str, params: &Value) -> Option<Result<Value, (i64, String)>> {
+    match method {
+        "resources/read" => Some(resources_read(config, params)),
+        "prompts/get" => Some(prompts_get(config, params)),
+        _ => None,
+    }
+}
+
+/// Mark a result as the whole answer. Revision 2026-07-28 requires
+/// `resultType` on every result.
+fn complete(mut result: Value) -> Value {
+    if let Some(object) = result.as_object_mut() {
+        object.insert("resultType".to_string(), Value::String("complete".to_string()));
+    }
+    result
+}
+
+fn capabilities() -> Value {
+    json!({
+        "tools": { "listChanged": false },
+        "resources": { "listChanged": false },
+        "prompts": { "listChanged": false },
+    })
+}
+
+fn tools(config: &McpMockConfig) -> Vec<Value> {
+    config
+        .tools
+        .iter()
+        .map(|tool| json!({
+            "name": tool.name,
+            "description": tool.description,
+            "inputSchema": tool.input_schema,
+        }))
+        .collect()
+}
+
+fn resources(config: &McpMockConfig) -> Vec<Value> {
+    config
+        .resources
+        .iter()
+        .map(|resource| json!({
+            "uri": resource.uri,
+            "name": resource.name,
+            "description": resource.description,
+            "mimeType": resource.mime_type,
+        }))
+        .collect()
+}
+
+fn prompts(config: &McpMockConfig) -> Vec<Value> {
+    config
+        .prompts
+        .iter()
+        .map(|prompt| json!({
+            "name": prompt.name,
+            "description": prompt.description,
+            "arguments": prompt.arguments.iter().map(|argument| json!({
+                "name": argument.name,
+                "description": argument.description,
+                "required": argument.required,
+            })).collect::<Vec<_>>(),
+        }))
+        .collect()
 }
 
 fn tools_call(config: &McpMockConfig, params: &Value) -> Value {
@@ -410,10 +589,6 @@ fn tools_call(config: &McpMockConfig, params: &Value) -> Value {
         "isError": tool.is_error,
     })
 }
-
-/// JSON-RPC invalid-params error code, returned for an unknown resource uri
-/// or prompt name.
-const INVALID_PARAMS: i64 = -32602;
 
 /// Handle `resources/read`: look the requested `uri` up in the catalog and
 /// return its canned contents, or an INVALID_PARAMS error if unknown.
@@ -456,13 +631,27 @@ fn error_response(id: Value, code: i64, message: &str) -> Value {
     json!({ "jsonrpc": "2.0", "id": id, "error": { "code": code, "message": message } })
 }
 
+/// An error with data for the client, as revision 2026-07-28 returns for an
+/// unsupported protocol revision.
+fn error_response_with_data(id: Value, code: i64, message: &str, data: Value) -> Value {
+    json!({ "jsonrpc": "2.0", "id": id, "error": { "code": code, "message": message, "data": data } })
+}
+
+/// A malformed or refused request on the per-request protocol is an HTTP 400.
+fn bad_request(body: Value) -> Response {
+    (StatusCode::BAD_REQUEST, Json(body)).into_response()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mockforge_contracts::mcp_contract::client::{ClientOptions, fetch_declared};
+    use mockforge_contracts::mcp_contract::Era;
 
-    async fn call(body: Value) -> Value {
-        let resp = handle_rpc(State(McpMockConfig::default()), Json(body)).await;
-        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    async fn body_of(response: Response) -> Value {
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         if bytes.is_empty() {
             Value::Null
         } else {
@@ -470,12 +659,44 @@ mod tests {
         }
     }
 
+    /// A request without the per-request metadata, as the handshake era sends.
+    async fn call(body: Value) -> Value {
+        let response = handle_rpc(State(McpMockConfig::default()), HeaderMap::new(), Json(body)).await;
+        body_of(response).await
+    }
+
+    /// A request on 2026-07-28 with the given headers. Returns the status and the body.
+    async fn modern(method: &str, params: Value, headers: &[(&'static str, String)]) -> (u16, Value) {
+        let mut map = HeaderMap::new();
+        for (name, value) in headers {
+            map.insert(*name, value.parse().unwrap());
+        }
+        let body = json!({ "jsonrpc": "2.0", "id": 1, "method": method, "params": params });
+        let response = handle_rpc(State(McpMockConfig::default()), map, Json(body)).await;
+        let status = response.status().as_u16();
+        (status, body_of(response).await)
+    }
+
+    /// The per-request metadata of a conforming client on 2026-07-28.
+    fn on(version: &str, mut params: Value) -> Value {
+        params["_meta"] = json!({ VERSION_KEY: version, CAPABILITIES_KEY: {} });
+        params
+    }
+
+    /// The headers a conforming client sends for `method`.
+    fn proper(method: &str) -> Vec<(&'static str, String)> {
+        vec![
+            ("mcp-method", method.to_string()),
+            ("mcp-protocol-version", MODERN_PROTOCOL.to_string()),
+        ]
+    }
+
     #[tokio::test]
     async fn initialize_returns_server_info_and_capabilities() {
         let v = call(json!({"jsonrpc":"2.0","id":1,"method":"initialize"})).await;
         assert_eq!(v["jsonrpc"], "2.0");
         assert_eq!(v["id"], 1);
-        assert_eq!(v["result"]["protocolVersion"], PROTOCOL_VERSION);
+        assert_eq!(v["result"]["protocolVersion"], LEGACY_PROTOCOL);
         assert_eq!(v["result"]["serverInfo"]["name"], "mockforge-mcp");
         assert!(v["result"]["capabilities"]["tools"].is_object());
     }
@@ -586,5 +807,99 @@ mod tests {
         }))
         .await;
         assert_eq!(v["error"]["code"], INVALID_PARAMS);
+    }
+
+    #[tokio::test]
+    async fn discover_answers_the_current_protocol_without_a_handshake() {
+        let (status, v) = modern("server/discover", on(MODERN_PROTOCOL, json!({})), &proper("server/discover")).await;
+        assert_eq!(status, 200);
+        assert_eq!(v["result"]["supportedVersions"], json!([MODERN_PROTOCOL]));
+        assert_eq!(v["result"]["resultType"], "complete");
+        assert_eq!(v["result"]["capabilities"]["tools"]["listChanged"], false);
+        assert_eq!(v["result"]["_meta"][SERVER_INFO_KEY]["name"], "mockforge-mcp");
+        assert_eq!(v["result"]["ttlMs"], 0, "the catalog can change, so nothing may be cached");
+
+        // The discover request may carry nothing but its metadata.
+        let only_meta = json!({ "_meta": { VERSION_KEY: MODERN_PROTOCOL, CAPABILITIES_KEY: {} } });
+        let (status, v) = modern("server/discover", only_meta, &proper("server/discover")).await;
+        assert_eq!((status, v["result"]["supportedVersions"].clone()), (200, json!([MODERN_PROTOCOL])));
+    }
+
+    #[tokio::test]
+    async fn modern_results_carry_their_type_and_the_same_catalog() {
+        let (status, v) = modern("tools/list", on(MODERN_PROTOCOL, json!({})), &proper("tools/list")).await;
+        assert_eq!(status, 200);
+        assert_eq!(v["result"]["resultType"], "complete");
+        assert_eq!(v["result"]["tools"], json!(tools(&McpMockConfig::default())));
+
+        let mut headers = proper("tools/call");
+        headers.push(("mcp-name", "echo".to_string()));
+        let echo = json!({ "name": "echo", "arguments": { "text": "hello mcp" } });
+        let (status, v) = modern("tools/call", on(MODERN_PROTOCOL, echo), &headers).await;
+        assert_eq!(status, 200);
+        assert_eq!(v["result"]["resultType"], "complete");
+        assert_eq!(v["result"]["content"][0]["text"], "hello mcp");
+
+        // The handshake era lists the same tools, without the type marker.
+        let handshake = call(json!({"jsonrpc":"2.0","id":2,"method":"tools/list"})).await;
+        assert_eq!(handshake["result"]["tools"], json!(tools(&McpMockConfig::default())));
+        assert!(handshake["result"].get("resultType").is_none());
+    }
+
+    #[tokio::test]
+    async fn modern_requests_are_checked_against_the_revision() {
+        // Modern headers without the metadata the revision requires.
+        let (status, v) = modern("tools/list", json!({}), &proper("tools/list")).await;
+        assert_eq!((status, v["error"]["code"].as_i64()), (400, Some(INVALID_PARAMS)));
+        let (status, v) = modern("server/discover", json!({}), &proper("server/discover")).await;
+        assert_eq!((status, v["error"]["code"].as_i64()), (400, Some(INVALID_PARAMS)));
+
+        // A revision this mock does not speak, answered with the ones it does.
+        let (status, v) = modern("tools/list", on("1900-01-01", json!({})), &proper("tools/list")).await;
+        assert_eq!((status, v["error"]["code"].as_i64()), (400, Some(UNSUPPORTED_VERSION)));
+        assert_eq!(v["error"]["data"], json!({ "supported": [MODERN_PROTOCOL], "requested": "1900-01-01" }));
+
+        // Headers that disagree with the body, or are missing.
+        let (status, v) = modern("tools/list", on(MODERN_PROTOCOL, json!({})), &proper("ping")).await;
+        assert_eq!((status, v["error"]["code"].as_i64()), (400, Some(HEADER_MISMATCH)));
+        assert!(v["error"]["message"].as_str().unwrap().contains("Mcp-Method header value 'ping'"));
+        let only_version = [("mcp-protocol-version", MODERN_PROTOCOL.to_string())];
+        let (status, v) = modern("tools/list", on(MODERN_PROTOCOL, json!({})), &only_version).await;
+        assert_eq!((status, v["error"]["code"].as_i64()), (400, Some(HEADER_MISMATCH)));
+        assert!(v["error"]["message"].as_str().unwrap().contains("Mcp-Method header is missing"));
+
+        // A tool call names its tool in a header as well as in the body.
+        let (status, v) = modern("tools/call", on(MODERN_PROTOCOL, json!({ "name": "echo" })), &proper("tools/call")).await;
+        assert_eq!((status, v["error"]["code"].as_i64()), (400, Some(HEADER_MISMATCH)));
+        assert!(v["error"]["message"].as_str().unwrap().contains("Mcp-Name"));
+    }
+
+    #[tokio::test]
+    async fn a_modern_unknown_method_is_a_404_and_a_bad_lookup_is_a_400() {
+        let (status, v) = modern("does/not/exist", on(MODERN_PROTOCOL, json!({})), &proper("does/not/exist")).await;
+        assert_eq!((status, v["error"]["code"].as_i64()), (404, Some(METHOD_NOT_FOUND)));
+
+        let mut headers = proper("resources/read");
+        headers.push(("mcp-name", "file:///nope".to_string()));
+        let read = json!({ "uri": "file:///nope" });
+        let (status, v) = modern("resources/read", on(MODERN_PROTOCOL, read), &headers).await;
+        assert_eq!((status, v["error"]["code"].as_i64()), (400, Some(INVALID_PARAMS)));
+    }
+
+    #[tokio::test]
+    async fn the_contract_client_reads_the_mock_as_a_modern_server() {
+        // The real client against the real mock: the loop a team can rehearse
+        // pin and check on without a third-party server.
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::serve(listener, router(McpMockConfig::default())).await.unwrap();
+        });
+        let options = ClientOptions::new(&format!("http://{address}/mcp"), ClientOptions::default_identity()).unwrap();
+        let declared = fetch_declared(&options).await.unwrap();
+        assert_eq!(declared.era, Era::Modern);
+        assert_eq!(declared.protocol_version, MODERN_PROTOCOL);
+        assert_eq!(declared.tools, tools(&McpMockConfig::default()));
+        assert_eq!(declared.implementation["name"], "mockforge-mcp");
     }
 }

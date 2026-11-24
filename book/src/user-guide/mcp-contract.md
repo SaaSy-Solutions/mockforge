@@ -143,6 +143,33 @@ job cannot pass by failing to look.
 `not_checked`, `error` says why and `server` is null. `changes` holds one
 entry per difference, addressed by JSON pointer relative to the tool.
 
+## Try it against the mock
+
+MockForge's own MCP mock speaks the current protocol revision, so the loop can
+be tried without a third-party server. In one terminal:
+
+```bash
+mockforge serve --mcp-mock --http-port 8080
+```
+
+In another:
+
+```bash
+mockforge mcp-contract pin --url http://127.0.0.1:8080/mcp --output contracts/mockforge-mcp.json
+mockforge mcp-contract check --contract contracts/mockforge-mcp.json
+```
+
+The pin records the mock's default catalog and the check reports it
+unchanged. To see a real finding, ask a different server with the same
+contract:
+
+```bash
+mockforge mcp-contract check --contract contracts/mockforge-mcp.json --url https://mcp.deepwiki.com/mcp
+```
+
+The check exits 1 and lists every tool as added or removed, plus the change of
+address as context.
+
 ## What a contract covers
 
 The server's instructions, and each tool's name, title, description, input
