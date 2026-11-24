@@ -61,12 +61,16 @@ We consider security research conducted in accordance with this policy to be aut
 
 We follow a 90-day disclosure timeline:
 
-- Day 0: Vulnerability reported
-- Day 30: Acknowledge receipt and provide initial assessment
+- Day 0: Vulnerability reported, with receipt acknowledged within 48 hours
+- Day 30: Provide an initial assessment
 - Day 60: Provide fix timeline and progress updates
 - Day 90: Public disclosure of the vulnerability and fix
 
 We may accelerate this timeline if the vulnerability is already public or being actively exploited.
+
+### CVE IDs and Advisories
+
+Confirmed vulnerabilities in MockForge will be assigned CVE IDs so that users can track them. Published advisories are listed at https://github.com/SaaSy-Solutions/mockforge/security/advisories.
 
 ### Recognition
 
