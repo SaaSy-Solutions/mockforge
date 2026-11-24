@@ -194,6 +194,18 @@ def run(args):
             # The reviewed lab application ships inside the pack and is
             # mounted read-only into the pinned image by lab().
             (output / name).write_text(content)
+        app_script = pack.get("application_script")
+        if app_script:
+            # A single-file lab app shipped as application_script is written to
+            # the host side of its {output} mount so the container sees a FILE.
+            # Without this the engine mounts a nonexistent host path and the
+            # runtime auto-creates an empty directory there, so `node
+            # /app/server.js` fails with MODULE_NOT_FOUND and the app never
+            # becomes ready.
+            for mount in pack.get("app", {}).get("mounts", ()):
+                if "{output}" in mount.get("host", ""):
+                    (output / mount["host"].rsplit("/", 1)[-1]).write_text(app_script)
+                    break
         # The scanner container runs with --network=host and reaches the
         # recorder listening in this process's network namespace. An engine
         # whose "host" network is another namespace (snap, VM, LXD, a systemd

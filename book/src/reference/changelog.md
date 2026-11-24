@@ -1,3 +1,9 @@
+## [Unreleased]
+
+### Fixed
+
+- **[Reality]** CVE labs materialize a single-file lab app shipped as `application_script` to its mount host path, so Node-style packs start instead of the runtime mounting an empty directory and the app failing with MODULE_NOT_FOUND. (#1620)
+
 ## [0.3.249] - 2026-11-23
 
 ### Security
