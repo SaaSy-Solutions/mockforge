@@ -23,7 +23,10 @@ def template(pack, token):
     header_lines = "\n".join(f'      {name}: "{value}"' for name, value in headers.items())
     body_block = ""
     if probe.get("body") is not None:
-        body_block = f"\n    body:\n      - \"{probe['body'].replace('{token}', token)}\""
+        # The pinned runner takes `body` as a string; it rejects a list with
+        # "cannot unmarshal !!seq into string". A JSON-escaped double-quoted
+        # scalar is valid YAML and carries the body byte for byte.
+        body_block = f'\n    body: {json.dumps(probe["body"].replace("{token}", token))}'
     return f"""id: {probe['template_id']}
 info:
   name: {probe['template_name']}

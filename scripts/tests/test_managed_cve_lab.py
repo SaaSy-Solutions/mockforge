@@ -256,13 +256,16 @@ class InputTests(unittest.TestCase):
             self.assertEqual(lab.main(["list"]), 0)
         packs = json.loads(output.getvalue())
         self.assertIn("CVE-2025-29927", packs)
-        for cve in ("CVE-2026-109618", "CVE-2026-109619", "CVE-2026-111497"):
+        # Reproduced on a lab host, so they are listed without --include-unverified.
+        self.assertIn("CVE-2026-111497", packs)
+        self.assertIn("CVE-2026-33017", packs)
+        for cve in ("CVE-2026-109618", "CVE-2026-109619"):
             self.assertNotIn(cve, packs)
 
         for action, hidden in (
             (action, hidden)
             for action in ("run", "prepare")
-            for hidden in ("CVE-2026-109618", "CVE-2026-111497")
+            for hidden in ("CVE-2026-109618", "CVE-2026-109619")
         ):
             err = io.StringIO()
             with self.subTest(action=action, cve=hidden), patch.object(lab, "prepare") as prepare, patch.object(lab, "run") as run, contextlib.redirect_stderr(err):
@@ -5009,6 +5012,106 @@ class SentRequestsLogTests(unittest.TestCase):
                 for line in lines
             )
         )
+
+
+class LangflowPackTests(unittest.TestCase):
+    """CVE-2026-33017: unauthenticated code execution through Langflow's public
+    flow build.
+
+    The build endpoint answers 200 with a job id for a malformed flow too, and
+    only the job's events show whether the reviewed code ran. So the lab's
+    baseline proves the unauthenticated build was accepted, while these tests
+    pin the flow's shape and its benign code. The execution itself (the marker
+    in the job's events) and the three LB verdicts were verified on a lab host.
+    """
+
+    def setUp(self):
+        self.pack = catalog.PACKS["CVE-2026-33017"]
+
+    def flow_code(self):
+        body = json.loads(self.pack["probe"]["body"])
+        return body["data"]["nodes"][0]["data"]["node"]["template"]["code"]["value"]
+
+    def test_pack_is_a_verified_data_driven_pack(self):
+        self.assertIs(self.pack["verified"], True)
+        self.assertEqual(self.pack["baseline_gate"], "data-driven")
+        self.assertEqual(self.pack["classifier"], "data-driven")
+        catalog.validate_data_driven_pack(self.pack)
+        pack_catalog = self.pack["catalog"]
+        self.assertEqual(pack_catalog["cve"], "CVE-2026-33017")
+        self.assertIn("1.8.1", pack_catalog["application_version"])
+        for image in (pack_catalog["application_image"], pack_catalog["runner_image"]):
+            self.assertIn("@sha256:", image)
+        self.assertIn("CVE-2026-33017", lab.verified_cves())
+        self.assertIn("CVE-2026-111497", lab.verified_cves())
+
+    def test_signature_is_the_unauthenticated_public_build(self):
+        probe = self.pack["probe"]
+        self.assertEqual(probe["method"], "POST")
+        self.assertTrue(
+            probe["path"].startswith("/api/v1/build_public_tmp/")
+            and probe["path"].endswith("/flow?__mockforge_cve={token}")
+        )
+        # The endpoint requires any client_id cookie; the run token is used.
+        self.assertEqual(probe["headers"]["Cookie"], "client_id=mockforge-{token}")
+        self.assertEqual(probe["headers"]["Content-Type"], "application/json")
+        self.assertEqual(probe["marker"], "job_id")
+
+    def test_flow_keeps_the_reviewed_node_shape(self):
+        # Langflow refuses anything else before the code runs; a wrong shape
+        # would still answer 200 with a job id and silently prove nothing.
+        body = json.loads(self.pack["probe"]["body"])
+        self.assertEqual(body["data"]["edges"], [])
+        data = body["data"]["nodes"][0]["data"]
+        self.assertEqual(data["type"], "CustomComponent")
+        node = data["node"]
+        self.assertEqual(node["template"]["_type"], "CustomComponent")
+        self.assertEqual(node["base_classes"], ["CustomComponent"])
+        self.assertEqual(
+            node["outputs"],
+            [{"types": ["CustomComponent"], "name": "Custom Component"}],
+        )
+        self.assertEqual(
+            self.flow_code().splitlines()[0], "from lfx.custom import Component"
+        )
+
+    def test_reviewed_code_only_raises_a_marker(self):
+        code = self.flow_code()
+        self.assertIn(
+            "_x = exec(\"raise Exception('MOCKFORGE-' + 'CVE-2026-33017')\")", code
+        )
+        for forbidden in (
+            "import os", "subprocess", "popen", "system(", "socket", "open(",
+            "__import__", "urllib", "requests", "eval(",
+        ):
+            self.assertNotIn(forbidden, code)
+        self.assertEqual(code.count("exec("), 1)
+        self.assertEqual(catalog.LANGFLOW_PUBLIC_BUILD_MARKER, "MOCKFORGE-CVE-2026-33017")
+        # Assembled at run time, so the marker cannot be echoed back.
+        self.assertNotIn(catalog.LANGFLOW_PUBLIC_BUILD_MARKER, code)
+
+    def test_app_and_controls_match_the_lab_application(self):
+        app = self.pack["app"]
+        self.assertEqual(app["port"], "7860/tcp")
+        self.assertEqual(app["env"]["LANGFLOW_AUTO_LOGIN"], "false")
+        self.assertEqual(app["readiness"], {"path": "/", "status": 200})
+        controls = self.pack["controls"]
+        self.assertEqual(controls["benign_path"], "/api/v1/version?__mockforge_cve={token}")
+        self.assertEqual(controls["benign_status"], 200)
+        self.assertEqual(controls["ordinary_path"], "/api/v1/flows/?__mockforge_cve={token}")
+        self.assertEqual(controls["ordinary_status"], 403)
+
+    def test_template_carries_the_json_body_as_a_string(self):
+        text = nuclei.template(self.pack, "tok")
+        # The pinned runner rejects a list: "cannot unmarshal !!seq into string".
+        self.assertIn('\n    body: "{\\"data\\":{\\"nodes\\":[', text)
+        self.assertNotIn("body:\n      - ", text)
+        self.assertIn('Cookie: "client_id=mockforge-tok"', text)
+        self.assertIn("/flow?__mockforge_cve=tok", text)
+
+    def test_plain_bodies_are_strings_byte_for_byte(self):
+        text = nuclei.template(catalog.PACKS["CVE-2024-4577"], "tok")
+        self.assertIn("\n    body: \"<?php echo 'MOCKFORGE-CVE-2024-4577'; ?>\"", text)
 
 
 if __name__ == "__main__":
