@@ -1,3 +1,9 @@
+## [Unreleased]
+
+### Added
+
+- **[Reality]** `mockforge cve detect` runs a passive, detection-only version check for the PHP2Shell (CVE-2026-109618, CVE-2026-109619) and Node2Shell (CVE-2026-111497) advisories. It sends one read-only `GET /`, compares the announced PHP or Node.js version with the fixed releases, and reports likely-affected, not-affected or unknown. Node.js usually reports unknown because it rarely announces its version.
+
 ## [0.3.249] - 2026-11-23
 
 ### Security

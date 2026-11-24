@@ -11,7 +11,8 @@ import subprocess
 import sys
 import time
 import uuid
-from cve_lab_catalog import CATALOG, CVE, PACKS, validate_data_driven_pack
+from cve_lab_catalog import CATALOG, CVE, DETECT_PACKS, PACKS, validate_data_driven_pack
+from cve_lab_detect import detect
 from cve_lab_engine import (
     cleanup,
     doctor,
@@ -444,6 +445,14 @@ def main(argv=None):
     runner.add_argument(
         "--output-dir", required=True, help="New report directory, never overwritten"
     )
+    detector = commands.add_parser(
+        "detect",
+        help="Passive, detection-only version check of a target (one read-only GET /)",
+    )
+    detector.add_argument("cve", choices=sorted(DETECT_PACKS))
+    detector.add_argument("--target", required=True, help="HTTP(S) origin to fingerprint")
+    detector.add_argument("--skip-tls-verify", action="store_true")
+    detector.add_argument("--output-dir", required=True, help="New report directory")
     down = commands.add_parser(
         "down", help="Recover owned containers after an interrupted run"
     )
@@ -493,6 +502,8 @@ def main(argv=None):
             )
         elif args.action == "run":
             return run(args)
+        elif args.action == "detect":
+            return detect(args)
         elif args.action == "down":
             cleanup(args)
         elif args.action == "images":
