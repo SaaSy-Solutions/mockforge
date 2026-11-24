@@ -268,5 +268,29 @@ def control(pack, base, run_id, phase, context=None):
     return outcome
 
 
+def version_probe(base, run_id, phase="detect", context=None):
+    """Passive version grab: one ordinary read-only ``GET /``.
+
+    Returns the status and the lower-cased response headers so a classifier
+    can read the version the target announces about itself. Nothing
+    attack-shaped is sent. A failure never raises; it is returned as
+    ``error`` so the verdict can say plainly that nothing was learned.
+    """
+    token = f"{run_id}-{phase}-{uuid.uuid4().hex}"
+    outcome = {"token": token}
+    try:
+        status, headers, _body = request(
+            base,
+            f"/?__mockforge_cve={token}",
+            {"X-Mockforge-Cve": token},
+            context=context,
+        )
+        outcome["status"] = status
+        outcome["headers"] = {name.lower(): value for name, value in headers}
+    except (OSError, ValueError, http.client.HTTPException) as exc:
+        outcome["error"] = str(exc)
+    return outcome
+
+
 def observations(records, token):
     return [r for r in records if token in r["tokens"]]
