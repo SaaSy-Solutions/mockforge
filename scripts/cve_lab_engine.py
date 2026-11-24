@@ -204,10 +204,16 @@ def host_network_probe(engine, image):
                 "--memory=64m",
                 "--pids-limit=16",
                 # The runner image's entrypoint is Nuclei; readlink needs no
-                # capabilities and exists on the image's busybox base.
+                # capabilities and is a busybox applet on the image's busybox
+                # base. Invoke it through /bin/busybox rather than assuming a
+                # /bin/readlink path: in the pinned runner image busybox installs
+                # the applet at /usr/bin/readlink, so a hardcoded /bin/readlink
+                # entrypoint fails with "no such file or directory" and the probe
+                # can never run.
                 "--entrypoint",
-                "/bin/readlink",
+                "/bin/busybox",
                 image,
+                "readlink",
                 "/proc/self/ns/net",
             ],
             timeout=60,
