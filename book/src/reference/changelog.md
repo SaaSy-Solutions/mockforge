@@ -1,3 +1,22 @@
+## [0.3.249] - 2026-11-23
+
+### Security
+
+- **[DevX]** Update `url` to 2.5.9 for RUSTSEC-2026-0592 (stack overflow in `Url::origin()` on nested `blob:` URLs). (#1673)
+- **[DevX]** Update `cookie` to 0.18.3 for RUSTSEC-2026-0594 (private cookie nonces can repeat in processes that fork). (#1673)
+- **[DevX]** Update `wasmtime` and `wasmtime-wasi` to 36.0.23, which includes the fixes for RUSTSEC-2026-0587 and the 2026-11-16 advisories. (#1660, #1669, #1672)
+- **[Reality]** CVE labs refuse a run when a `--network=host` container would get a different network namespace. (#1587)
+
+### Fixed
+
+- **[Reality]** The Kafka mock serves requests larger than 10 MB instead of closing the connection. (#1539)
+- **[Reality]** The PHP2Shell CVE lab producer trigger reaches its out-of-memory bail-out. (#1670)
+- **[DevX]** The cloud app no longer shows a Local-only section in cloud mode, and cloud route guards are in place. (#1662)
+
+### Added
+
+- **[Reality]** The Kafka mock implements the InitProducerId API (v0 to v4). (#1540)
+
 ## [0.3.248] - 2026-11-18
 
 0.3.247 was tagged but never published: its release check found that `mockforge cve` failed on Linux, so 0.3.248 ships its changes with the fix.
