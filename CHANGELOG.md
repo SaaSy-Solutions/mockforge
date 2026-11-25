@@ -3,6 +3,7 @@
 ### Security
 
 - **[DevX]** Update `brotli` to 9.1.3 and `brotli-decompressor` to 6.4.0. The decompressor now rejects a block switch that the stream made impossible with a format error, matching the C decoder's fix for CVE-2026-111497 (Node2Shell), instead of reporting that it needs more input. The Rust decoder already bounds-checked the buffer involved, so this was not memory-unsafe in MockForge.
+- **[DevX]** Update `kube` to 4.2.1 for RUSTSEC-2026-0600: with the `openssl-tls` connector, `kube-client` trusted the system's CA store beside the configured cluster CA, so a root installed locally, a TLS inspection proxy's for one, could complete the handshake. MockForge enables only `rustls-tls` for `kube`, which the advisory does not concern, so nothing was exposed in its build. The manifest asks for the patched version, so a fresh resolution cannot pick the old one.
 
 ### Added
 
