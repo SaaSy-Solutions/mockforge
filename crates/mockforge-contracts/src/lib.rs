@@ -43,6 +43,8 @@
 //! - **contract_validation**: Contract validation types and CI/CD pipeline integration
 //! - **contract_drift**: Drift detection types, consumer mapping, fitness functions, and forecasting
 //! - **diff_types**: Core diff analysis types shared across contract modules
+//! - **fidelity**: Mock fidelity comparison against a source specification
+//! - **mcp_contract**: Pinning what an MCP tool server declares, and checking it for change
 //! - **protocol**: Protocol type enumeration
 //!
 //! Incident management types live in `mockforge_foundation::incidents_types`;
@@ -60,6 +62,7 @@ pub mod diff_types;
 pub mod error;
 pub mod fidelity;
 pub mod http_route_match;
+pub mod mcp_contract;
 pub mod protocol;
 pub mod response_validation;
 pub mod schema_diff;

@@ -6,6 +6,7 @@
 
 ### Added
 
+- **[Contracts][AI]** `mockforge mcp-contract pin` records what an MCP tool server declares, and `mockforge mcp-contract check` fails CI when it changes: a rewritten tool description, a new tool, an argument that becomes required, annotations that claim less restraint. It speaks the 2026-07-28 protocol and the earlier `initialize` handshake, never calls a tool, and never writes a credential into a contract. A server that cannot be asked exits 2 rather than passing as unchanged.
 - **[Reality]** `mockforge cve detect` runs a passive, detection-only version check for the PHP2Shell (CVE-2026-109618, CVE-2026-109619) and Node2Shell (CVE-2026-111497) advisories. It sends one read-only `GET /`, compares the announced PHP or Node.js version with the fixed releases, and reports likely-affected, not-affected or unknown. Node.js usually reports unknown because it rarely announces its version.
 - **[Reality]** CVE lab runs against an operator `--target` require an authorization attestation (`--i-am-authorized`, `MOCKFORGE_CVE_AUTHORIZED=1`, or an interactive confirmation) and record it in `report.json`. (#1682)
 - **[Reality]** New managed CVE lab pack for CVE-2026-33017: one reviewed request against the pinned Langflow 1.8.1 image reproduces unauthenticated code execution through the public flow build, verified on a lab host.
