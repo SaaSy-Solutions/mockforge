@@ -41,7 +41,11 @@ jobs:
   # mergeable without burning self-hosted runner time on a Rust build.
   changes:
     name: Detect change scope
-    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","linux","x64","rust"]') || 'ubuntu-latest' }}
+    # Nineteen seconds of Python that every other job on the pull request
+    # waits for: the Rust lane, the audit and the Test aggregate all need it.
+    # It runs GitHub-hosted, which is free on this public repository, so that
+    # a pull request starts without waiting for a self-hosted runner.
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:
       code: ${{ steps.filter.outputs.code }}
@@ -257,7 +261,12 @@ jobs:
     name: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'Test (1.96.0)' || 'Trusted Rust completion' }}
     needs: [changes, test]
     if: ${{ always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && (needs.changes.result != 'success' || needs.changes.outputs.code != 'false') }}
-    runs-on: [self-hosted, linux, x64, rust]
+    # The `Test (1.96.0)` context: a five-second shell step that reports once
+    # the Rust lane has finished. On the shared pool it queued behind builds
+    # after the tests were done, so it was the last check to report on a pull
+    # request. It runs GitHub-hosted, free on this public repository; the `if`
+    # above is what keeps forks off it.
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     strategy:
       fail-fast: false
@@ -450,7 +459,11 @@ jobs:
     name: Security Audit
     needs: changes
     if: ${{ needs.changes.outputs.code == 'true' }}
-    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","linux","x64","rust"]') || 'ubuntu-latest' }}
+    # A required check. On 2026-11-25 it did 39 seconds of work after two
+    # hours in the shared Rust queue. It runs GitHub-hosted, free on this
+    # public repository, as it already did for forks: nothing in it needs the
+    # pool, and the toolchain and tools it lacks are installed in minutes.
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
     - name: Checkout repository

@@ -11,6 +11,10 @@
 - **[Reality]** CVE lab runs against an operator `--target` require an authorization attestation (`--i-am-authorized`, `MOCKFORGE_CVE_AUTHORIZED=1`, or an interactive confirmation) and record it in `report.json`. (#1682)
 - **[Reality]** New managed CVE lab pack for CVE-2026-33017: one reviewed request against the pinned Langflow 1.8.1 image reproduces unauthenticated code execution through the public flow build, verified on a lab host.
 
+### Changed
+
+- **[DevX]** A pull request waits less for the shared self-hosted runners. The security audit, the two jobs that detect what changed, and the `Test (1.96.0)` summary run on GitHub-hosted runners, which are free on a public repository. On 2026-11-25 the audit did 39 seconds of work after two hours in that queue. `Test (1.96.0)` is a required check: a pull request cannot merge when the Rust lane failed, was cancelled or never ran.
+
 ### Fixed
 
 - **[Contracts]** An operation with `security: []` is now treated as opting out of the top-level security requirement, as OpenAPI defines it, in request validation and in generated client commands. Both treated the empty list as "fall back to the top-level requirement", so an operation the spec deliberately leaves open was validated and called as secured.
