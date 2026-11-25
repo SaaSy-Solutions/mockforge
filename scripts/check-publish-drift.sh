@@ -26,6 +26,9 @@ fi
 
 # Publishable members (publish != false). In `cargo metadata`, publish == []
 # means publish=false; null means publishable.
+# Python on Windows ends each line it prints with a carriage return. Without
+# dropping it no name matches the ones read from disk, and every crate looks
+# like an orphan.
 publishable=$(cargo metadata --locked --no-deps --format-version 1 2>/dev/null | python3 -c "
 import sys, json
 try:
@@ -35,7 +38,7 @@ except Exception:
 for p in pkgs:
     if p['name'].startswith('mockforge-') and p.get('publish') != []:
         print(p['name'])
-" | sort -u)
+" | tr -d '\r' | sort -u)
 
 # CRATES list block in publish-crates.sh.
 listed=$(sed -n '/^CRATES=(/,/^)/p' scripts/publish-crates.sh 2>/dev/null | grep -oE 'mockforge-[a-z0-9-]+' | sort -u)
@@ -49,7 +52,7 @@ try:
     print('\n'.join(p['name'] for p in json.load(sys.stdin)['packages']))
 except Exception:
     pass
-" | sort -u)
+" | tr -d '\r' | sort -u)
 ondisk=$(ls -d crates/mockforge-*/ 2>/dev/null | sed 's#crates/##;s#/##' | sort -u)
 orphans=$(comm -23 <(printf '%s\n' "$ondisk") <(printf '%s\n' "$members"))
 
