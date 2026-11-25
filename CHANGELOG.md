@@ -13,6 +13,7 @@
 
 ### Fixed
 
+- **[Contracts]** An operation with `security: []` is now treated as opting out of the top-level security requirement, as OpenAPI defines it, in request validation and in generated client commands. Both treated the empty list as "fall back to the top-level requirement", so an operation the spec deliberately leaves open was validated and called as secured.
 - **[Reality]** CVE labs materialize a single-file lab app shipped as `application_script` to its mount host path, so Node-style packs start instead of the runtime mounting an empty directory and the app failing with MODULE_NOT_FOUND. (#1620)
 - **[Reality]** `mockforge cve run` no longer returns inconclusive on every host. The network-namespace probe called `/bin/readlink`, which the pinned Nuclei runner image does not have (its busybox installs `readlink` at `/usr/bin/readlink`), so the probe failed with an OCI "no such file" error. It now runs `/bin/busybox readlink`.
 - **[Reality]** The Node.js Node2Shell pack (CVE-2026-111497) reproduced on a lab host with its pinned image, so it is verified and listed by default.
