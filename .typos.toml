@@ -59,6 +59,7 @@ PN = "PN"  # Part of "6PN" — Fly.io's IPv6 private network branding
 
 [files]
 extend-exclude = [
+  "**/tests/fixtures/saml/**",            # Base64 certs/signatures in SAML fixtures
   "**/book/book/searchindex.js",           # Generated search index
   "**/book/book/ace.js",                   # Third-party code editor library
   "**/book/book/highlight.js",             # Third-party syntax highlighting library
