@@ -19,14 +19,26 @@
 //! # Example
 //!
 //! ```bash
-//! export MOCKFORGE_CAPTURE_SCRUB='[
-//!   {"field": "email", "replacement": "user@example.com"},
-//!   {"pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", "replacement": "00000000-0000-0000-0000-000000000000"}
-//! ]'
+//! export MOCKFORGE_CAPTURE_SCRUB='{
+//!   "rules": [
+//!     {"type": "field", "field": "email", "replacement": "user@example.com"},
+//!     {"type": "uuid", "replacement": "00000000-0000-0000-0000-{{counter:012}}"},
+//!     {"type": "email", "replacement": "user{{counter}}@example.com"}
+//!   ]
+//! }'
 //!
 //! export MOCKFORGE_CAPTURE_FILTER='{"status_codes": [500, 502, 503, 504]}'
 //! export MOCKFORGE_CAPTURE_DETERMINISTIC=true
 //! ```
+//!
+//! `{{counter}}` in the replacement of a built-in rule (`uuid`, `email`,
+//! `ip_address`, `credit_card`) is the matched value's pseudonym: the same
+//! value is replaced the same way wherever it appears, and two different
+//! values never share one. A replacement without it is used for every match.
+//!
+//! If `MOCKFORGE_CAPTURE_SCRUB` is set but cannot be read, nothing sensitive
+//! reaches the recording: everything but the method, the path and the status
+//! is redacted until the configuration is fixed.
 
 use crate::{RecordedRequest, RecordedResponse, RecorderError, Result};
 use chrono::{DateTime, Utc};
@@ -34,14 +46,17 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tracing::{debug, warn};
 
 /// Global scrubber instance loaded from environment
 static GLOBAL_SCRUBBER: Lazy<Arc<Scrubber>> = Lazy::new(|| {
-    Arc::new(Scrubber::from_env().unwrap_or_else(|e| {
-        warn!("Failed to load scrubber from environment: {}", e);
-        Scrubber::default()
+    Arc::new(Scrubber::from_env().unwrap_or_else(|error| {
+        warn!(
+            "Failed to load scrubber from environment: {error}. Recording with everything \
+             redacted until MOCKFORGE_CAPTURE_SCRUB is fixed."
+        );
+        Scrubber::redact_everything()
     }))
 });
 
@@ -226,11 +241,43 @@ impl Default for CaptureFilterConfig {
     }
 }
 
+/// How many values a scrubber remembers pseudonyms for. Beyond this a new
+/// value still gets its own number, but is not remembered, so it may get
+/// another one the next time it appears.
+const DEFAULT_PSEUDONYM_CACHE: usize = 100_000;
+
+/// What a value is replaced with when the scrubbing configuration could not
+/// be read and everything is redacted.
+const REDACTED: &str = "[redacted]";
+
+/// The body recorded instead of the real one when everything is redacted. It
+/// says why, so a recording explains itself.
+const REDACTED_BODY: &str =
+    "[redacted: MOCKFORGE_CAPTURE_SCRUB could not be read. Fix it to record bodies.]";
+
+/// The built-in rules that give a value a pseudonym. A value's number is
+/// remembered per rule, so an address and an identifier never share one.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+enum Pseudonym {
+    Uuid,
+    Email,
+    IpAddress,
+    CreditCard,
+}
+
 /// Handles scrubbing of sensitive data from recorded requests/responses
 pub struct Scrubber {
     config: ScrubConfig,
     compiled_regexes: Vec<(Regex, String, ScrubTarget)>,
     deterministic_counter: std::sync::atomic::AtomicU64,
+    /// The values that already have a pseudonym, so a value is replaced the
+    /// same way wherever it appears.
+    pseudonyms: Mutex<HashMap<(Pseudonym, String), u64>>,
+    /// How many values may be remembered at once.
+    pseudonym_cache: usize,
+    /// Set when the configuration could not be read: then everything is
+    /// redacted rather than nothing.
+    redact_all: bool,
 }
 
 impl Default for Scrubber {
@@ -239,11 +286,29 @@ impl Default for Scrubber {
             config: ScrubConfig::default(),
             compiled_regexes: Vec::new(),
             deterministic_counter: std::sync::atomic::AtomicU64::new(0),
+            pseudonyms: Mutex::new(HashMap::new()),
+            pseudonym_cache: DEFAULT_PSEUDONYM_CACHE,
+            redact_all: false,
         }
     }
 }
 
 impl Scrubber {
+    /// A scrubber for when the configuration could not be read. It keeps the
+    /// method, the path and the status, which routing needs, and redacts the
+    /// rest, so an unreadable configuration never records raw data.
+    pub fn redact_everything() -> Self {
+        Self {
+            redact_all: true,
+            ..Self::default()
+        }
+    }
+
+    /// Whether everything is redacted because the configuration could not be
+    /// read.
+    pub fn redacts_everything(&self) -> bool {
+        self.redact_all
+    }
     /// Create a new scrubber with the given configuration
     pub fn new(config: ScrubConfig) -> Result<Self> {
         let mut compiled_regexes = Vec::new();
@@ -270,6 +335,16 @@ impl Scrubber {
             deterministic_counter: std::sync::atomic::AtomicU64::new(config.counter_seed),
             config,
             compiled_regexes,
+            ..Self::default()
+        })
+    }
+
+    /// A scrubber that remembers pseudonyms for at most `cache` values.
+    #[cfg(test)]
+    fn with_pseudonym_cache(config: ScrubConfig, cache: usize) -> Result<Self> {
+        Ok(Self {
+            pseudonym_cache: cache,
+            ..Self::new(config)?
         })
     }
 
@@ -301,6 +376,27 @@ impl Scrubber {
 
     /// Scrub a recorded request
     pub fn scrub_request(&self, request: &mut RecordedRequest) {
+        if self.redact_all {
+            redact_headers(&mut request.headers);
+            if request.body.is_some() {
+                request.body = Some(REDACTED_BODY.to_string());
+                request.body_encoding = "utf8".to_string();
+            }
+            if let Some(ref mut query) = request.query_params {
+                *query = REDACTED.to_string();
+            }
+            if let Some(ref mut value) = request.trace_id {
+                *value = REDACTED.to_string();
+            }
+            if let Some(ref mut value) = request.span_id {
+                *value = REDACTED.to_string();
+            }
+            if let Some(ref mut value) = request.client_ip {
+                *value = REDACTED.to_string();
+            }
+            return;
+        }
+
         // Scrub headers
         if let Ok(mut headers) = serde_json::from_str::<HashMap<String, String>>(&request.headers) {
             self.scrub_headers(&mut headers);
@@ -340,6 +436,15 @@ impl Scrubber {
 
     /// Scrub a recorded response
     pub fn scrub_response(&self, response: &mut RecordedResponse) {
+        if self.redact_all {
+            redact_headers(&mut response.headers);
+            if response.body.is_some() {
+                response.body = Some(REDACTED_BODY.to_string());
+                response.body_encoding = "utf8".to_string();
+            }
+            return;
+        }
+
         // Scrub headers
         if let Ok(mut headers) = serde_json::from_str::<HashMap<String, String>>(&response.headers)
         {
@@ -444,32 +549,105 @@ impl Scrubber {
         result
     }
 
-    /// Scrub UUIDs with deterministic counter
+    /// Scrub UUIDs. Each UUID keeps its pseudonym wherever it appears.
     fn scrub_uuids(&self, input: &str, replacement: &str) -> String {
-        UUID_REGEX
-            .replace_all(input, |_: &regex::Captures| {
-                let counter =
-                    self.deterministic_counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                replacement
-                    .replace("{{counter}}", &counter.to_string())
-                    .replace("{{counter:012}}", &format!("{:012}", counter))
-            })
-            .to_string()
+        // A UUID is the same UUID in either case, so both get one pseudonym.
+        self.scrub_pattern(&UUID_REGEX, Pseudonym::Uuid, input, replacement, true)
     }
 
     /// Scrub email addresses
     fn scrub_emails(&self, input: &str, replacement: &str) -> String {
-        EMAIL_REGEX.replace_all(input, replacement).to_string()
+        self.scrub_pattern(&EMAIL_REGEX, Pseudonym::Email, input, replacement, false)
     }
 
     /// Scrub IP addresses
     fn scrub_ips(&self, input: &str, replacement: &str) -> String {
-        IPV4_REGEX.replace_all(input, replacement).to_string()
+        self.scrub_pattern(&IPV4_REGEX, Pseudonym::IpAddress, input, replacement, false)
     }
 
     /// Scrub credit card numbers
     fn scrub_credit_cards(&self, input: &str, replacement: &str) -> String {
-        CREDIT_CARD_REGEX.replace_all(input, replacement).to_string()
+        self.scrub_pattern(&CREDIT_CARD_REGEX, Pseudonym::CreditCard, input, replacement, false)
+    }
+
+    /// Replace every match of `pattern` in `input`.
+    fn scrub_pattern(
+        &self,
+        pattern: &Regex,
+        kind: Pseudonym,
+        input: &str,
+        replacement: &str,
+        fold_case: bool,
+    ) -> String {
+        pattern
+            .replace_all(input, |found: &regex::Captures| {
+                let value = if fold_case {
+                    found[0].to_ascii_lowercase()
+                } else {
+                    found[0].to_string()
+                };
+                self.pseudonymize(kind, &value, replacement)
+            })
+            .to_string()
+    }
+
+    /// Replace one matched value. A replacement with `{{counter}}` or
+    /// `{{counter:WIDTH}}` becomes the value's pseudonym, zero-padded to the
+    /// width when one is given; any other replacement is used as it is, for
+    /// every match.
+    fn pseudonymize(&self, kind: Pseudonym, value: &str, replacement: &str) -> String {
+        if !replacement.contains("{{counter") {
+            return replacement.to_string();
+        }
+        Self::render_counter(replacement, self.number_for(kind, value))
+    }
+
+    /// A replacement with every `{{counter}}` and `{{counter:WIDTH}}` filled
+    /// in with `number`.
+    fn render_counter(replacement: &str, number: u64) -> String {
+        const MARKER: &str = "{{counter";
+        let mut rendered = String::with_capacity(replacement.len());
+        let mut rest = replacement;
+        while let Some(at) = rest.find(MARKER) {
+            rendered.push_str(&rest[..at]);
+            let after = &rest[at + MARKER.len()..];
+            let Some(end) = after.find("}}") else {
+                rendered.push_str(MARKER);
+                rest = after;
+                continue;
+            };
+            let inside = &after[..end];
+            let width = inside.strip_prefix(':').and_then(|width| width.parse::<usize>().ok());
+            if !inside.is_empty() && width.is_none() {
+                // Text that only starts like a marker, such as `{{counterfeit}}`.
+                rendered.push_str(MARKER);
+                rest = after;
+                continue;
+            }
+            match width {
+                Some(width) => rendered.push_str(&format!("{number:0width$}")),
+                None => rendered.push_str(&number.to_string()),
+            }
+            rest = &after[end + 2..];
+        }
+        rendered.push_str(rest);
+        rendered
+    }
+
+    /// The number a value is replaced with. A value keeps the number it was
+    /// given the first time it was seen, so it reads the same everywhere.
+    fn number_for(&self, kind: Pseudonym, value: &str) -> u64 {
+        let key = (kind, value.to_string());
+        let mut pseudonyms =
+            self.pseudonyms.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(number) = pseudonyms.get(&key) {
+            return *number;
+        }
+        let number = self.deterministic_counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        if pseudonyms.len() < self.pseudonym_cache {
+            pseudonyms.insert(key, number);
+        }
+        number
     }
 
     /// Scrub specific JSON field
@@ -530,6 +708,22 @@ impl Scrubber {
             .and_hms_opt(0, 0, 0)
             .expect("0 is valid for hours/minutes/seconds")
             .and_utc()
+    }
+}
+
+/// Replace every header value, keeping the names an exchange is understood
+/// by. Headers that are not a JSON object are emptied.
+fn redact_headers(headers: &mut String) {
+    let redacted = match serde_json::from_str::<HashMap<String, String>>(headers) {
+        Ok(map) => {
+            let redacted: HashMap<String, String> =
+                map.keys().map(|name| (name.clone(), REDACTED.to_string())).collect();
+            serde_json::to_string(&redacted)
+        }
+        Err(_) => Ok("{}".to_string()),
+    };
+    if let Ok(redacted) = redacted {
+        *headers = redacted;
     }
 }
 
@@ -824,6 +1018,169 @@ mod tests {
 
         assert!(result1.contains("000000000000"));
         assert!(result2.contains("000000000001"));
+    }
+
+    fn uuid_scrubber(replacement: &str, seed: u64) -> Scrubber {
+        Scrubber::new(ScrubConfig {
+            rules: vec![ScrubRule::Uuid {
+                replacement: replacement.to_string(),
+            }],
+            deterministic: false,
+            counter_seed: seed,
+        })
+        .unwrap()
+    }
+
+    const USER: &str = "123e4567-e89b-12d3-a456-426614174000";
+    const ORDER: &str = "abc12345-e89b-12d3-a456-426614174000";
+
+    #[test]
+    fn test_the_same_uuid_keeps_its_pseudonym() {
+        let scrubber = uuid_scrubber("00000000-0000-0000-0000-{{counter:012}}", 0);
+        let first = scrubber.scrub_string(&format!("user {USER}"), ScrubTarget::All);
+        let again = scrubber.scrub_string(&format!("order for {USER}"), ScrubTarget::All);
+        let other = scrubber.scrub_string(&format!("user {ORDER}"), ScrubTarget::All);
+        let upper =
+            scrubber.scrub_string(&format!("user {}", USER.to_uppercase()), ScrubTarget::All);
+        assert_eq!(first, "user 00000000-0000-0000-0000-000000000000");
+        assert_eq!(
+            again, "order for 00000000-0000-0000-0000-000000000000",
+            "the same identifier reads the same wherever it appears"
+        );
+        assert_eq!(other, "user 00000000-0000-0000-0000-000000000001");
+        assert_eq!(upper, first, "a UUID in upper case is the same UUID");
+    }
+
+    #[test]
+    fn test_every_builtin_rule_can_give_distinct_pseudonyms() {
+        let scrubber = Scrubber::new(ScrubConfig {
+            rules: vec![
+                ScrubRule::Email {
+                    replacement: "user{{counter}}@example.com".to_string(),
+                },
+                ScrubRule::IpAddress {
+                    replacement: "10.0.0.{{counter}}".to_string(),
+                },
+                ScrubRule::CreditCard {
+                    replacement: "XXXX-XXXX-XXXX-{{counter:04}}".to_string(),
+                },
+            ],
+            deterministic: false,
+            counter_seed: 0,
+        })
+        .unwrap();
+        let first = scrubber.scrub_string(
+            "john@test.com paid with 4111-1111-1111-1111 from 203.0.113.7",
+            ScrubTarget::All,
+        );
+        let again = scrubber.scrub_string(
+            "jane@test.org paid with 5555-5555-5555-5555 from 203.0.113.7 for john@test.com",
+            ScrubTarget::All,
+        );
+        assert_eq!(first, "user0@example.com paid with XXXX-XXXX-XXXX-0002 from 10.0.0.1");
+        assert_eq!(
+            again,
+            "user3@example.com paid with XXXX-XXXX-XXXX-0004 from 10.0.0.1 for user0@example.com",
+            "the address, the payer and the card are told apart, and stay the same"
+        );
+    }
+
+    #[test]
+    fn test_a_replacement_without_a_counter_is_used_for_every_match() {
+        let scrubber = uuid_scrubber("00000000-0000-0000-0000-000000000000", 0);
+        let first = scrubber.scrub_string(USER, ScrubTarget::All);
+        let second = scrubber.scrub_string(ORDER, ScrubTarget::All);
+        assert_eq!(first, "00000000-0000-0000-0000-000000000000");
+        assert_eq!(
+            first, second,
+            "a constant replacement still collapses every value, as configured"
+        );
+        assert_eq!(
+            scrubber.deterministic_counter.load(std::sync::atomic::Ordering::SeqCst),
+            0,
+            "no number is spent on a constant replacement"
+        );
+    }
+
+    #[test]
+    fn test_numbers_start_from_the_counter_seed() {
+        let scrubber = uuid_scrubber("{{counter}}", 100);
+        assert_eq!(scrubber.scrub_string(&format!("{USER} {ORDER}"), ScrubTarget::All), "100 101");
+    }
+
+    #[test]
+    fn test_beyond_the_cache_a_value_is_not_remembered() {
+        let scrubber = Scrubber::with_pseudonym_cache(
+            ScrubConfig {
+                rules: vec![ScrubRule::Uuid {
+                    replacement: "{{counter}}".to_string(),
+                }],
+                deterministic: false,
+                counter_seed: 0,
+            },
+            1,
+        )
+        .unwrap();
+        assert_eq!(scrubber.scrub_string(USER, ScrubTarget::All), "0");
+        assert_eq!(
+            scrubber.scrub_string(ORDER, ScrubTarget::All),
+            "1",
+            "a value past the cache still gets its own number"
+        );
+        assert_eq!(scrubber.scrub_string(ORDER, ScrubTarget::All), "2", "but is not remembered");
+        assert_eq!(
+            scrubber.scrub_string(USER, ScrubTarget::All),
+            "0",
+            "while a remembered one keeps it"
+        );
+    }
+
+    #[test]
+    fn test_one_uuid_gets_one_pseudonym_when_scrubbed_from_many_threads() {
+        // Each thread sees the same two identifiers, half of them in the
+        // other order, and reports them in a fixed order.
+        let scrubber = Arc::new(uuid_scrubber("{{counter}}", 0));
+        let handles: Vec<_> = (0..8)
+            .map(|thread| {
+                let scrubber = Arc::clone(&scrubber);
+                std::thread::spawn(move || {
+                    let scrub = |value: &str| scrubber.scrub_string(value, ScrubTarget::All);
+                    if thread % 2 == 0 {
+                        (scrub(USER), scrub(ORDER))
+                    } else {
+                        let order = scrub(ORDER);
+                        (scrub(USER), order)
+                    }
+                })
+            })
+            .collect();
+        let results: Vec<_> = handles.into_iter().map(|handle| handle.join().unwrap()).collect();
+        assert!(results.iter().all(|pair| pair == &results[0]), "{results:?}");
+        assert_ne!(results[0].0, results[0].1);
+    }
+
+    #[test]
+    fn test_a_counter_can_have_any_width() {
+        assert_eq!(Scrubber::render_counter("{{counter}}", 42), "42");
+        assert_eq!(Scrubber::render_counter("{{counter:012}}", 42), "000000000042");
+        assert_eq!(Scrubber::render_counter("id-{{counter:04}}", 42), "id-0042");
+        assert_eq!(Scrubber::render_counter("{{counter:6}}/{{counter}}", 42), "000042/42");
+        // Text that only looks like a marker is left alone.
+        assert_eq!(
+            Scrubber::render_counter("{{counterfeit}} {{counter", 42),
+            "{{counterfeit}} {{counter"
+        );
+    }
+
+    #[test]
+    fn test_only_an_unreadable_configuration_redacts_everything() {
+        assert!(!Scrubber::default().redacts_everything());
+        assert!(!uuid_scrubber("{{counter}}", 0).redacts_everything());
+        assert!(Scrubber::redact_everything().redacts_everything());
+        assert!(
+            REDACTED_BODY.contains("MOCKFORGE_CAPTURE_SCRUB"),
+            "a recording says why it is redacted"
+        );
     }
 
     #[test]

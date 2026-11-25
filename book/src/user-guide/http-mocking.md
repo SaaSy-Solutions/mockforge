@@ -454,6 +454,47 @@ mockforge serve --spec api-spec.json --recorder --recorder-db ./mockforge-record
 mockforge recorder convert --input ./mockforge-recordings.db --output fixtures/
 ```
 
+#### Scrub sensitive data while recording
+
+Nothing is scrubbed unless you say how. Set `MOCKFORGE_CAPTURE_SCRUB` to a
+JSON object with a `rules` list before recording traffic that carries
+personal data:
+
+```bash
+export MOCKFORGE_CAPTURE_SCRUB='{
+  "rules": [
+    {"type": "header", "name": "authorization", "replacement": "Bearer REDACTED"},
+    {"type": "field", "field": "email", "replacement": "user@example.com"},
+    {"type": "uuid", "replacement": "00000000-0000-0000-0000-{{counter:012}}"},
+    {"type": "email", "replacement": "user{{counter}}@example.com"},
+    {"type": "ip_address", "replacement": "127.0.0.1"},
+    {"type": "credit_card", "replacement": "XXXX-XXXX-XXXX-XXXX"},
+    {"type": "regex", "pattern": "sk-[A-Za-z0-9]{20,}", "replacement": "sk-REDACTED"}
+  ]
+}'
+```
+
+| Rule | Replaces |
+| --- | --- |
+| `header` | One header, by name, wherever it appears. |
+| `field` | One JSON field, by a path such as `user.email`, and a header of the same name. |
+| `regex` | Every match of a pattern. |
+| `uuid`, `email`, `ip_address`, `credit_card` | Every value of that shape. |
+
+`{{counter}}` in the replacement of a built-in rule is the value's
+pseudonym. The same UUID, address, IP or card number is replaced the same way
+wherever it appears in a recording, and two different values never share one,
+so a converted fixture still tells one user from another. A replacement
+without it is used for every match. `counter_seed` sets the first number.
+
+Only text bodies are scrubbed. A body recorded in another encoding is stored
+as it arrived.
+
+If `MOCKFORGE_CAPTURE_SCRUB` cannot be read, the recorder keeps the method,
+the path and the status and redacts everything else, so a mistake in the
+configuration never records raw data. The recorded body then says that
+`MOCKFORGE_CAPTURE_SCRUB` could not be read.
+
 ### Stateful Behavior
 
 Simulate stateful APIs where responses change based on previous requests:
