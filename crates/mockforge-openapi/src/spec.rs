@@ -629,7 +629,14 @@ impl OpenApiSpec {
         Ok(true)
     }
 
-    /// Check if a security scheme is satisfied
+    /// Check if a security scheme is satisfied.
+    ///
+    /// `auth_header` is the credential supplied in a header: the
+    /// `Authorization` header for `http`, OAuth2 and OpenID Connect schemes,
+    /// or its named header for an API key. `api_key` is the credential
+    /// supplied in a query parameter or a cookie. Those two values are all
+    /// this check sees, so it cannot match an API key to its header by name,
+    /// and it does not look at scopes.
     fn is_security_scheme_satisfied(
         &self,
         scheme_name: &str,

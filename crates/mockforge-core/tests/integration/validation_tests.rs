@@ -135,6 +135,72 @@ mod validation_tests {
     }
 
     #[test]
+    fn an_empty_security_list_opts_out_of_the_global_requirement() {
+        let spec = json!({
+            "openapi": "3.0.0",
+            "info": {"title": "Test API", "version": "1.0.0"},
+            "security": [{"bearerAuth": []}],
+            "paths": {
+                "/inherited": {"get": {"responses": {"200": {"description": "OK"}}}},
+                "/public": {
+                    "get": {"responses": {"200": {"description": "OK"}}, "security": []}
+                },
+                "/own": {
+                    "get": {
+                        "responses": {"200": {"description": "OK"}},
+                        "security": [{"apiKeyAuth": []}]
+                    }
+                }
+            },
+            "components": {
+                "securitySchemes": {
+                    "bearerAuth": {"type": "http", "scheme": "bearer"},
+                    "apiKeyAuth": {"type": "apiKey", "in": "header", "name": "X-Api-Key"}
+                }
+            }
+        });
+        let openapi_spec = mockforge_openapi::OpenApiSpec::from_json(spec).unwrap();
+
+        // No `security` of its own: the operation inherits the top-level requirement.
+        assert!(!validate_openapi_operation_security(&openapi_spec, "/inherited", "GET", None, None).valid);
+        assert!(validate_openapi_operation_security(
+            &openapi_spec,
+            "/inherited",
+            "GET",
+            Some("Bearer token123"),
+            None
+        )
+        .valid);
+
+        // `security: []` removes it for this operation. OpenAPI: "To remove a
+        // top-level security requirement, an empty array can be used."
+        let result = validate_openapi_operation_security(&openapi_spec, "/public", "GET", None, None);
+        assert!(result.valid, "{:?}", result.errors);
+
+        // Its own requirement replaces the top-level one: without a
+        // credential it fails, and the API key goes in as a header credential.
+        assert!(!validate_openapi_operation_security(&openapi_spec, "/own", "GET", None, None).valid);
+        assert!(validate_openapi_operation_security(
+            &openapi_spec,
+            "/own",
+            "GET",
+            Some("secret-key"),
+            None
+        )
+        .valid);
+        // What this check cannot see: it takes any header credential for an
+        // API key in a header, so a bearer token passes for the key too.
+        assert!(validate_openapi_operation_security(
+            &openapi_spec,
+            "/own",
+            "GET",
+            Some("Bearer token123"),
+            None
+        )
+        .valid);
+    }
+
+    #[test]
     fn test_validate_openapi_api_key_security() {
         let spec = json!({
             "openapi": "3.0.0",
