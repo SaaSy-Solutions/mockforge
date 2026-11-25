@@ -293,7 +293,7 @@ impl OwaspReport {
         }
 
         SarifReport {
-            schema: "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json".to_string(),
+            schema: "https://docs.oasis-open.org/sarif/sarif/v2.1.0/cs01/schemas/sarif-schema-2.1.0.json".to_string(),
             version: "2.1.0".to_string(),
             runs: vec![SarifRun {
                 tool: SarifTool {
