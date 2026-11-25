@@ -337,7 +337,10 @@ impl From<CatalogTool> for ToolContract {
 /// * `{ "reflect": "argument" }`, the value of one string argument;
 /// * `{ "text": "...", "requires": "argument", "missing": "..." }`, `text`
 ///   when the call gives that argument, and `missing` as an error when it
-///   does not.
+///   does not;
+/// * the same with `equals`, when the tool acts on one value of the argument
+///   only: `text` when the call sends exactly that value, and `missing` for
+///   every other value, and for none.
 ///
 /// A tool without a `result` answers that the catalog gives it none.
 fn answer(
@@ -354,11 +357,14 @@ fn answer(
         Value::String(text) => Ok(McpToolResult::text(text.clone())),
         Value::Object(fields) => {
             if let Some(key) = fields.keys().find(|key| {
-                !matches!(key.as_str(), "text" | "isError" | "reflect" | "requires" | "missing")
+                !matches!(
+                    key.as_str(),
+                    "text" | "isError" | "reflect" | "requires" | "equals" | "missing"
+                )
             }) {
                 return Err(wrong(&format!(
-                    "`result` has no field `{key}`; it has `text` with `isError` or with \
-                     `requires` and `missing`, or `reflect`"
+                    "`result` has no field `{key}`; it has `text`, with `isError`, or with \
+                     `requires`, `equals` and `missing`, or it has `reflect`"
                 )));
             }
             if let Some(requires) = fields.get("requires") {
@@ -391,14 +397,35 @@ fn answer(
                         "`result` has `requires` but no `missing`, the answer when the argument is not given"
                     }));
                 };
+                let equals = match fields.get("equals") {
+                    None => None,
+                    Some(value @ (Value::String(_) | Value::Number(_) | Value::Bool(_))) => {
+                        Some(value.clone())
+                    }
+                    Some(Value::Null) => {
+                        return Err(wrong(
+                            "`result.equals` is null; name the value the argument must have",
+                        ))
+                    }
+                    Some(_) => {
+                        return Err(wrong(
+                            "`result.equals` is not a string, a number or true or false",
+                        ))
+                    }
+                };
                 return Ok(McpToolResult::Requires {
                     argument,
+                    equals,
                     text: text.clone(),
                     missing: missing.clone(),
                 });
             }
-            if fields.contains_key("missing") {
-                return Err(wrong("`result` has `missing` but no `requires`"));
+            for only_with_requires in ["missing", "equals"] {
+                if fields.contains_key(only_with_requires) {
+                    return Err(wrong(&format!(
+                        "`result` has `{only_with_requires}` but no `requires`"
+                    )));
+                }
             }
             if let Some(reflect) = fields.get("reflect") {
                 if fields.len() > 1 {
@@ -780,6 +807,14 @@ mod tests {
                 r#"{ "text": "released", "requires": "key", "missing": "no key" }"#,
                 McpToolResult::requires("key", "released", "no key"),
             ),
+            (
+                r#"{ "text": "issued", "requires": "confirmed", "equals": true, "missing": "not confirmed" }"#,
+                McpToolResult::requires_equal("confirmed", json!(true), "issued", "not confirmed"),
+            ),
+            (
+                r#"{ "text": "three", "requires": "count", "equals": 3, "missing": "not three" }"#,
+                McpToolResult::requires_equal("count", json!(3), "three", "not three"),
+            ),
         ] {
             assert_eq!(load(&with(result)).unwrap().tools[0].result, expected, "{result}");
         }
@@ -788,8 +823,8 @@ mod tests {
             (r#"[]"#, "tools[0]: `result` is neither text nor an object"),
             (
                 r#"{ "txt": "t" }"#,
-                "tools[0]: `result` has no field `txt`; it has `text` with `isError` or with \
-                 `requires` and `missing`, or `reflect`",
+                "tools[0]: `result` has no field `txt`; it has `text`, with `isError`, or with \
+                 `requires`, `equals` and `missing`, or it has `reflect`",
             ),
             (r#"{}"#, "tools[0]: `result` has neither `text` nor `reflect`"),
             (r#"{ "text": 7 }"#, "tools[0]: `result.text` is not text"),
@@ -816,6 +851,22 @@ mod tests {
             (
                 r#"{ "text": "t", "missing": "m" }"#,
                 "tools[0]: `result` has `missing` but no `requires`",
+            ),
+            (
+                r#"{ "text": "t", "equals": true }"#,
+                "tools[0]: `result` has `equals` but no `requires`",
+            ),
+            (
+                r#"{ "text": "t", "requires": "k", "missing": "m", "equals": null }"#,
+                "tools[0]: `result.equals` is null; name the value the argument must have",
+            ),
+            (
+                r#"{ "text": "t", "requires": "k", "missing": "m", "equals": [true] }"#,
+                "tools[0]: `result.equals` is not a string, a number or true or false",
+            ),
+            (
+                r#"{ "text": "t", "requires": "k", "missing": "m", "equals": { "yes": true } }"#,
+                "tools[0]: `result.equals` is not a string, a number or true or false",
             ),
             (
                 r#"{ "text": "t", "requires": "key", "missing": "m", "reflect": "q" }"#,

@@ -82,10 +82,13 @@ pub enum McpToolResult {
     Requires {
         /// The argument the tool needs.
         argument: String,
+        /// The value the argument must have, when the catalog names one. When
+        /// it names none, any value that is given counts.
+        equals: Option<Value>,
         /// The answer when the call gives it.
         text: String,
-        /// The answer, as an error, when the call leaves it out or sends it
-        /// blank.
+        /// The answer, as an error, when the call leaves the argument out,
+        /// sends it blank, or sends a value other than the one it must have.
         missing: String,
     },
 }
@@ -116,21 +119,42 @@ impl McpToolResult {
     ) -> Self {
         Self::Requires {
             argument: argument.into(),
+            equals: None,
+            text: text.into(),
+            missing: missing.into(),
+        }
+    }
+
+    /// `text` when the call gives `argument` with exactly `value`, and
+    /// `missing` as an error for any other value, and for none.
+    pub fn requires_equal(
+        argument: impl Into<String>,
+        value: Value,
+        text: impl Into<String>,
+        missing: impl Into<String>,
+    ) -> Self {
+        Self::Requires {
+            argument: argument.into(),
+            equals: Some(value),
             text: text.into(),
             missing: missing.into(),
         }
     }
 }
 
-/// Whether a call gives the named argument: it is there, and it is neither
-/// null nor blank text.
-fn is_given(arguments: Option<&Value>, argument: &str) -> bool {
+/// Whether a call gives the named argument as the tool needs it: it is there,
+/// it is neither null nor blank text, and, when the catalog names the value it
+/// must have, it is that value.
+fn is_given(arguments: Option<&Value>, argument: &str, equals: Option<&Value>) -> bool {
     arguments
         .and_then(|arguments| arguments.get(argument))
-        .is_some_and(|value| match value {
-            Value::String(text) => !text.trim().is_empty(),
-            Value::Null => false,
-            _ => true,
+        .is_some_and(|value| match equals {
+            Some(expected) => value == expected,
+            None => match value {
+                Value::String(text) => !text.trim().is_empty(),
+                Value::Null => false,
+                _ => true,
+            },
         })
 }
 
@@ -774,10 +798,11 @@ fn tools_call(config: &McpMockConfig, params: &Value) -> Value {
         ),
         McpToolResult::Requires {
             argument,
+            equals,
             text,
             missing,
         } => {
-            if is_given(args, argument) {
+            if is_given(args, argument, equals.as_ref()) {
                 (text.clone(), false)
             } else {
                 (missing.clone(), true)
@@ -1234,6 +1259,44 @@ mod tests {
             called(&config, "release_export", json!({ "key": 42 })).await,
             text("released", false)
         );
+    }
+
+    #[tokio::test]
+    async fn a_tool_that_requires_a_value_refuses_a_call_with_any_other() {
+        let config = McpMockConfig::from_json(
+            r#"{
+              "kind": "mockforge-mcp-catalog", "schema_version": 1,
+              "tools": [{
+                "name": "issue_refund", "inputSchema": { "type": "object" },
+                "result": { "text": "refund issued", "requires": "confirmed", "equals": true, "missing": "the user has not confirmed the refund" }
+              }]
+            }"#,
+            "catalog.json",
+        )
+        .unwrap();
+
+        let text = |text: &str, is_error: bool| json!({ "content": [{ "type": "text", "text": text }], "isError": is_error });
+        let refused = text("the user has not confirmed the refund", true);
+        assert_eq!(
+            called(&config, "issue_refund", json!({ "confirmed": true })).await,
+            text("refund issued", false)
+        );
+        // The tool acts on true alone. False is given, and is not it: without
+        // `equals` it would count as an argument that is there.
+        for arguments in [
+            json!({ "confirmed": false }),
+            json!({}),
+            json!({ "confirmed": null }),
+            json!({ "confirmed": "true" }),
+            json!({ "confirmed": 1 }),
+            json!({ "approved": true }),
+        ] {
+            assert_eq!(
+                called(&config, "issue_refund", arguments.clone()).await,
+                refused,
+                "{arguments}"
+            );
+        }
     }
 
     #[tokio::test]

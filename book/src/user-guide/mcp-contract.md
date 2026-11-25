@@ -222,6 +222,11 @@ tool carries what it declares, the fields of the protocol (`name`,
   when the call leaves it out, sends it as null, or sends blank text. A mock
   that answers the same either way lets a caller get away with what a real
   server would refuse.
+- A tool that acts on one value of an argument says so with `equals`, beside
+  `requires`. It answers its `text` only when the call sends exactly that
+  value, and `missing` for every other value, and for none. A refund tool that
+  acts only when `confirmed` is true refuses a call that sends `false`, where
+  `requires` alone would take `false` as an argument that is there.
 - `server` may carry `instructions`, the guidance the server gives the model,
   and `capabilities`, when the server claims something other than tools,
   resources and prompts.
