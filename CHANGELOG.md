@@ -14,6 +14,7 @@
 - **[Reality]** New managed CVE lab pack for CVE-2026-33017: one reviewed request against the pinned Langflow 1.8.1 image reproduces unauthenticated code execution through the public flow build, verified on a lab host.
 - **[DevX]** A daily advisory watch runs the security audit on `main`, on a GitHub-hosted runner. When a RustSec advisory is in `Cargo.lock` it opens an issue with the audit's output and fails, and it closes the issue once the audit is clean. RUSTSEC-2026-0600 was published on 2026-11-24 and first seen the next day, when the audit of every open pull request failed on it.
 - **[DevX]** A GitHub Action starts a MockForge mock in a workflow. `SaaSy-Solutions/mockforge/.github/actions/setup` runs the published image with a spec, waits until the port answers, and gives the url. It takes a port, a tag of the image, a timeout and settings for the mock. It needs a Linux runner, since it runs a container.
+- **[DevX]** A CI job runs every lab the catalog marks verified against its pinned image on a GitHub-hosted runner, when a pull request changes the lab runner or its tests and on demand. A pack listed as verified that cannot run fails the run.
 
 ### Changed
 
