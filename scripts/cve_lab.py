@@ -44,6 +44,20 @@ UNVERIFIED_MESSAGE = (
     "is an unverified lab pack (its trigger has not reproduced on a lab host); "
     "pass --include-unverified to run it for development"
 )
+PENDING_IMAGE_MESSAGE = (
+    "is an unverified lab pack (its lab image is still pending review, so its "
+    "trigger has not been reproduced through the runner); pass "
+    "--include-unverified to run it for development"
+)
+
+
+def unverified_message(cve):
+    """Why a pack is unverified, and how to run it anyway."""
+    pending = (
+        PACKS[cve].get("catalog", {}).get("image_status")
+        == "pending-lab-host-review"
+    )
+    return f"{cve} {PENDING_IMAGE_MESSAGE if pending else UNVERIFIED_MESSAGE}"
 
 
 def verified_cves(include_unverified=False):
@@ -56,7 +70,7 @@ def verified_cves(include_unverified=False):
 
 def require_verified(cve, include_unverified):
     if not PACKS[cve].get("verified", False) and not include_unverified:
-        raise ValueError(f"{cve} {UNVERIFIED_MESSAGE}")
+        raise ValueError(unverified_message(cve))
 
 
 def _pack_images_runnable(pack_catalog):
@@ -519,7 +533,7 @@ def main(argv=None):
                     + ")"
                 )
             if args.cve not in valid_cves:
-                raise ValueError(f"{args.cve} {UNVERIFIED_MESSAGE}")
+                raise ValueError(unverified_message(args.cve))
             require_verified(args.cve, args.include_unverified)
         if args.action == "doctor":
             report = doctor(args.engine, {cve: PACKS[cve] for cve in valid_cves})
