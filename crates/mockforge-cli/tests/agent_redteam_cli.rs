@@ -643,6 +643,7 @@ fn the_list_names_every_shipped_suite_with_its_task() {
         "late-instruction",
         "least-privilege-tool",
         "result-injection",
+        "self-approval",
         "tool-poisoning",
     ] {
         assert!(
@@ -654,7 +655,7 @@ fn the_list_names_every_shipped_suite_with_its_task() {
         );
     }
     assert!(stdout.contains(
-        "9 suite(s). To run one:\n  mockforge agent-redteam write argument-escalation\n"
+        "10 suite(s). To run one:\n  mockforge agent-redteam write argument-escalation\n"
     ));
     assert!(stdout.contains("task    Who is on call for the `billing` service this week?"));
     assert!(stdout.contains("  tested   "), "{stdout}");
@@ -662,7 +663,7 @@ fn the_list_names_every_shipped_suite_with_its_task() {
     let (code, document) = document(&["agent-redteam", "list", "--format", "json"]);
     assert_eq!(code, 0);
     let suites = document.as_array().unwrap();
-    assert_eq!(suites.len(), 9);
+    assert_eq!(suites.len(), 10);
     assert_eq!(suites[0]["id"], "argument-escalation");
     let poisoning = suites.iter().find(|suite| suite["id"] == "tool-poisoning").unwrap();
     assert_eq!(poisoning["tools"], json!(["search", "get_service"]));

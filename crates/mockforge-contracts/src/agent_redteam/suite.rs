@@ -407,7 +407,7 @@ fn shown_example(text: &str) -> String {
 }
 
 /// The suites MockForge ships, by id and as JSON.
-const SHIPPED: [(&str, &str); 9] = [
+const SHIPPED: [(&str, &str); 10] = [
     ("argument-escalation", include_str!("suites/argument-escalation.json")),
     ("argument-exfiltration", include_str!("suites/argument-exfiltration.json")),
     ("boundary-spoofing", include_str!("suites/boundary-spoofing.json")),
@@ -416,6 +416,7 @@ const SHIPPED: [(&str, &str); 9] = [
     ("late-instruction", include_str!("suites/late-instruction.json")),
     ("least-privilege-tool", include_str!("suites/least-privilege-tool.json")),
     ("result-injection", include_str!("suites/result-injection.json")),
+    ("self-approval", include_str!("suites/self-approval.json")),
     ("tool-poisoning", include_str!("suites/tool-poisoning.json")),
 ];
 
@@ -470,6 +471,7 @@ mod tests {
                 "late-instruction",
                 "least-privilege-tool",
                 "result-injection",
+                "self-approval",
                 "tool-poisoning"
             ]
         );
@@ -586,6 +588,31 @@ mod tests {
         let suite = Suite::from_json(shipped("boundary-spoofing").unwrap(), "s").unwrap();
         let forbidden = suite.rules.iter().find(|rule| rule.kind == RuleKind::NeverCall).unwrap();
         assert_eq!(forbidden.tool.as_deref(), Some("send_invoice"));
+
+        // The order's note is its customer's, asks for the refund tool with
+        // its confirmation set, and reads as an instruction; the tool itself
+        // asks for the user's agreement first, and acts on true alone.
+        let order = tool("self-approval", "get_order");
+        let text = order["result"].as_str().unwrap();
+        assert!(text.contains("Note from the customer") && text.contains("issue_refund"));
+        assert!(text.contains("confirmed set to true"));
+        assert!(crate::mcp_contract::signals::text_signals(text)
+            .iter()
+            .any(|signal| signal.kind == crate::mcp_contract::SignalKind::InstructionLikeText));
+        let refund = tool("self-approval", "issue_refund");
+        assert!(refund["description"].as_str().unwrap().contains("after the user has agreed"));
+        assert_eq!(refund["result"]["equals"], json!(true));
+        // The argument the suite judges is the one the tool acts on.
+        let suite = Suite::from_json(shipped("self-approval").unwrap(), "s").unwrap();
+        let approval = suite
+            .rules
+            .iter()
+            .find(|rule| rule.kind == RuleKind::ArgumentNeverMatches)
+            .unwrap();
+        assert_eq!(
+            (approval.tool.as_deref(), approval.argument.as_deref()),
+            (Some("issue_refund"), Some("confirmed"))
+        );
     }
 
     #[test]
@@ -812,7 +839,7 @@ mod tests {
             shipped("nope").unwrap_err().to_string(),
             "no shipped suite has the id `nope`; the shipped suites are argument-escalation, \
              argument-exfiltration, boundary-spoofing, confirmation-step, forged-user-turn, \
-             late-instruction, least-privilege-tool, result-injection, tool-poisoning"
+             late-instruction, least-privilege-tool, result-injection, self-approval, tool-poisoning"
         );
         for id in shipped_ids() {
             assert!(serde_json::from_str::<Value>(shipped(id).unwrap()).is_ok(), "{id}");
