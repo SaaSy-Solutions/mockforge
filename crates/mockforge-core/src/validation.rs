@@ -739,10 +739,7 @@ pub fn validate_openapi_operation_security(
     // requirement, an empty array can be used"). Only an operation that has
     // no `security` of its own inherits it.
     let global_security = spec.get_global_security_requirements();
-    let security_reqs = openapi_operation
-        .security
-        .as_deref()
-        .unwrap_or(global_security.as_slice());
+    let security_reqs = openapi_operation.security.as_deref().unwrap_or(global_security.as_slice());
     if security_reqs.is_empty() {
         // No security requirements, or an explicit opt-out from them.
         return ValidationResult::success();
