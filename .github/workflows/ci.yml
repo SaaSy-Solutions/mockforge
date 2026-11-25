@@ -41,10 +41,11 @@ jobs:
   # mergeable without burning self-hosted runner time on a Rust build.
   changes:
     name: Detect change scope
-    # Nineteen seconds of Python that every other job on the pull request
-    # waits for: the Rust lane, the audit and the Test aggregate all need it.
-    # It runs GitHub-hosted, which is free on this public repository, so that
-    # a pull request starts without waiting for a self-hosted runner.
+    # Every other job on the pull request waits for this one: the Rust lane,
+    # the audit and the Test aggregate all need its answer. It is a few
+    # seconds of Python and one small toolchain download. It runs
+    # GitHub-hosted, which is free on this public repository, so that a
+    # pull request starts without waiting for a self-hosted runner.
     runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:
@@ -56,6 +57,19 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+      - name: Install the pinned toolchain
+        if: runner.environment == 'github-hosted'
+        # Two steps below run cargo inside this checkout: a guard test runs the
+        # scope step for real, and the scope step asks cargo for the workspace
+        # graph. A fresh runner does not have the pinned toolchain. Left to
+        # cargo, the first call makes rustup download it, all six components,
+        # through an auto-install rustup marks as deprecated. The minimal
+        # profile is under half the size. When the install fails the scope
+        # script keeps its fallback to the full suite, so this is a warning
+        # and not a failure.
+        run: |
+          rustup toolchain install "${RUSTUP_TOOLCHAIN}" --profile minimal --no-self-update \
+            || echo "::warning::The pinned toolchain did not install; the Rust scope runs the full suite."
       - name: Verify Rust lane and required-context routing
         shell: sh
         run: |
