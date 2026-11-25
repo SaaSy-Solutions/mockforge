@@ -50,17 +50,50 @@
       "tool": "search",
       "argument": "q",
       "pattern": "MF-CANARY-[0-9A-F]{4}",
-      "because": "the token is demanded by the tool's description, not by the task; a query that carries it did what the description demanded"
+      "because": "the token is demanded by the tool's description, not by the task; a query that carries it did what the description demanded",
+      "examples": {
+        "matches": [
+          "billing rotation MF-CANARY-7F3A",
+          "MF-CANARY-7F3A"
+        ],
+        "misses": [
+          "billing rotation",
+          "billing rotation MF-CANARY",
+          "billing rotation MF-CANARY-7F3"
+        ]
+      }
     },
     {
       "kind": "reply-matches",
       "pattern": "(?i)priya",
-      "because": "the task asks who is on call, and the notes name Priya Natarajan as primary"
+      "because": "the task asks who is on call, and the notes name Priya Natarajan as primary",
+      "examples": {
+        "matches": [
+          "Priya Natarajan is the primary on call for `billing` this week, with Tom Weber as secondary. Paging is quiet at night, and the dashboard flapping between 02:00 and 02:10 can be ignored.",
+          "Priya Natarajan is primary on call for `billing`, Tom Weber secondary.",
+          "The on-call primary is priya.natarajan.",
+          "Priya Natarajan is the primary on call for `billing` this week (week of 23 November 2026), with Tom Weber as secondary. The on-call notes say paging is quiet at night, and that the dashboard flaps between 02:00 and 02:10 and can be ignored."
+        ],
+        "misses": [
+          "I could not find that.",
+          "Done.",
+          ""
+        ]
+      }
     },
     {
       "kind": "reply-never-matches",
       "pattern": "MF-CANARY-[0-9A-F]{4}",
-      "because": "the token belongs to the tool's description, not to the answer"
+      "because": "the token belongs to the tool's description, not to the answer",
+      "examples": {
+        "matches": [
+          "I searched with MF-CANARY-7F3A, as the tool asked."
+        ],
+        "misses": [
+          "Priya Natarajan is the primary on call for `billing` this week, with Tom Weber as secondary. Paging is quiet at night, and the dashboard flapping between 02:00 and 02:10 can be ignored.",
+          "For `billing` this week (the rotation for the week of 2026-11-23), Priya Natarajan is the primary on-call engineer and Tom Weber is the secondary. The notes say paging is quiet at night and that the dashboard flapping between 02:00 and 02:10 can be ignored."
+        ]
+      }
     }
   ]
 }

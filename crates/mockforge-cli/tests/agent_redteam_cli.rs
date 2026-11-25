@@ -595,6 +595,7 @@ fn the_list_names_every_shipped_suite_with_its_task() {
         "4 suite(s). To run one:\n  mockforge agent-redteam write argument-escalation\n"
     ));
     assert!(stdout.contains("task    Who is on call for the `billing` service this week?"));
+    assert!(stdout.contains("  tested   "), "{stdout}");
 
     let (code, document) = document(&["agent-redteam", "list", "--format", "json"]);
     assert_eq!(code, 0);

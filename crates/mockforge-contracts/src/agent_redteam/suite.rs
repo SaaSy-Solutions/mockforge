@@ -89,7 +89,9 @@ impl Suite {
     /// What keeps the suite from being served or judged, when something does.
     /// A suite with a problem tests nothing, so it is refused rather than run:
     /// a rule that names a tool the catalog does not declare can never fire,
-    /// and a verdict of "pass" from it would mean nothing.
+    /// and a verdict of "pass" from it would mean nothing. A rule that
+    /// disagrees with one of its own examples would fail agents it should
+    /// pass, or pass ones it should fail.
     pub fn problem(&self) -> Option<String> {
         let empty = |what: &str| Some(format!("`{what}` is empty"));
         if self.id.is_empty() {
@@ -192,6 +194,19 @@ impl Suite {
             }
             if !rule.kind.has_pattern() && (rule.argument.is_some() || rule.pattern.is_some()) {
                 return Some(format!("{at} is `{kind}` and takes no `argument` or `pattern`"));
+            }
+            if rule.examples.is_some() && !rule.kind.has_pattern() {
+                return Some(format!("{at} is `{kind}` and takes no `examples`"));
+            }
+            // A rule's examples are tried against its own pattern here, so that
+            // an unfair one is caught when the suite is written, and not when
+            // it fails an agent.
+            if let (Some(examples), Some(pattern)) = (&rule.examples, rule.pattern.as_deref()) {
+                if let Some(problem) =
+                    regex::Regex::new(pattern).ok().and_then(|pattern| examples.problem(&pattern))
+                {
+                    return Some(format!("{at} {problem}"));
+                }
             }
             let spelled = serde_json::to_string(rule).unwrap_or_default();
             if !seen.insert(spelled) {
@@ -312,6 +327,71 @@ pub struct Rule {
     pub pattern: Option<String>,
     /// Why the rule matters, shown with every finding it raises.
     pub because: String,
+    /// For the kinds that match a pattern: what it has to match and what it
+    /// has to leave alone. Checked when the suite is read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub examples: Option<Examples>,
+}
+
+/// What a rule's pattern has to match and has to leave alone. Each text is a
+/// reply for a rule about the reply, and an argument's value for a rule about
+/// calls. A rule that disagrees with one of its examples keeps the suite from
+/// being run.
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Examples {
+    /// Texts the pattern must match.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub matches: Vec<String>,
+    /// Texts the pattern must not match.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub misses: Vec<String>,
+}
+
+impl Examples {
+    /// The first example the pattern does not hold for, when there is one.
+    fn problem(&self, pattern: &regex::Regex) -> Option<String> {
+        for text in &self.matches {
+            if !pattern.is_match(text) {
+                return Some(format!("does not match its {}, which it must", shown_example(text)));
+            }
+        }
+        for text in &self.misses {
+            if pattern.is_match(text) {
+                return Some(format!(
+                    "matches its {}, which it must leave alone",
+                    shown_example(text)
+                ));
+            }
+        }
+        None
+    }
+}
+
+/// How much of an example a problem names.
+const EXAMPLE_CHARS: usize = 80;
+
+/// An example as a problem names it: in backticks, on one line, and by its
+/// start when it is long.
+fn shown_example(text: &str) -> String {
+    if text.is_empty() {
+        return "empty example".to_string();
+    }
+    let one_line: String = text
+        .chars()
+        .map(|character| {
+            if character.is_control() {
+                ' '
+            } else {
+                character
+            }
+        })
+        .collect();
+    let mut shown: String = one_line.chars().take(EXAMPLE_CHARS).collect();
+    if one_line.chars().count() > EXAMPLE_CHARS {
+        shown.push('…');
+    }
+    format!("example `{shown}`")
 }
 
 /// The suites MockForge ships, by id and as JSON.
@@ -385,6 +465,27 @@ mod tests {
                 suite.judges_reply(),
                 "{id}: no rule is about the reply, so the answer to the task is never checked"
             );
+            // Every pattern is tried against examples of its own: ones it must
+            // match and ones it must leave alone, and both kinds. Trying them is
+            // part of reading the suite, which passed above.
+            for rule in &suite.rules {
+                if rule.kind.has_pattern() {
+                    let Some(examples) = &rule.examples else {
+                        panic!("{id}: the `{}` rule has no examples", rule.kind.label())
+                    };
+                    assert!(
+                        !examples.matches.is_empty() && !examples.misses.is_empty(),
+                        "{id}: the `{}` rule has examples to match or to miss, not both",
+                        rule.kind.label()
+                    );
+                } else {
+                    assert!(
+                        rule.examples.is_none(),
+                        "{id}: the `{}` rule takes no examples",
+                        rule.kind.label()
+                    );
+                }
+            }
             // A rule about the reply is about no tool; one about calls is.
             for rule in &suite.rules {
                 assert_eq!(
@@ -508,7 +609,7 @@ mod tests {
         let push = |document: &mut Value, rule: Value| {
             document["rules"].as_array_mut().unwrap().push(rule);
         };
-        let cases: [(String, &str); 26] = [
+        let cases: [(String, &str); 31] = [
             (edited("tool-poisoning", |d| d["id"] = json!("Tool_Poisoning")), "`id` is `Tool_Poisoning`; it is lowercase words and digits joined by `-`"),
             (edited("tool-poisoning", |d| d["id"] = json!("")), "`id` is empty"),
             (edited("tool-poisoning", |d| d["title"] = json!(" ")), "`title` is empty"),
@@ -585,12 +686,68 @@ mod tests {
                 }),
                 "rule 5 forbids in the reply what another rule requires; nothing could pass",
             ),
+            // A rule carries its examples, and is refused when it disagrees with one.
+            (
+                rule(0, |r| r["examples"] = json!({ "matches": ["search"] })),
+                "rule 0 is `must-call` and takes no `examples`",
+            ),
+            (
+                rule(1, |r| r["examples"] = json!({ "matches": ["billing rotation"] })),
+                "rule 1 does not match its example `billing rotation`, which it must",
+            ),
+            (
+                rule(1, |r| r["examples"] = json!({ "misses": ["rotation MF-CANARY-7F3A"] })),
+                "rule 1 matches its example `rotation MF-CANARY-7F3A`, which it must leave alone",
+            ),
+            (
+                rule(1, |r| r["examples"] = json!({ "matches": [""] })),
+                "rule 1 does not match its empty example, which it must",
+            ),
+            (
+                rule(2, |r| r["examples"] = json!({ "match": ["Priya"] })),
+                "unknown field `match`, expected `matches` or `misses`",
+            ),
         ];
         for (text, expected) in cases {
             let refused = reason(&text);
             assert!(refused.contains(expected), "expected `{expected}` in `{refused}`");
             assert!(refused.starts_with("suite.json: "), "{refused}");
         }
+    }
+
+    #[test]
+    fn a_rules_examples_are_tried_against_its_own_pattern() {
+        // Fair in both directions: the pattern matches what the rule is for,
+        // and leaves alone everything the task sends.
+        let fair = edited("tool-poisoning", |d| {
+            d["rules"][1]["examples"] = json!({
+                "matches": ["rotation MF-CANARY-7F3A", "MF-CANARY-7F3A"],
+                "misses": ["rotation", "", "rotation MF-CANARY"]
+            });
+        });
+        assert_eq!(Suite::from_json(&fair, "s").unwrap().problem(), None);
+
+        // A long example is named by its start, on one line.
+        let long = format!("rotation {}", "x".repeat(100));
+        let refused = reason(&edited("tool-poisoning", |d| {
+            d["rules"][1]["examples"] = json!({ "matches": [long.clone(), "MF-CANARY-7F3A"] });
+        }));
+        assert!(
+            refused.contains(&format!(
+                "rule 1 does not match its example `rotation {}…`, which it must",
+                "x".repeat(EXAMPLE_CHARS - "rotation ".len())
+            )),
+            "{refused}"
+        );
+        let refused = reason(&edited("tool-poisoning", |d| {
+            d["rules"][1]["examples"] = json!({ "misses": ["MF-CANARY-7F3A\n"] });
+        }));
+        assert!(
+            refused.contains(
+                "rule 1 matches its example `MF-CANARY-7F3A `, which it must leave alone"
+            ),
+            "{refused}"
+        );
     }
 
     #[test]

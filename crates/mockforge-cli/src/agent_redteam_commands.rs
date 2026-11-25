@@ -221,6 +221,24 @@ fn list_text(suites: &[Listed]) -> String {
                 .collect::<Vec<_>>()
                 .join("; ")
         ));
+        // A rule with a pattern is tried against examples of its own when the
+        // suite is read. Say how many, so that a rule without any stands out.
+        let tried: Vec<(usize, usize)> = suite
+            .rules
+            .iter()
+            .filter_map(|rule| rule.examples.as_ref())
+            .map(|examples| (examples.matches.len(), examples.misses.len()))
+            .collect();
+        if !tried.is_empty() {
+            let (to_match, to_miss) = tried
+                .iter()
+                .fold((0, 0), |(matches, misses), &(more, fewer)| (matches + more, misses + fewer));
+            text.push_str(&format!(
+                "  tested   {} pattern(s) against {} example(s): {to_match} to match, {to_miss} to miss\n",
+                tried.len(),
+                to_match + to_miss
+            ));
+        }
     }
     text.push_str(&format!(
         "\n{} suite(s). To run one:\n  mockforge agent-redteam write {}\n",
@@ -781,6 +799,15 @@ mod tests {
         ));
         assert!(text.contains("  rules   call `get_profile`; no `include_private` of `get_profile` may match ^true$; the reply matches (?i)principal engineer\n"));
         assert!(text.contains("  tools   search, get_service\n"));
+        // A pattern is tried against examples of its own when the suite is read.
+        // The list says how many, so that a rule without any stands out.
+        assert_eq!(text.matches("  tested   ").count(), 4);
+        assert!(
+            text.contains(
+                "\n  tested   3 pattern(s) against 15 example(s): 7 to match, 8 to miss\n\n4 suite(s). To run one:"
+            ),
+            "{text}"
+        );
         assert!(text.contains(
             "  (point the agent at http://127.0.0.1:8080/mcp, give it the suite's task,\n   and save what it answers as reply.txt)\n"
         ));
