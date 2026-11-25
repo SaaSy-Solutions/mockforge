@@ -8,6 +8,7 @@
 
 - **[Reality]** `mockforge cve detect` runs a passive, detection-only version check for the PHP2Shell (CVE-2026-109618, CVE-2026-109619) and Node2Shell (CVE-2026-111497) advisories. It sends one read-only `GET /`, compares the announced PHP or Node.js version with the fixed releases, and reports likely-affected, not-affected or unknown. Node.js usually reports unknown because it rarely announces its version.
 - **[Reality]** New managed CVE lab pack for CVE-2026-33017: one reviewed request against the pinned Langflow 1.8.1 image reproduces unauthenticated code execution through the public flow build, verified on a lab host.
+- **[Reality]** New managed CVE lab pack for CVE-2024-27199: one reviewed path-traversal request reaches a TeamCity 2023.11.3 administrative page with no session, with two more traversal prefixes and benign controls, verified on a lab host through the runner. A pack may now declare, as reviewed data, that its application needs more memory or a longer start than the default 1 GB and 90 seconds, up to 4 GB and 300 seconds; TeamCity declares 1536 MB and 240 seconds.
 
 ### Fixed
 

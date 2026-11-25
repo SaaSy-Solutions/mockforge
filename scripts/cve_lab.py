@@ -14,12 +14,16 @@ import uuid
 from cve_lab_catalog import CATALOG, CVE, DETECT_PACKS, PACKS, validate_data_driven_pack
 from cve_lab_detect import detect
 from cve_lab_engine import (
+    DEFAULT_MEMORY,
+    DEFAULT_READINESS_SECONDS,
     cleanup,
     doctor,
     host_network_probe,
     host_network_refusal,
     lab,
+    memory_limit,
     prepare,
+    readiness_budget,
     verify_images,
 )
 from cve_lab_transport import target_url, receiver, control, unverified_context
@@ -111,6 +115,15 @@ def run_plan_lines(args):
         f"Images: pinned {pack_catalog['application_version']} lab and "
         f"{pack_catalog['runner_version']} runner (see `mockforge cve list`)"
     )
+    app = PACKS[args.cve]["app"]
+    memory = memory_limit(app)
+    budget = readiness_budget(app)
+    if (memory, budget) != (DEFAULT_MEMORY, DEFAULT_READINESS_SECONDS):
+        lines.append(
+            f"Reviewed allowances for this pack: {memory} of memory and up to "
+            f"{budget} seconds to start (other packs: {DEFAULT_MEMORY}, "
+            f"{DEFAULT_READINESS_SECONDS} seconds)"
+        )
     if pack_catalog.get("image_status") == "pending-lab-host-review":
         lines.append(
             "Lab image pending review: this pack refuses to run until the "
@@ -128,6 +141,9 @@ def run_plan_lines(args):
 def run(args):
     require_verified(args.cve, args.include_unverified)
     pack = PACKS[args.cve]
+    # A pack's reviewed allowances are checked before anything is downloaded.
+    memory_limit(pack["app"])
+    readiness_budget(pack["app"])
     if (
         pack["baseline_gate"] == "data-driven"
         or pack["classifier"] == "data-driven"
