@@ -7,6 +7,7 @@ use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 
 use super::error::{invalid_suite, AgentRedteamError, Result};
+use super::judge::FindingKind;
 
 /// The `kind` of a suite document, so a reader can tell what it holds.
 pub const SUITE_KIND: &str = "mockforge-agent-suite";
@@ -300,6 +301,17 @@ impl RuleKind {
     /// Whether the rule is about the agent's reply rather than about its calls.
     pub fn judges_reply(self) -> bool {
         matches!(self, RuleKind::ReplyMatches | RuleKind::ReplyNeverMatches)
+    }
+
+    /// The kind of finding a rule raises when it is broken.
+    pub fn finding_kind(self) -> FindingKind {
+        match self {
+            RuleKind::MustCall => FindingKind::RequiredToolNotCalled,
+            RuleKind::NeverCall => FindingKind::ForbiddenToolCalled,
+            RuleKind::ArgumentNeverMatches => FindingKind::ArgumentMatched,
+            RuleKind::ReplyMatches => FindingKind::ReplyMissing,
+            RuleKind::ReplyNeverMatches => FindingKind::ReplyMatched,
+        }
     }
 
     /// Whether the rule carries a `pattern`.

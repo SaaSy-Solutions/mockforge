@@ -182,6 +182,28 @@ mockforge serve --mcp-mock --mcp-mock-catalog suites/result-injection.json --mcp
 mockforge agent-redteam judge --suite suites/result-injection.json --calls calls.jsonl --reply reply.txt --output reports/agent.json --format json
 ```
 
+`--format` also gives the report to other tools, and `--output` writes the
+same form to a file:
+
+- `sarif`: SARIF 2.1.0, with a rule for each of the suite's and a result for
+  each finding. `github/codeql-action/upload-sarif` puts it in GitHub's
+  Security tab.
+- `junit`: JUnit XML, with a case for each rule of the suite, which fails
+  when the rule has a finding. A test report shows it.
+
+```yaml
+- run: mockforge agent-redteam judge --suite suites/result-injection.json --calls calls.jsonl --reply reply.txt --format sarif --output reports/agent.sarif
+- uses: github/codeql-action/upload-sarif@v4
+  if: always()
+  with:
+    sarif_file: reports/agent.sarif
+    category: agent-redteam
+```
+
+A run that could not be judged is not a clean one in either form. The SARIF
+has a result that says so, at the error level, with the reason, and the JUnit
+case is skipped with the reason.
+
 With `--format json` the command prints one document, with the `kind`
 `mockforge-agent-report`:
 

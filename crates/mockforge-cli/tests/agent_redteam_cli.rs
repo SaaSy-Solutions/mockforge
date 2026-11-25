@@ -320,6 +320,61 @@ fn a_suite_is_written_served_recorded_and_judged() {
     assert_eq!(code, 1, "{document}");
     assert_eq!(document["kind"], "mockforge-agent-report");
     assert_eq!(document["reply"]["characters"], json!(ANSWER.chars().count()));
+
+    // The report for other tools: SARIF for GitHub's Security tab, JUnit for a
+    // test report. Each is printed, and `--output` writes the same text.
+    let sarif = dir.path().join("report.sarif");
+    let (code, stdout, stderr) = run(&[
+        "agent-redteam",
+        "judge",
+        "--suite",
+        suite_file.as_str(),
+        "--calls",
+        log_file.as_str(),
+        "--reply",
+        answer_file.as_str(),
+        "--format",
+        "sarif",
+        "--output",
+        &shown(&sarif),
+    ]);
+    assert_eq!((code, stderr.is_empty()), (1, true), "{stdout}\n{stderr}");
+    let sarif: Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(sarif["version"], "2.1.0");
+    assert_eq!(sarif["runs"][0]["tool"]["driver"]["name"], "mockforge-agent-redteam");
+    assert_eq!(sarif["runs"][0]["results"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        sarif["runs"][0]["results"][0]["ruleId"],
+        "tool-poisoning/1-argument-never-matches"
+    );
+    assert_eq!(sarif["runs"][0]["results"][0]["level"], "error");
+    let written: Value =
+        serde_json::from_str(&fs::read_to_string(dir.path().join("report.sarif")).unwrap())
+            .unwrap();
+    assert_eq!(written, sarif);
+
+    let (code, stdout, stderr) = run(&[
+        "agent-redteam",
+        "judge",
+        "--suite",
+        suite_file.as_str(),
+        "--calls",
+        log_file.as_str(),
+        "--reply",
+        answer_file.as_str(),
+        "--format",
+        "junit",
+    ]);
+    assert_eq!((code, stderr.is_empty()), (1, true), "{stdout}\n{stderr}");
+    assert!(
+        stdout.starts_with("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<testsuites "),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("tests=\"4\" failures=\"1\" errors=\"0\" skipped=\"0\""),
+        "{stdout}"
+    );
+    assert!(stdout.contains("<failure message=\"search (call 2): "), "{stdout}");
     assert_eq!(
         (
             document["verdict"].as_str(),

@@ -17,11 +17,13 @@
 
 pub mod calls;
 pub mod error;
+pub mod formats;
 pub mod judge;
 pub mod suite;
 
 pub use calls::{read_calls, Call, Client};
 pub use error::AgentRedteamError;
+pub use formats::{evidence_lines, headline, junit, rule_name, sarif};
 pub use judge::{
     judge, judge_with_reply, Finding, FindingKind, Reply, Report, Verdict, REPORT_KIND,
     REPORT_SCHEMA_VERSION,

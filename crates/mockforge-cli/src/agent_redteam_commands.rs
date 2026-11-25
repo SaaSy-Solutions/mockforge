@@ -16,6 +16,9 @@
 //! verdict. It reads what the agent sent and the reply it is given, and
 //! nothing else. A suite with a rule about the reply is not run without one.
 //!
+//! `--format` gives the report as text, as one JSON document, as SARIF 2.1.0
+//! for GitHub's Security tab, or as JUnit XML for a test report.
+//!
 //! Exit codes of `judge`: 0 passed, 1 failed, 2 not run. A run where nothing
 //! was recorded is never reported as a pass. `--format json` prints one
 //! document and nothing else on stdout.
@@ -23,9 +26,7 @@
 use std::path::{Path, PathBuf};
 
 use clap::{Args, Subcommand};
-use mockforge_contracts::agent_redteam::{
-    self as redteam, Finding, FindingKind, Report, Rule, Suite, Verdict,
-};
+use mockforge_contracts::agent_redteam::{self as redteam, Finding, Report, Rule, Suite, Verdict};
 use mockforge_contracts::mcp_contract::Severity;
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -101,12 +102,26 @@ pub(crate) struct JudgeArgs {
     /// about the reply is not run without it
     #[arg(long, value_name = "FILE")]
     pub reply: Option<PathBuf>,
-    /// Print one JSON document instead of text
+    /// The form of the report: text to read, one JSON document, SARIF 2.1.0
+    /// for GitHub's Security tab, or JUnit XML for a test report
     #[arg(long, value_enum, default_value = "text")]
-    pub format: Format,
-    /// Also write the report, as JSON, here
+    pub format: JudgeFormat,
+    /// Also write the report, in the same form, here
     #[arg(long, value_name = "FILE")]
     pub output: Option<PathBuf>,
+}
+
+/// The forms `judge` gives its report in.
+#[derive(Clone, Copy, Debug, clap::ValueEnum)]
+pub(crate) enum JudgeFormat {
+    /// Text a person reads
+    Text,
+    /// One JSON document
+    Json,
+    /// SARIF 2.1.0, for GitHub's Security tab and the tools that read it
+    Sarif,
+    /// JUnit XML, for a test report
+    Junit,
 }
 
 pub(crate) fn handle_agent_redteam_command(args: AgentRedteamArgs) -> mockforge_core::Result<()> {
@@ -365,20 +380,27 @@ fn judge(args: JudgeArgs) -> Result<i32, String> {
             ..report
         },
     };
-    shown(&args, &calls_path, report)
+    shown(&args, &calls_path, &suite, report)
 }
 
 /// Write the report where one was asked for, print it in the format asked for,
 /// and give the exit code. A report is printed in every case, so a build gets
 /// its document whether the run passed, failed or could not be judged.
-fn shown(args: &JudgeArgs, calls_path: &str, report: Report) -> Result<i32, String> {
+fn shown(args: &JudgeArgs, calls_path: &str, suite: &Suite, report: Report) -> Result<i32, String> {
+    // Where the reply was read from, as the SARIF places a finding about it there.
+    let reply = args.reply.as_ref().map(|path| path.display().to_string());
+    let text = match args.format {
+        JudgeFormat::Text => report_text(Path::new(calls_path), &report),
+        JudgeFormat::Json => pretty(&report)?,
+        JudgeFormat::Sarif => {
+            pretty(&redteam::sarif(&report, suite, calls_path, reply.as_deref()))?
+        }
+        JudgeFormat::Junit => redteam::junit(&report, suite),
+    };
     if let Some(path) = &args.output {
-        write_json(path, &report)?;
+        write_text(path, &format!("{text}\n"))?;
     }
-    match args.format {
-        Format::Json => println!("{}", pretty(&report)?),
-        Format::Text => println!("{}", report_text(Path::new(calls_path), &report)),
-    }
+    println!("{text}");
     Ok(report.exit_code())
 }
 
@@ -446,16 +468,13 @@ fn report_text(calls: &Path, report: &Report) -> String {
 }
 
 fn finding_text(finding: &Finding) -> String {
-    let start = format!("  {:<6} {:<23} ", severity(finding.severity), kind(finding.kind));
-    let mut text = match (&finding.rule.tool, finding.seq) {
-        // A finding about a call names the tool and the call.
-        (Some(tool), Some(seq)) => {
-            format!("{start}{tool} (call {seq}): {}", finding.summary)
-        }
-        (Some(tool), None) => format!("{start}{tool}: {}", finding.summary),
-        // One about the reply has no subject: its summary says what was said.
-        (None, _) => format!("{start}{}", finding.summary),
-    };
+    // What it is about and what it found, as the other formats say it too.
+    let mut text = format!(
+        "  {:<6} {:<23} {}",
+        severity(finding.severity),
+        finding.kind.label(),
+        redteam::headline(finding)
+    );
     if let Some(arguments) = finding.evidence.get("arguments") {
         text.push_str(&format!("\n           arguments: {arguments}"));
     }
@@ -490,34 +509,23 @@ fn severity(severity: Severity) -> &'static str {
     }
 }
 
-fn kind(kind: FindingKind) -> &'static str {
-    match kind {
-        FindingKind::RequiredToolNotCalled => "required-tool-not-called",
-        FindingKind::ForbiddenToolCalled => "forbidden-tool-called",
-        FindingKind::ArgumentMatched => "argument-matched",
-        FindingKind::ReplyMatched => "reply-matched",
-        FindingKind::ReplyMissing => "reply-missing",
-    }
-}
-
 fn pretty(document: &impl Serialize) -> Result<String, String> {
     serde_json::to_string_pretty(document)
         .map_err(|error| format!("cannot be written as JSON: {error}"))
 }
 
-fn write_json(path: &Path, document: &impl Serialize) -> Result<(), String> {
+fn write_text(path: &Path, text: &str) -> Result<(), String> {
     if let Some(parent) = path.parent().filter(|parent| !parent.as_os_str().is_empty()) {
         std::fs::create_dir_all(parent)
             .map_err(|error| format!("{}: {error}", parent.display()))?;
     }
-    std::fs::write(path, format!("{}\n", pretty(document)?))
-        .map_err(|error| format!("{}: {error}", path.display()))
+    std::fs::write(path, text).map_err(|error| format!("{}: {error}", path.display()))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mockforge_contracts::agent_redteam::{Call, Client};
+    use mockforge_contracts::agent_redteam::{Call, Client, FindingKind};
 
     fn calls(seq: u64, tool: &str, arguments: Value) -> Call {
         Call::tool_call(seq, tool, arguments)

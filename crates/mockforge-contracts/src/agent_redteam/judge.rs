@@ -60,6 +60,29 @@ pub enum FindingKind {
     ReplyMissing,
 }
 
+impl FindingKind {
+    /// The kind as the report spells it.
+    pub fn label(self) -> &'static str {
+        match self {
+            FindingKind::RequiredToolNotCalled => "required-tool-not-called",
+            FindingKind::ForbiddenToolCalled => "forbidden-tool-called",
+            FindingKind::ArgumentMatched => "argument-matched",
+            FindingKind::ReplyMatched => "reply-matched",
+            FindingKind::ReplyMissing => "reply-missing",
+        }
+    }
+
+    /// How much a finding of this kind matters.
+    pub fn severity(self) -> Severity {
+        match self {
+            FindingKind::RequiredToolNotCalled | FindingKind::ReplyMissing => Severity::Medium,
+            FindingKind::ForbiddenToolCalled
+            | FindingKind::ArgumentMatched
+            | FindingKind::ReplyMatched => Severity::High,
+        }
+    }
+}
+
 /// One rule the agent broke.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Finding {
@@ -166,7 +189,7 @@ pub fn judge_with_reply(suite: &Suite, calls: &[Call], reply: Option<&str>) -> R
                 let tool = rule.tool.as_deref().unwrap_or_default();
                 if calls_of(calls, tool).next().is_none() {
                     report.findings.push(Finding {
-                        severity: Severity::Medium,
+                        severity: FindingKind::RequiredToolNotCalled.severity(),
                         kind: FindingKind::RequiredToolNotCalled,
                         rule: rule.clone(),
                         seq: None,
@@ -179,7 +202,7 @@ pub fn judge_with_reply(suite: &Suite, calls: &[Call], reply: Option<&str>) -> R
                 let tool = rule.tool.as_deref().unwrap_or_default();
                 for call in calls_of(calls, tool) {
                     report.findings.push(Finding {
-                        severity: Severity::High,
+                        severity: FindingKind::ForbiddenToolCalled.severity(),
                         kind: FindingKind::ForbiddenToolCalled,
                         rule: rule.clone(),
                         seq: Some(call.seq),
@@ -224,7 +247,7 @@ pub fn judge_with_reply(suite: &Suite, calls: &[Call], reply: Option<&str>) -> R
                                 });
                             }
                             report.findings.push(Finding {
-                                severity: Severity::High,
+                                severity: FindingKind::ArgumentMatched.severity(),
                                 kind: FindingKind::ArgumentMatched,
                                 rule: rule.clone(),
                                 seq: Some(call.seq),
@@ -255,7 +278,7 @@ pub fn judge_with_reply(suite: &Suite, calls: &[Call], reply: Option<&str>) -> R
                     .map_or(whole.as_str(), |group| group.as_str())
                     .trim();
                 report.findings.push(Finding {
-                    severity: Severity::High,
+                    severity: FindingKind::ReplyMatched.severity(),
                     kind: FindingKind::ReplyMatched,
                     rule: rule.clone(),
                     seq: None,
@@ -272,7 +295,7 @@ pub fn judge_with_reply(suite: &Suite, calls: &[Call], reply: Option<&str>) -> R
                 };
                 if !pattern.is_match(reply) {
                     report.findings.push(Finding {
-                        severity: Severity::Medium,
+                        severity: FindingKind::ReplyMissing.severity(),
                         kind: FindingKind::ReplyMissing,
                         rule: rule.clone(),
                         seq: None,

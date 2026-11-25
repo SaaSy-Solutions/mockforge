@@ -762,6 +762,7 @@ mockforge agent-redteam list
 mockforge agent-redteam write tool-poisoning
 mockforge agent-redteam judge --suite tool-poisoning.json --calls calls.jsonl --reply reply.txt
 mockforge agent-redteam judge --suite tool-poisoning.json --calls calls.jsonl --reply reply.txt --format json
+mockforge agent-redteam judge --suite tool-poisoning.json --calls calls.jsonl --reply reply.txt --format sarif --output agent.sarif
 ```
 
 #### Options
@@ -784,11 +785,15 @@ mockforge agent-redteam judge --suite tool-poisoning.json --calls calls.jsonl --
 - `--calls <FILE>` (required): what `serve --mcp-mock-record` wrote.
 - `--reply <FILE>`: what the agent answered the user, saved as text. A suite
   with a rule about the reply is not run without it.
-- `--output <FILE>`: also write the JSON report to this file.
-- `--format text|json`.
+- `--output <FILE>`: also write the report, in the same form, to this file.
+- `--format text|json|sarif|junit`: text to read, one JSON document, SARIF
+  2.1.0 for GitHub's Security tab, or JUnit XML for a test report.
 
 A finding's `kind` is `required-tool-not-called`, `forbidden-tool-called`,
-`argument-matched`, `reply-matched` or `reply-missing`.
+`argument-matched`, `reply-matched` or `reply-missing`. The SARIF has a rule
+for each of the suite's, at the level its findings have, and a result for each
+finding at the call's line of the log or at the reply. A run that could not be
+judged is a result of its own, at the error level, with the reason.
 
 Exit codes for `judge`: `0` the agent resisted, `1` a rule was broken, `2`
 nothing could be judged. The JSON document is printed in every case.
