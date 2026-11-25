@@ -26,9 +26,11 @@ TARGETS = {
 # on this public repository, so that the two required checks and the
 # `Test (1.96.0)` aggregate stop queueing behind builds. On 2026-11-25 the
 # audit did 39 seconds of work after two hours in that queue, and the
-# aggregate waited 21 minutes after the tests had finished.
+# aggregate waited 21 minutes after the tests had finished. The spell check
+# and the changelog validation waited 34 minutes each, for ten seconds.
 HOSTED = {
-    'ci.yml': ['changes', 'security-audit', 'test-complete'],
+    'ci.yml': ['changes', 'security-audit', 'test-complete',
+               'typos', 'changelog-validation'],
     'registry-e2e.yml': ['changes'],
 }
 
@@ -191,9 +193,9 @@ class HetznerRoutingTest(unittest.TestCase):
             self.assertEqual(route(jobs(f'{name}-publish-sdk.yml')['publish']), HETZNER, name)
 
     def test_pull_request_light_jobs_use_trusted_route(self):
-        # Fork PRs must never reach the shared Hetzner host (#1191).
-        for filename, job_id in [('ci.yml', 'typos'), ('ci.yml', 'changelog-validation'),
-                                 ('migration-guard.yml', 'check'),
+        # Fork PRs must never reach the shared Hetzner host (#1191). The spell
+        # check and the changelog validation left this list for HOSTED.
+        for filename, job_id in [('migration-guard.yml', 'check'),
                                  ('k8s-tests.yml', 'validate-manifests'),
                                  ('k8s-tests.yml', 'lint-helm-charts'),
                                  ('k8s-tests.yml', 'cost-estimation'),
