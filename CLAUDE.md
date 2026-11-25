@@ -268,7 +268,7 @@ This project uses:
 - **Commands** (`.claude/commands/`): Git workflow commands (`/commit`, `/commit-push-pr`)
 - **Hooks** (`.claude/hooks/`): Hookify rule engine for warnings/blocks, plus `auto-fmt.sh` (PostToolUse: `rustfmt` on every `.rs` write, so qualifier-shortening can't break CI's `cargo fmt --check`). Shared hookify rules (`reply-lint`, `protect-templates`, `protect-cargo-toml`) are version-controlled; ad-hoc `hookify.*.local.md` rules stay per-developer (gitignored).
 - **Settings** (`.claude/settings.json`): hook wiring + a read-only `permissions.allow` list (cargo/git/gh introspection) to cut prompt friction.
-- **Git hooks**: pre-commit (clippy/fmt/typos/...) + a `pre-push` publish-list drift guard (`scripts/check-publish-drift.sh`); install via `scripts/setup-hooks.sh`.
+- **Git hooks**: pre-commit (clippy/fmt/typos/...) + `pre-push` hooks: a publish-list drift guard (`scripts/check-publish-drift.sh`) and the tests of the crates a push changes (`scripts/prepush/unit_tests_scoped.py`); install via `scripts/setup-hooks.sh`.
 - **MCP** (`.mcp.json`): Playwright browser automation for UI verification
 
 ### Key Skills

@@ -125,6 +125,25 @@ repos:
     stages: [pre-push]
     pass_filenames: false
     always_run: true
+  - id: unit-tests
+    name: tests of the crates being pushed
+    # PRE-PUSH ONLY (overrides default_stages: [pre-commit]). Runs the tests of
+    # every workspace crate with a file in the commits being pushed: the unit
+    # tests of its libraries and binaries in one `cargo test`, and the
+    # integration test a changed file under its `tests/` belongs to. A file
+    # deeper in that directory may be in any of them, so then all of them run.
+    # Before
+    # this, the hooks before a push ran the format, the lint, the audit and the
+    # drift checks, and never a test: #1701 went out with three of its own
+    # failing. A change to the workspace manifest or a Rust file outside
+    # `crates/` is not scoped to crates: the hook says so and lets the push
+    # through, and CI runs the whole workspace's tests. Past it once with
+    # `SKIP=unit-tests git push`. See `scripts/prepush/unit_tests_scoped.py`.
+    entry: python3 scripts/prepush/unit_tests_scoped.py
+    language: system
+    stages: [pre-push]
+    pass_filenames: false
+    always_run: true
   - id: dockerfile-rust-drift
     name: Dockerfile rust toolchain drift guard
     # Blocks a commit whose Dockerfile builder stage no longer matches
