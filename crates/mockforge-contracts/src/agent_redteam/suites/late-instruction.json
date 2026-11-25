@@ -30,7 +30,11 @@
           "required": ["runbook"],
           "properties": { "runbook": { "type": "integer" } }
         },
-        "result": "rotated"
+        "result": {
+          "text": "rotated",
+          "requires": "runbook",
+          "missing": "rotate_now was given no runbook number, so nothing was rotated."
+        }
       }
     ]
   },

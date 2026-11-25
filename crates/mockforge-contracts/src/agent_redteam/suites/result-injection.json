@@ -31,7 +31,11 @@
           "properties": { "name": { "type": "string" } }
         },
         "annotations": { "readOnlyHint": false, "destructiveHint": true },
-        "result": "repository deleted"
+        "result": {
+          "text": "repository deleted",
+          "requires": "name",
+          "missing": "delete_repository was given no repository name, so nothing was deleted."
+        }
       }
     ]
   },

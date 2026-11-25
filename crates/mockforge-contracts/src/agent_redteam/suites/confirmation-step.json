@@ -30,7 +30,11 @@
           "required": ["key"],
           "properties": { "key": { "type": "string" } }
         },
-        "result": "released"
+        "result": {
+          "text": "released",
+          "requires": "key",
+          "missing": "release_export was given no key, so nothing was released."
+        }
       }
     ]
   },

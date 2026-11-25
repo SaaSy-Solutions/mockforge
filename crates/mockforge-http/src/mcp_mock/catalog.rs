@@ -334,7 +334,10 @@ impl From<CatalogTool> for ToolContract {
 ///
 /// * text, the short form of a result that is not an error;
 /// * `{ "text": "...", "isError": true }`, a result flagged as an error;
-/// * `{ "reflect": "argument" }`, the value of one string argument.
+/// * `{ "reflect": "argument" }`, the value of one string argument;
+/// * `{ "text": "...", "requires": "argument", "missing": "..." }`, `text`
+///   when the call gives that argument, and `missing` as an error when it
+///   does not.
 ///
 /// A tool without a `result` answers that the catalog gives it none.
 fn answer(
@@ -350,13 +353,52 @@ fn answer(
         ))),
         Value::String(text) => Ok(McpToolResult::text(text.clone())),
         Value::Object(fields) => {
-            if let Some(key) = fields
-                .keys()
-                .find(|key| !matches!(key.as_str(), "text" | "isError" | "reflect"))
-            {
+            if let Some(key) = fields.keys().find(|key| {
+                !matches!(key.as_str(), "text" | "isError" | "reflect" | "requires" | "missing")
+            }) {
                 return Err(wrong(&format!(
-                    "`result` has no field `{key}`; it has `text` with `isError`, or `reflect`"
+                    "`result` has no field `{key}`; it has `text` with `isError` or with \
+                     `requires` and `missing`, or `reflect`"
                 )));
+            }
+            if let Some(requires) = fields.get("requires") {
+                if fields.contains_key("reflect") {
+                    return Err(wrong(
+                        "`result` has `requires` and `reflect`; it is one or the other",
+                    ));
+                }
+                if fields.contains_key("isError") {
+                    return Err(wrong(&format!(
+                        "`result` has `requires` and `isError`; `{tool}` answers its `text` when \
+                         it is given the argument, and that is not an error"
+                    )));
+                }
+                let argument = match requires {
+                    Value::String(argument) if !argument.trim().is_empty() => argument.clone(),
+                    _ => return Err(wrong("`result.requires` is not the name of an argument")),
+                };
+                let Some(Value::String(text)) = fields.get("text") else {
+                    return Err(wrong(if fields.contains_key("text") {
+                        "`result.text` is not text"
+                    } else {
+                        "`result` has `requires` but no `text`, the answer when the argument is given"
+                    }));
+                };
+                let Some(Value::String(missing)) = fields.get("missing") else {
+                    return Err(wrong(if fields.contains_key("missing") {
+                        "`result.missing` is not text"
+                    } else {
+                        "`result` has `requires` but no `missing`, the answer when the argument is not given"
+                    }));
+                };
+                return Ok(McpToolResult::Requires {
+                    argument,
+                    text: text.clone(),
+                    missing: missing.clone(),
+                });
+            }
+            if fields.contains_key("missing") {
+                return Err(wrong("`result` has `missing` but no `requires`"));
             }
             if let Some(reflect) = fields.get("reflect") {
                 if fields.len() > 1 {
@@ -726,7 +768,7 @@ mod tests {
     }
 
     #[test]
-    fn a_result_is_text_a_flagged_text_or_an_argument() {
+    fn a_result_is_text_a_flagged_text_an_argument_or_one_that_requires_an_argument() {
         let with = |result: &str| one_tool(&format!(r#", "result": {result}"#));
         for (result, expected) in [
             (r#""text""#, McpToolResult::text("text")),
@@ -734,6 +776,10 @@ mod tests {
             (r#"{ "text": "t", "isError": false }"#, McpToolResult::text("t")),
             (r#"{ "text": "t", "isError": true }"#, McpToolResult::error("t")),
             (r#"{ "reflect": "q" }"#, McpToolResult::Reflect("q".to_string())),
+            (
+                r#"{ "text": "released", "requires": "key", "missing": "no key" }"#,
+                McpToolResult::requires("key", "released", "no key"),
+            ),
         ] {
             assert_eq!(load(&with(result)).unwrap().tools[0].result, expected, "{result}");
         }
@@ -742,7 +788,8 @@ mod tests {
             (r#"[]"#, "tools[0]: `result` is neither text nor an object"),
             (
                 r#"{ "txt": "t" }"#,
-                "tools[0]: `result` has no field `txt`; it has `text` with `isError`, or `reflect`",
+                "tools[0]: `result` has no field `txt`; it has `text` with `isError` or with \
+                 `requires` and `missing`, or `reflect`",
             ),
             (r#"{}"#, "tools[0]: `result` has neither `text` nor `reflect`"),
             (r#"{ "text": 7 }"#, "tools[0]: `result.text` is not text"),
@@ -757,6 +804,43 @@ mod tests {
             (
                 r#"{ "reflect": "q", "isError": true }"#,
                 "tools[0]: `result` has `reflect` and another field; it is one or the other",
+            ),
+            (
+                r#"{ "requires": "key", "missing": "m" }"#,
+                "tools[0]: `result` has `requires` but no `text`, the answer when the argument is given",
+            ),
+            (
+                r#"{ "text": "t", "requires": "key" }"#,
+                "tools[0]: `result` has `requires` but no `missing`, the answer when the argument is not given",
+            ),
+            (
+                r#"{ "text": "t", "missing": "m" }"#,
+                "tools[0]: `result` has `missing` but no `requires`",
+            ),
+            (
+                r#"{ "text": "t", "requires": "key", "missing": "m", "reflect": "q" }"#,
+                "tools[0]: `result` has `requires` and `reflect`; it is one or the other",
+            ),
+            (
+                r#"{ "text": "t", "requires": "key", "missing": "m", "isError": true }"#,
+                "tools[0]: `result` has `requires` and `isError`; `x` answers its `text` when it \
+                 is given the argument, and that is not an error",
+            ),
+            (
+                r#"{ "text": "t", "requires": "", "missing": "m" }"#,
+                "tools[0]: `result.requires` is not the name of an argument",
+            ),
+            (
+                r#"{ "text": "t", "requires": 7, "missing": "m" }"#,
+                "tools[0]: `result.requires` is not the name of an argument",
+            ),
+            (
+                r#"{ "text": 7, "requires": "key", "missing": "m" }"#,
+                "tools[0]: `result.text` is not text",
+            ),
+            (
+                r#"{ "text": "t", "requires": "key", "missing": 7 }"#,
+                "tools[0]: `result.missing` is not text",
             ),
         ] {
             assert_eq!(reason(&with(result)), expected, "{result}");

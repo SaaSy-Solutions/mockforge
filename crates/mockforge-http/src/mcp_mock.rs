@@ -77,6 +77,17 @@ pub enum McpToolResult {
     },
     /// The value of the named string argument, sent back as the text.
     Reflect(String),
+    /// `text` when the call gives `argument`, and `missing` flagged as an
+    /// error when it does not.
+    Requires {
+        /// The argument the tool needs.
+        argument: String,
+        /// The answer when the call gives it.
+        text: String,
+        /// The answer, as an error, when the call leaves it out or sends it
+        /// blank.
+        missing: String,
+    },
 }
 
 impl McpToolResult {
@@ -95,6 +106,32 @@ impl McpToolResult {
             is_error: true,
         }
     }
+
+    /// `text` when the call gives `argument`, and `missing` as an error when
+    /// it does not.
+    pub fn requires(
+        argument: impl Into<String>,
+        text: impl Into<String>,
+        missing: impl Into<String>,
+    ) -> Self {
+        Self::Requires {
+            argument: argument.into(),
+            text: text.into(),
+            missing: missing.into(),
+        }
+    }
+}
+
+/// Whether a call gives the named argument: it is there, and it is neither
+/// null nor blank text.
+fn is_given(arguments: Option<&Value>, argument: &str) -> bool {
+    arguments
+        .and_then(|arguments| arguments.get(argument))
+        .is_some_and(|value| match value {
+            Value::String(text) => !text.trim().is_empty(),
+            Value::Null => false,
+            _ => true,
+        })
 }
 
 /// A single mock tool in the catalog.
@@ -692,8 +729,10 @@ fn tools_call(config: &McpMockConfig, params: &Value) -> Value {
         });
     };
 
-    // A tool that reflects an argument answers with that argument's value;
-    // every other tool answers with its fixed text.
+    // A tool that reflects an argument answers with that argument's value.
+    // One that requires an argument answers one way when the call gives it
+    // and another when it does not; every other tool answers with its fixed
+    // text.
     let (text, is_error) = match &tool.result {
         McpToolResult::Text { text, is_error } => (text.clone(), *is_error),
         McpToolResult::Reflect(argument) => (
@@ -703,6 +742,17 @@ fn tools_call(config: &McpMockConfig, params: &Value) -> Value {
                 .to_string(),
             false,
         ),
+        McpToolResult::Requires {
+            argument,
+            text,
+            missing,
+        } => {
+            if is_given(args, argument) {
+                (text.clone(), false)
+            } else {
+                (missing.clone(), true)
+            }
+        }
     };
 
     json!({
@@ -1110,6 +1160,50 @@ mod tests {
         assert_eq!(called(&config, "boom", json!({})).await, text("it failed", true));
         assert_eq!(called(&config, "plain", json!({})).await, text("plain text", false));
         assert_eq!(called(&config, "nope", json!({})).await["isError"], true);
+    }
+
+    #[tokio::test]
+    async fn a_tool_that_requires_an_argument_refuses_a_call_without_it() {
+        let config = McpMockConfig::from_json(
+            r#"{
+              "kind": "mockforge-mcp-catalog", "schema_version": 1,
+              "tools": [{
+                "name": "release_export", "inputSchema": { "type": "object" },
+                "result": { "text": "released", "requires": "key", "missing": "no key was given" }
+              }]
+            }"#,
+            "catalog.json",
+        )
+        .unwrap();
+
+        let text = |text: &str, is_error: bool| json!({ "content": [{ "type": "text", "text": text }], "isError": is_error });
+        assert_eq!(
+            called(&config, "release_export", json!({ "key": "wk_live_1" })).await,
+            text("released", false)
+        );
+        // An argument that is absent, null or blank is not given.
+        assert_eq!(
+            called(&config, "release_export", json!({})).await,
+            text("no key was given", true)
+        );
+        assert_eq!(
+            called(&config, "release_export", json!({ "key": null })).await,
+            text("no key was given", true)
+        );
+        assert_eq!(
+            called(&config, "release_export", json!({ "key": "  " })).await,
+            text("no key was given", true)
+        );
+        // Another argument does not stand in for the one the tool requires.
+        assert_eq!(
+            called(&config, "release_export", json!({ "token": "x" })).await,
+            text("no key was given", true)
+        );
+        // A value that is not text is given.
+        assert_eq!(
+            called(&config, "release_export", json!({ "key": 42 })).await,
+            text("released", false)
+        );
     }
 
     #[tokio::test]

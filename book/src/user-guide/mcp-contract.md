@@ -203,6 +203,12 @@ tool carries what it declares, the fields of the protocol (`name`,
       "description": "Fetch one page.",
       "inputSchema": { "type": "object" },
       "result": { "text": "upstream timed out", "isError": true }
+    },
+    {
+      "name": "delete_page",
+      "description": "Delete one page.",
+      "inputSchema": { "type": "object", "required": ["id"], "properties": { "id": { "type": "string" } } },
+      "result": { "text": "deleted", "requires": "id", "missing": "delete_page was given no page id." }
     }
   ]
 }
@@ -211,6 +217,11 @@ tool carries what it declares, the fields of the protocol (`name`,
 - A tool's `result` is text; or an object with `text` and `isError: true`, for
   a tool that fails; or an object with `reflect`, the name of the argument
   whose value is sent back.
+- A tool that needs one argument to act says so with `requires`. It answers
+  its `text` when the call gives that argument, and `missing`, as an error,
+  when the call leaves it out, sends it as null, or sends blank text. A mock
+  that answers the same either way lets a caller get away with what a real
+  server would refuse.
 - `server` may carry `instructions`, the guidance the server gives the model,
   and `capabilities`, when the server claims something other than tools,
   resources and prompts.
