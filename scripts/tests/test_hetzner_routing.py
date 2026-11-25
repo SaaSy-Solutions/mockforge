@@ -223,9 +223,30 @@ class HetznerRoutingTest(unittest.TestCase):
         self.assertEqual(health_events, {'schedule', 'workflow_dispatch'})
         self.assertEqual(re.findall(r"cron: '([^']+)'", health_header), ['47 * * * *'])
 
+    def test_the_setup_action_runs_the_published_image_and_proves_itself(self):
+        # The roadmap's `mockforge/setup` action, as far as this repository can
+        # ship it: no Linux binary is published to download, so the action
+        # runs the published image, and the pull request that changes it
+        # proves it on a hosted runner, which has Docker.
+        action = (WORKFLOWS.parent / 'actions/setup/action.yml').read_text()
+        self.assertIn('runs:\n  using: composite\n', action)
+        self.assertIn('default: ghcr.io/saasy-solutions/mockforge', action)
+        self.assertIn('--volume "$spec:/mockforge/$name:ro"', action)
+        self.assertNotIn('--privileged', action)
+        # What a workflow passes reaches the shell as a variable, and is
+        # never part of a command.
+        for number, line in enumerate(action.splitlines(), 1):
+            if '${{ inputs.' in line:
+                self.assertRegex(line, r'^\s+[A-Z_]+: \$\{\{ inputs\.[a-z]+ \}\}$', f'line {number}')
+        smoke = (WORKFLOWS / 'setup-action-smoke.yml').read_text()
+        self.assertEqual(route(jobs('setup-action-smoke.yml')['smoke']), 'ubuntu-latest')
+        self.assertIn('uses: ./.github/actions/setup', smoke)
+        self.assertIn('if: always()', smoke)  # the container is stopped, however the job ends
+
     def test_every_job_selects_hetzner_or_an_audited_exception(self):
         allowed = {HETZNER, ROUTE}
         exceptions = {('runner-health.yml', 'check'): 'ubuntu-latest',
+                      ('setup-action-smoke.yml', 'smoke'): 'ubuntu-latest',
                       ('docs-check.yml', 'docs'): 'ubuntu-latest',
                       ('production-smoke.yml', 'smoke'): 'ubuntu-latest',
                       ('release.yml', 'release-windows'): 'windows-latest',

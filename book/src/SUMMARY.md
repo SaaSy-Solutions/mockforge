@@ -52,6 +52,7 @@
 - [Directory Synchronization](user-guide/sync.md)
 - [Admin UI](user-guide/admin-ui.md)
 - [IDE Integration](user-guide/ide-integration.md)
+- [GitHub Action](user-guide/github-action.md)
 
 ## Testing & Resilience
 

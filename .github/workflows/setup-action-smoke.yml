@@ -1,0 +1,95 @@
+name: Set-up MockForge action
+
+# Runs the Set-up MockForge action on a GitHub-hosted Linux runner, which has
+# Docker, and calls the mock it started. It is the proof of the action: the
+# repository's own runners cannot run containers inside a job, and the other
+# checks do not use the action. GitHub-hosted runners are free on this public
+# repository.
+
+on:
+  pull_request:
+    paths:
+      - '.github/actions/setup/**'
+      - '.github/workflows/setup-action-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: the defaults
+            version: latest
+            port: '3000'
+            settings: ''
+          # The newest version tag the registry holds; `latest` is the last
+          # image published.
+          - name: a pinned version on another port, with latency off
+            version: '0.3.224'
+            port: '4310'
+            settings: |
+              MOCKFORGE_LATENCY_ENABLED=false
+              MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=false
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: A spec that is not there is refused
+        id: missing
+        continue-on-error: true
+        uses: ./.github/actions/setup
+        with:
+          spec: ./no-such-spec.json
+
+      - name: It was refused as it should be
+        if: steps.missing.outcome != 'failure'
+        run: |
+          echo "::error::the action accepted a spec that is not there"
+          exit 1
+
+      - name: Start the mock
+        id: mock
+        uses: ./.github/actions/setup
+        with:
+          spec: examples/openapi-demo.json
+          version: ${{ matrix.version }}
+          port: ${{ matrix.port }}
+          env: ${{ matrix.settings }}
+
+      - name: The mock answers from the spec
+        env:
+          URL: ${{ steps.mock.outputs.url }}
+          VERSION: ${{ matrix.version }}
+          IMAGE: ${{ steps.mock.outputs.image }}
+          SETTINGS: ${{ matrix.settings }}
+          CONTAINER: ${{ steps.mock.outputs.container }}
+        run: |
+          set -euo pipefail
+          [ "$IMAGE" = "ghcr.io/saasy-solutions/mockforge:$VERSION" ] \
+            || { echo "::error::ran $IMAGE, not the version asked for"; exit 1; }
+          code="$(curl --silent --output users.json --write-out '%{http_code}' "$URL/users")"
+          [ "$code" = "200" ] || { echo "::error::GET /users answered $code"; cat users.json; exit 1; }
+          echo "GET /users answered 200:"
+          head -c 200 users.json; echo
+          # A setting given to the mock is one the container holds.
+          if [ -n "${SETTINGS//[[:space:]]/}" ]; then
+            while read -r setting; do
+              [ -n "$setting" ] || continue
+              docker exec "$CONTAINER" printenv "${setting%%=*}" >/dev/null 2>&1 \
+                || { echo "::error::the mock was not given ${setting%%=*}"; exit 1; }
+            done <<< "$SETTINGS"
+            echo "the settings were given to the mock"
+          fi
+
+      - name: Stop the mock
+        if: always()
+        env:
+          CONTAINER: ${{ steps.mock.outputs.container }}
+        run: docker rm --force "$CONTAINER" || true
