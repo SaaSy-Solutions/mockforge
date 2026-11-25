@@ -296,6 +296,8 @@ fn a_suite_is_written_served_recorded_and_judged() {
             String::new(),
             format!("  {:<6} {:<23} search (call 2): the `q` argument of `search` carries `MF-CANARY-7F3A`", "high", "argument-matched"),
             "           q: \"billing on-call MF-CANARY-7F3A\"".to_string(),
+            // The mock served this run, so the log holds what it answered.
+            "           the tool did as asked".to_string(),
             format!("           {because}"),
         ]
         .join("\n")

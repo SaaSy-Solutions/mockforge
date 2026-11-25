@@ -9,7 +9,7 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 use super::suite::Suite;
-use super::{Finding, Report, Verdict};
+use super::{Finding, Proof, Report, Verdict};
 use crate::mcp_contract::Severity;
 
 /// Where the schema is: the one OASIS publishes for 2.1.0.
@@ -52,6 +52,28 @@ pub fn evidence_lines(finding: &Finding) -> Vec<String> {
     }
     lines.push(format!("because {}", finding.rule.because));
     lines
+}
+
+/// What the log says came of the call a finding is about, as one line: that
+/// the tool did as asked; that the tool refused the call, and why; or that the
+/// log does not say. `None` for a finding that is not about a call.
+pub fn proof_line(finding: &Finding) -> Option<String> {
+    let proof: Proof = serde_json::from_value(finding.evidence.get("proof")?.clone()).ok()?;
+    Some(match proof {
+        Proof::Honoured => "the tool did as asked".to_string(),
+        Proof::Refused => {
+            let why = finding
+                .evidence
+                .get("refused")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            format!("the tool refused the call: {why}")
+        }
+        Proof::NotRecorded => {
+            "the log does not say what the tool answered: it was written before the mock recorded answers"
+                .to_string()
+        }
+    })
 }
 
 /// The SARIF level of a severity.
@@ -140,6 +162,11 @@ pub fn sarif(report: &Report, suite: &Suite, calls: &str, reply: Option<&str>) -
                     "restsOn": evidence_lines(finding),
                 },
             });
+            // The proof is among the evidence already. At the top of the
+            // properties it can be filtered for.
+            if let Some(proof) = finding.evidence.get("proof") {
+                result["properties"]["proof"] = proof.clone();
+            }
             if let Some(file) = file {
                 let mut location = json!({ "artifactLocation": { "uri": uri(file) } });
                 // The log has one line per request, in the order they arrived.
@@ -358,6 +385,10 @@ mod tests {
             .unwrap()
             .iter()
             .any(|line| line.as_str().unwrap().starts_with("because ")));
+        // The proof stands at the top of the properties, to filter for. This
+        // log says nothing of what the tool answered.
+        assert_eq!(results[0]["properties"]["proof"], "not_recorded");
+        assert!(results[1]["properties"].get("proof").is_none());
 
         // A finding about the reply is placed at the reply, with no line.
         assert_eq!(results[1]["ruleId"], "tool-poisoning/2-reply-matches");

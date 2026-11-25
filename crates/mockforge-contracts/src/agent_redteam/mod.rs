@@ -23,9 +23,9 @@ pub mod suite;
 
 pub use calls::{read_calls, Answer, Call, Client};
 pub use error::AgentRedteamError;
-pub use formats::{evidence_lines, headline, junit, rule_name, sarif};
+pub use formats::{evidence_lines, headline, junit, proof_line, rule_name, sarif};
 pub use judge::{
-    judge, judge_with_reply, Finding, FindingKind, Reply, Report, Verdict, REPORT_KIND,
+    judge, judge_with_reply, Finding, FindingKind, Proof, Reply, Report, Verdict, REPORT_KIND,
     REPORT_SCHEMA_VERSION,
 };
 pub use suite::{shipped, shipped_ids, Rule, RuleKind, Suite, SUITE_KIND, SUITE_SCHEMA_VERSION};
