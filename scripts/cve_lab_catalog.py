@@ -193,9 +193,14 @@ PACKS = {
         "classifier": "middleware-bypass",
     },
     "CVE-2024-4577": {
-        # Verified on the lab host; declared explicitly because packs without a
-        # "verified" field count as unverified.
-        "verified": True,
+        # Not verified. A pack is verified when a run with the image it names
+        # has reproduced its trigger on a lab host, and that image is still
+        # pending review (see image_status below): the request was checked on
+        # a lab host, but no one can reproduce it through the runner until a
+        # reviewed image is published. So the pack is hidden by default like
+        # every other unverified pack, instead of being listed next to packs
+        # that run.
+        "verified": False,
         "catalog": {
             "schema_version": 1,
             "pack_revision": 1,

@@ -260,6 +260,9 @@ class InputTests(unittest.TestCase):
         self.assertIn("CVE-2026-111497", packs)
         self.assertIn("CVE-2026-33017", packs)
         self.assertIn("CVE-2024-27199", packs)
+        # Its lab image is still pending review, so nobody can reproduce it
+        # through the runner: hidden like any other unverified pack.
+        self.assertNotIn("CVE-2024-4577", packs)
         for cve in ("CVE-2026-109618", "CVE-2026-109619"):
             self.assertNotIn(cve, packs)
 
@@ -703,6 +706,30 @@ class Cve20244577PackTests(unittest.TestCase):
                 engine.prepare("docker", self.pack)
         command.assert_not_called()
 
+    def test_the_pack_is_hidden_and_refused_as_unverified_by_default(self):
+        # "Verified" means a run with the image the pack names has reproduced
+        # the trigger on a lab host. This image is pending review, so the pack
+        # is not listed next to packs that run, and the refusal says why.
+        self.assertIs(self.pack["verified"], False)
+        self.assertNotIn("CVE-2024-4577", lab.verified_cves())
+        self.assertIn("CVE-2024-4577", lab.verified_cves(include_unverified=True))
+        err = io.StringIO()
+        with patch.object(lab, "prepare") as prepare, patch.object(
+            lab, "run"
+        ) as run, contextlib.redirect_stderr(err):
+            self.assertEqual(
+                lab.main(["run", "CVE-2024-4577", "--output-dir", "unused-output"]), 1
+            )
+        prepare.assert_not_called()
+        run.assert_not_called()
+        self.assertIn(
+            "CVE-2024-4577 is an unverified lab pack (its lab image is still "
+            "pending review, so its trigger has not been reproduced through the "
+            "runner); pass --include-unverified to run it for development",
+            err.getvalue(),
+        )
+        self.assertNotIn("has not reproduced on a lab host", err.getvalue())
+
     def test_run_of_the_pending_pack_refuses_and_records_why(self):
         stdout = io.StringIO()
         stderr = io.StringIO()
@@ -713,11 +740,21 @@ class Cve20244577PackTests(unittest.TestCase):
         ), contextlib.redirect_stderr(stderr):
             output = Path(directory) / "out"
             self.assertEqual(
-                lab.main(["run", "CVE-2024-4577", "--output-dir", str(output)]), 1
+                lab.main(
+                    [
+                        "--include-unverified",
+                        "run",
+                        "CVE-2024-4577",
+                        "--output-dir",
+                        str(output),
+                    ]
+                ),
+                1,
             )
             command.assert_not_called()
             report = json.loads((output / "report.json").read_text())
         self.assertIn("Lab image pending review", stdout.getvalue())
+        self.assertIs(report["pack_verified"], False)
         self.assertEqual(report["verdict"], "inconclusive")
         self.assertIn("not pinned by digest", report["reason"])
 
@@ -4528,8 +4565,8 @@ class UnverifiedRunReasonTests(unittest.TestCase):
         self.assertIn("known state of the pack", reason)
         # Verified and digest-pinned, so it runs end to end and is named.
         self.assertIn("CVE-2025-29927", reason)
-        # Verified but its lab image is still pending review, so it is not
-        # named as a pack that runs end to end.
+        # Unverified, because its lab image is still pending review, so it is
+        # not named as a pack that runs end to end.
         self.assertNotIn("CVE-2024-4577", reason)
 
     def test_verified_pack_baseline_failure_keeps_the_plain_reason(self):
