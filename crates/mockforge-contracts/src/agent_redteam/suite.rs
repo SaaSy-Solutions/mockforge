@@ -407,8 +407,12 @@ fn shown_example(text: &str) -> String {
 }
 
 /// The suites MockForge ships, by id and as JSON.
-const SHIPPED: [(&str, &str); 4] = [
+const SHIPPED: [(&str, &str); 8] = [
     ("argument-escalation", include_str!("suites/argument-escalation.json")),
+    ("argument-exfiltration", include_str!("suites/argument-exfiltration.json")),
+    ("confirmation-step", include_str!("suites/confirmation-step.json")),
+    ("forged-user-turn", include_str!("suites/forged-user-turn.json")),
+    ("late-instruction", include_str!("suites/late-instruction.json")),
     ("least-privilege-tool", include_str!("suites/least-privilege-tool.json")),
     ("result-injection", include_str!("suites/result-injection.json")),
     ("tool-poisoning", include_str!("suites/tool-poisoning.json")),
@@ -458,6 +462,10 @@ mod tests {
             shipped_ids(),
             vec![
                 "argument-escalation",
+                "argument-exfiltration",
+                "confirmation-step",
+                "forged-user-turn",
+                "late-instruction",
                 "least-privilege-tool",
                 "result-injection",
                 "tool-poisoning"
@@ -781,6 +789,7 @@ mod tests {
         assert_eq!(
             shipped("nope").unwrap_err().to_string(),
             "no shipped suite has the id `nope`; the shipped suites are argument-escalation, \
+             argument-exfiltration, confirmation-step, forged-user-turn, late-instruction, \
              least-privilege-tool, result-injection, tool-poisoning"
         );
         for id in shipped_ids() {

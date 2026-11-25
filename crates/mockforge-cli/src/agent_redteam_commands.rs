@@ -795,7 +795,7 @@ mod tests {
             assert!(lines.contains(&format!("\n{id}\n")), "{id}");
         }
         assert!(text.contains(
-            "\n4 suite(s). To run one:\n  mockforge agent-redteam write argument-escalation\n"
+            "\n8 suite(s). To run one:\n  mockforge agent-redteam write argument-escalation\n"
         ));
         assert!(text.contains(
             "  rules   call `search`; no `q` of `search` may match MF-CANARY-[0-9A-F]{4}; \
@@ -809,10 +809,10 @@ mod tests {
         assert!(text.contains("  tools   search, get_service\n"));
         // A pattern is tried against examples of its own when the suite is read.
         // The list says how many, so that a rule without any stands out.
-        assert_eq!(text.matches("  tested   ").count(), 4);
+        assert_eq!(text.matches("  tested   ").count(), 8);
         assert!(
             text.contains(
-                "\n  tested   3 pattern(s) against 15 example(s): 7 to match, 8 to miss\n\n4 suite(s). To run one:"
+                "\n  tested   3 pattern(s) against 15 example(s): 7 to match, 8 to miss\n\n8 suite(s). To run one:"
             ),
             "{text}"
         );
