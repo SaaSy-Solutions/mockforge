@@ -12,6 +12,7 @@ import uuid
 from pathlib import Path
 
 import cve_lab_sent as sent
+from cve_lab_authz import require_authorization
 from cve_lab_catalog import DETECT_PACKS
 from cve_lab_evidence import CLASSIFIERS
 from cve_lab_transport import target_url, unverified_context, version_probe
@@ -20,6 +21,7 @@ from cve_lab_transport import target_url, unverified_context, version_probe
 def detect(args):
     pack = DETECT_PACKS[args.cve]
     target_url(args.target)
+    authorization = require_authorization(args.target, assume_yes=args.i_am_authorized)
     output = Path(args.output_dir).resolve()
     output.mkdir(parents=True, exist_ok=False)
     run_id = uuid.uuid4().hex
@@ -30,6 +32,7 @@ def detect(args):
         "mode": "detect-only",
         "pack": pack["catalog"],
         "target": args.target,
+        "authorization": authorization,
         "verdict": "unknown",
         "sent_requests": "sent_requests.jsonl",
         "scope": "Passive version fingerprint from response headers; the vulnerability is not tested",
