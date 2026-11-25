@@ -455,13 +455,43 @@ async fn handle_rpc(
         // Notification: acknowledge with 202 and no body.
         return StatusCode::ACCEPTED.into_response();
     };
-    // Written down before it is answered, whatever the answer is: what an
-    // agent sent is the evidence, including what was refused.
-    if let Some(log) = &config.record {
-        if let Err(error) = log.record(&req).await {
+    let response = respond(&config, &headers, id.clone(), &req);
+    // Written down before it is sent, whatever the answer is: what an agent
+    // sent is the evidence, including what was refused. The answer is written
+    // down with a tool call, so that a finding can say whether the tool did
+    // what was asked, refused it, or was never reached.
+    let Some(log) = &config.record else {
+        return response;
+    };
+    let (parts, body) = response.into_parts();
+    let Ok(bytes) = axum::body::to_bytes(body, RECORDED_ANSWER_LIMIT).await else {
+        if let Err(error) = log.record(&req, None).await {
             tracing::warn!(%error, "the mock MCP call log could not be written");
         }
+        return Json(error_response(
+            id,
+            INTERNAL_ERROR,
+            "the mock could not hold its own answer to write it down",
+        ))
+        .into_response();
+    };
+    let answered = serde_json::from_slice::<Value>(&bytes).ok();
+    if let Err(error) = log.record(&req, answered.as_ref()).await {
+        tracing::warn!(%error, "the mock MCP call log could not be written");
     }
+    Response::from_parts(parts, axum::body::Body::from(bytes))
+}
+
+/// Revision 2026-07-28 and the handshake alike: the mock could not hold its
+/// own answer back to write the call log.
+const INTERNAL_ERROR: i64 = -32603;
+
+/// The largest answer the mock holds back to write it into the call log.
+/// Answers are JSON built here, a few kilobytes at most.
+const RECORDED_ANSWER_LIMIT: usize = 1 << 20;
+
+/// Answer a request that expects one, on the revision it speaks.
+fn respond(config: &McpMockConfig, headers: &HeaderMap, id: Value, req: &Value) -> Response {
     let method = req.get("method").and_then(|m| m.as_str()).unwrap_or("");
     let params = req.get("params").cloned().unwrap_or(Value::Null);
 
@@ -481,9 +511,9 @@ async fn handle_rpc(
         .is_some_and(Value::is_string);
     let names_method_in_header = headers.contains_key("mcp-method");
     if carries_version || names_method_in_header || method == "server/discover" {
-        return modern(&config, &headers, id, method, &params);
+        return modern(config, headers, id, method, &params);
     }
-    legacy(&config, id, method, &params)
+    legacy(config, id, method, &params)
 }
 
 /// Answer a request on the `initialize` handshake that earlier revisions use.
@@ -1362,6 +1392,26 @@ mod tests {
         headers.push(("mcp-name", "echo".to_string()));
         let (status, _) = modern_on(&config, "tools/call", echo, &headers).await;
         assert_eq!(status, 200);
+        // A tool call the tool refuses.
+        let mut headers = proper("tools/call");
+        headers.push(("mcp-name", "fail_tool".to_string()));
+        let (status, _) = modern_on(
+            &config,
+            "tools/call",
+            on(MODERN_PROTOCOL, json!({ "name": "fail_tool", "arguments": {} })),
+            &headers,
+        )
+        .await;
+        assert_eq!(status, 200);
+        // A tool call the mock refuses before any tool is called.
+        let (status, _) = modern_on(
+            &config,
+            "tools/call",
+            on(MODERN_PROTOCOL, json!({ "name": "echo", "arguments": {} })),
+            &[],
+        )
+        .await;
+        assert_eq!(status, 400);
         // A request the mock refuses is written down too.
         let (status, _) = modern_on(&config, "tools/list", json!({}), &proper("tools/list")).await;
         assert_eq!(status, 400);
@@ -1374,13 +1424,33 @@ mod tests {
         let calls = mockforge_contracts::agent_redteam::read_calls(&text, "calls.jsonl").unwrap();
         let sent: Vec<(u64, &str)> =
             calls.iter().map(|call| (call.seq, call.method.as_str())).collect();
-        assert_eq!(sent, vec![(1, "tools/call"), (2, "tools/list")], "{text}");
+        assert_eq!(
+            sent,
+            vec![
+                (1, "tools/call"),
+                (2, "tools/call"),
+                (3, "tools/call"),
+                (4, "tools/list")
+            ],
+            "{text}"
+        );
         assert_eq!(calls[0].tool.as_deref(), Some("echo"));
         assert_eq!(calls[0].arguments, Some(json!({ "text": "hello" })));
         assert_eq!(
             calls[0].client.as_ref().map(|client| client.name.as_str()),
             Some("agent-under-test")
         );
-        assert!(calls[1].tool.is_none());
+        // What the mock answered is written down with a tool call, and only then.
+        assert_eq!(calls[0].answer.as_ref().map(|answer| answer.is_error), Some(false));
+        assert_eq!(calls[0].answer.as_ref().and_then(|answer| answer.text.as_deref()), None);
+        assert_eq!(
+            calls[1].answer.as_ref().map(|answer| (answer.is_error, answer.text.as_deref())),
+            Some((true, Some("simulated tool failure")))
+        );
+        assert_eq!(
+            calls[2].answer.as_ref().and_then(|answer| answer.refused.as_deref()),
+            Some("Header mismatch: Mcp-Method header is missing")
+        );
+        assert!(calls[3].tool.is_none() && calls[3].answer.is_none());
     }
 }

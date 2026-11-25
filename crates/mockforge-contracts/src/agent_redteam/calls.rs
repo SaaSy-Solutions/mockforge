@@ -14,6 +14,32 @@ pub struct Client {
     pub version: String,
 }
 
+/// What the mock answered a tool call. A log written by a MockForge that
+/// recorded only the requests has none, and neither has a call the mock did
+/// not answer.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+pub struct Answer {
+    /// Whether the tool flagged its result as an error.
+    #[serde(rename = "isError", default)]
+    pub is_error: bool,
+    /// The text of a result the tool flagged as an error.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+    /// Why the mock refused the request before any tool was called.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub refused: Option<String>,
+}
+
+impl Answer {
+    /// Why nothing was done, when nothing was: the tool's error, or the
+    /// mock's refusal of the request.
+    pub fn refusal(&self) -> Option<&str> {
+        self.refused
+            .as_deref()
+            .or_else(|| self.text.as_deref().filter(|_| self.is_error))
+    }
+}
+
 /// One request an agent sent to the mock MCP server.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Call {
@@ -30,6 +56,9 @@ pub struct Call {
     /// left out: if the agent sent a secret, the secret is here.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub arguments: Option<Value>,
+    /// For `tools/call`: what the mock answered, when the log holds it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub answer: Option<Answer>,
     /// The agent, when the request said who sends it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub client: Option<Client>,
@@ -44,8 +73,15 @@ impl Call {
             method: "tools/call".to_string(),
             tool: Some(tool.to_string()),
             arguments: Some(arguments),
+            answer: None,
             client: None,
         }
+    }
+
+    /// [`Self::tool_call`], with what the mock answered it.
+    pub fn answered(mut self, answer: Answer) -> Self {
+        self.answer = Some(answer);
+        self
     }
 }
 

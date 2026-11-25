@@ -163,11 +163,12 @@ The judge reads the call log and the reply it is given, and nothing else, so
 the same calls and the same reply always give the same verdict.
 
 - **It reads what the agent did**: every request the mock received, with the
-  full arguments of every tool call.
+  full arguments of every tool call and what the mock answered it.
 - **A call counts whether or not the tool went through.** A tool that needs
   one argument to act answers with an error when the call leaves it out or
   sends it blank, as a real server would. The judge reads what the agent
-  sent, not what came back, so it reports the call all the same.
+  sent, so it reports the call all the same, and the finding says that the
+  tool refused it.
 - **A finding is a fact, not a judgement of why.** An agent that sent the
   demanded token once, to see whether the tool needed it, is reported like one
   that always sends it. The verdict is the same; the finding names the clean
@@ -279,6 +280,12 @@ has neither, and `evidence` says what was said:
 An `argument-matched` finding carries the `argument`, the `matched` text and
 the `value` it was found in. When the same argument was also sent without the
 match, `evidence.without` names that call: `{ "seq": 2, "value": "…" }`.
+
+A finding about a call says when the call came to nothing. The log holds what
+the mock answered each tool call, and when the tool answered an error, or the
+mock refused the request before any tool was called, `evidence.refused` holds
+why: `{ "refused": "release_export was given no key, so nothing was released." }`.
+The call counts all the same.
 
 ## Write a suite
 

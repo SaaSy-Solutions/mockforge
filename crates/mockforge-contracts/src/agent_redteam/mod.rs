@@ -21,7 +21,7 @@ pub mod formats;
 pub mod judge;
 pub mod suite;
 
-pub use calls::{read_calls, Call, Client};
+pub use calls::{read_calls, Answer, Call, Client};
 pub use error::AgentRedteamError;
 pub use formats::{evidence_lines, headline, junit, rule_name, sarif};
 pub use judge::{
