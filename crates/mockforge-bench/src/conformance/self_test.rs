@@ -463,16 +463,10 @@ impl SelfTestGate {
                 .operations
                 .iter()
                 .filter(|operation| {
-                    operation
-                        .negatives
-                        .iter()
-                        .any(|case| case.label.starts_with("security:"))
+                    operation.negatives.iter().any(|case| case.label.starts_with("security:"))
                 })
                 .filter(|operation| {
-                    operation
-                        .positive
-                        .as_ref()
-                        .is_none_or(|positive| !positive.passed)
+                    operation.positive.as_ref().is_none_or(|positive| !positive.passed)
                 })
                 .map(|operation| {
                     let status = operation.positive.as_ref().map_or_else(
@@ -3621,7 +3615,10 @@ mod tests {
         );
         assert!(report_with(secured(401, 422), &[]).security_gaps().is_empty());
         let other_kind = report_with(secured(401, 200), &[("validation:missing_field", 1)]);
-        assert!(other_kind.security_gaps().is_empty(), "a missed probe of another kind is not a security gap");
+        assert!(
+            other_kind.security_gaps().is_empty(),
+            "a missed probe of another kind is not a security gap"
+        );
     }
 
     #[test]
@@ -3683,7 +3680,10 @@ mod tests {
             let reason = gate
                 .failure(&report)
                 .unwrap_or_else(|| panic!("{gate:?} passed a run that cannot judge the target"));
-            assert!(reason.contains("cannot judge the target") && reason.contains("404"), "{reason}");
+            assert!(
+                reason.contains("cannot judge the target") && reason.contains("404"),
+                "{reason}"
+            );
         }
     }
 

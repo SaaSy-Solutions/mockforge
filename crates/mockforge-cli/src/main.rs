@@ -697,12 +697,12 @@ enum ConformanceFailOn {
 fn self_test_gate(
     scope: Option<ConformanceFailOn>,
 ) -> mockforge_bench::conformance::self_test::SelfTestGate {
-        use mockforge_bench::conformance::self_test::SelfTestGate;
-        match scope {
-            None => SelfTestGate::Off,
-            Some(ConformanceFailOn::Security) => SelfTestGate::Security,
-            Some(ConformanceFailOn::All) => SelfTestGate::All,
-        }
+    use mockforge_bench::conformance::self_test::SelfTestGate;
+    match scope {
+        None => SelfTestGate::Off,
+        Some(ConformanceFailOn::Security) => SelfTestGate::Security,
+        Some(ConformanceFailOn::All) => SelfTestGate::All,
+    }
 }
 
 #[derive(Subcommand)]
