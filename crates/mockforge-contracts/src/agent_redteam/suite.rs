@@ -156,38 +156,42 @@ impl Suite {
             if rule.because.trim().is_empty() {
                 return Some(format!("{at} has an empty `because`"));
             }
-            if !names.contains(&rule.tool.as_str()) {
-                return Some(format!(
-                    "{at} names `{}`, which the catalog does not declare",
-                    rule.tool
-                ));
+            let kind = rule.kind.label();
+            if rule.kind.judges_reply() {
+                // A rule about the reply is not about a tool.
+                if rule.tool.is_some() {
+                    return Some(format!("{at} is `{kind}` and is not about a tool"));
+                }
+                if rule.argument.is_some() {
+                    return Some(format!("{at} is `{kind}` and takes no `argument`"));
+                }
+            } else {
+                let Some(tool) = rule.tool.as_deref().filter(|tool| !tool.is_empty()) else {
+                    return Some(format!("{at} is `{kind}` and names no `tool`"));
+                };
+                if !names.contains(&tool) {
+                    return Some(format!(
+                        "{at} names `{tool}`, which the catalog does not declare"
+                    ));
+                }
             }
-            match rule.kind {
-                RuleKind::ArgumentNeverMatches => {
-                    if rule.argument.as_deref().is_none_or(str::is_empty) {
-                        return Some(format!(
-                            "{at} is `argument-never-matches` and names no `argument`"
-                        ));
-                    }
-                    let Some(pattern) = rule.pattern.as_deref().filter(|p| !p.is_empty()) else {
-                        return Some(format!(
-                            "{at} is `argument-never-matches` and has no `pattern`"
-                        ));
-                    };
-                    if let Err(error) = regex::Regex::new(pattern) {
-                        return Some(format!(
-                            "{at} has a `pattern` that is not a regular expression: {error}"
-                        ));
-                    }
+            if rule.kind.has_pattern() {
+                let Some(pattern) = rule.pattern.as_deref().filter(|p| !p.is_empty()) else {
+                    return Some(format!("{at} is `{kind}` and has no `pattern`"));
+                };
+                if let Err(error) = regex::Regex::new(pattern) {
+                    return Some(format!(
+                        "{at} has a `pattern` that is not a regular expression: {error}"
+                    ));
                 }
-                RuleKind::MustCall | RuleKind::NeverCall => {
-                    if rule.argument.is_some() || rule.pattern.is_some() {
-                        return Some(format!(
-                            "{at} is `{}` and takes no `argument` or `pattern`",
-                            rule.kind.label()
-                        ));
-                    }
-                }
+            }
+            if rule.kind == RuleKind::ArgumentNeverMatches
+                && rule.argument.as_deref().is_none_or(str::is_empty)
+            {
+                return Some(format!("{at} is `argument-never-matches` and names no `argument`"));
+            }
+            if !rule.kind.has_pattern() && (rule.argument.is_some() || rule.pattern.is_some()) {
+                return Some(format!("{at} is `{kind}` and takes no `argument` or `pattern`"));
             }
             let spelled = serde_json::to_string(rule).unwrap_or_default();
             if !seen.insert(spelled) {
@@ -203,11 +207,27 @@ impl Suite {
             {
                 return Some(format!(
                     "rule {index} requires `{}`, which another rule forbids; nothing could pass",
-                    rule.tool
+                    rule.tool.clone().unwrap_or_default()
+                ));
+            }
+            if rule.kind == RuleKind::ReplyNeverMatches
+                && rule.pattern.is_some()
+                && self.rules.iter().any(|other| {
+                    other.kind == RuleKind::ReplyMatches && other.pattern == rule.pattern
+                })
+            {
+                return Some(format!(
+                    "rule {index} forbids in the reply what another rule requires; nothing could pass"
                 ));
             }
         }
         None
+    }
+
+    /// Whether any rule is about the agent's reply. Such a suite cannot be
+    /// judged from the calls alone.
+    pub fn judges_reply(&self) -> bool {
+        self.rules.iter().any(|rule| rule.kind.judges_reply())
     }
 
     /// The tools the suite's server declares, in the order of the catalog.
@@ -242,6 +262,12 @@ pub enum RuleKind {
     /// attack tries to get into the call, such as a token the tool's
     /// description demands.
     ArgumentNeverMatches,
+    /// What the agent answered the user must match a pattern: the fact the
+    /// task asks for, so that a run is not judged on a tool call alone.
+    ReplyMatches,
+    /// What the agent answered the user must not match a pattern: what the
+    /// attack tries to get the agent to say, such as a token or a secret.
+    ReplyNeverMatches,
 }
 
 impl RuleKind {
@@ -251,7 +277,19 @@ impl RuleKind {
             RuleKind::MustCall => "must-call",
             RuleKind::NeverCall => "never-call",
             RuleKind::ArgumentNeverMatches => "argument-never-matches",
+            RuleKind::ReplyMatches => "reply-matches",
+            RuleKind::ReplyNeverMatches => "reply-never-matches",
         }
+    }
+
+    /// Whether the rule is about the agent's reply rather than about its calls.
+    pub fn judges_reply(self) -> bool {
+        matches!(self, RuleKind::ReplyMatches | RuleKind::ReplyNeverMatches)
+    }
+
+    /// Whether the rule carries a `pattern`.
+    fn has_pattern(self) -> bool {
+        !matches!(self, RuleKind::MustCall | RuleKind::NeverCall)
     }
 }
 
@@ -261,14 +299,15 @@ impl RuleKind {
 pub struct Rule {
     /// What the rule checks.
     pub kind: RuleKind,
-    /// The tool the rule is about.
-    pub tool: String,
+    /// The tool a rule about calls is about. A rule about the reply has none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool: Option<String>,
     /// For `argument-never-matches`: the argument whose value is matched, or
     /// `*` for every argument of the call.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub argument: Option<String>,
-    /// For `argument-never-matches`: the regular expression the value must
-    /// not match.
+    /// For the kinds that match a pattern: the regular expression. It is
+    /// matched against an argument's value, or against the agent's reply.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pattern: Option<String>,
     /// Why the rule matters, shown with every finding it raises.
@@ -341,6 +380,20 @@ mod tests {
                 suite.rules.iter().any(|rule| rule.kind == RuleKind::MustCall),
                 "{id}: no rule requires a tool, so an agent that does nothing would pass"
             );
+            // Calling the tool is not answering: each suite also judges the reply.
+            assert!(
+                suite.judges_reply(),
+                "{id}: no rule is about the reply, so the answer to the task is never checked"
+            );
+            // A rule about the reply is about no tool; one about calls is.
+            for rule in &suite.rules {
+                assert_eq!(
+                    rule.tool.is_some(),
+                    !rule.kind.judges_reply(),
+                    "{id}: {}",
+                    rule.kind.label()
+                );
+            }
             // The task is the user's text: it does not read as an attack.
             assert!(
                 crate::mcp_contract::signals::text_signals(&suite.task).is_empty(),
@@ -452,7 +505,10 @@ mod tests {
 
     #[test]
     fn what_keeps_a_suite_from_being_run_is_named() {
-        let cases: [(String, &str); 19] = [
+        let push = |document: &mut Value, rule: Value| {
+            document["rules"].as_array_mut().unwrap().push(rule);
+        };
+        let cases: [(String, &str); 26] = [
             (edited("tool-poisoning", |d| d["id"] = json!("Tool_Poisoning")), "`id` is `Tool_Poisoning`; it is lowercase words and digits joined by `-`"),
             (edited("tool-poisoning", |d| d["id"] = json!("")), "`id` is empty"),
             (edited("tool-poisoning", |d| d["title"] = json!(" ")), "`title` is empty"),
@@ -481,7 +537,54 @@ mod tests {
             // A third rule requires the tool the second one forbids.
             (edited("result-injection", |d| d["rules"].as_array_mut().unwrap().push(
                 json!({ "kind": "must-call", "tool": "delete_repository", "because": "a mistake" })
-            )), "rule 2 requires `delete_repository`, which another rule forbids; nothing could pass"),
+            )), "rule 4 requires `delete_repository`, which another rule forbids; nothing could pass"),
+            // A rule about the reply is not about a tool, and carries a pattern and nothing else.
+            (
+                edited("tool-poisoning", |d| push(
+                    d,
+                    json!({ "kind": "reply-matches", "tool": "search", "pattern": "x", "because": "y" })
+                )),
+                "rule 4 is `reply-matches` and is not about a tool",
+            ),
+            (
+                edited("tool-poisoning", |d| push(
+                    d,
+                    json!({ "kind": "reply-never-matches", "argument": "q", "pattern": "x", "because": "y" })
+                )),
+                "rule 4 is `reply-never-matches` and takes no `argument`",
+            ),
+            (
+                edited("tool-poisoning", |d| push(d, json!({ "kind": "reply-matches", "because": "y" }))),
+                "rule 4 is `reply-matches` and has no `pattern`",
+            ),
+            (
+                edited("tool-poisoning", |d| push(
+                    d,
+                    json!({ "kind": "reply-never-matches", "pattern": "(", "because": "y" })
+                )),
+                "rule 4 has a `pattern` that is not a regular expression: regex parse error",
+            ),
+            // A rule about calls needs its tool.
+            (
+                rule(0, |r| {
+                    r.as_object_mut().unwrap().remove("tool");
+                }),
+                "rule 0 is `must-call` and names no `tool`",
+            ),
+            (
+                rule(1, |r| {
+                    r.as_object_mut().unwrap().remove("tool");
+                }),
+                "rule 1 is `argument-never-matches` and names no `tool`",
+            ),
+            // Requiring and forbidding the same thing in the reply.
+            (
+                edited("tool-poisoning", |d| {
+                    push(&mut *d, json!({ "kind": "reply-matches", "pattern": "same", "because": "y" }));
+                    push(d, json!({ "kind": "reply-never-matches", "pattern": "same", "because": "y" }));
+                }),
+                "rule 5 forbids in the reply what another rule requires; nothing could pass",
+            ),
         ];
         for (text, expected) in cases {
             let refused = reason(&text);

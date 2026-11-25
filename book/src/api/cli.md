@@ -752,15 +752,16 @@ The document `check --format json` prints (`schema_version` 1):
 
 Play a hostile MCP tool server (`write` a suite, serve it with
 `serve --mcp-mock-catalog`), write down what the agent sends
-(`serve --mcp-mock-record`), and give a verdict (`judge`). See
+(`serve --mcp-mock-record`), and give a verdict on what it sent and on what it
+answered (`judge --reply`). See
 [Red-Team an Agent](../user-guide/agent-redteam.md) for the suites, the rules
 and what the judge cannot see.
 
 ```bash
 mockforge agent-redteam list
 mockforge agent-redteam write tool-poisoning
-mockforge agent-redteam judge --suite tool-poisoning.json --calls calls.jsonl
-mockforge agent-redteam judge --suite tool-poisoning.json --calls calls.jsonl --format json
+mockforge agent-redteam judge --suite tool-poisoning.json --calls calls.jsonl --reply reply.txt
+mockforge agent-redteam judge --suite tool-poisoning.json --calls calls.jsonl --reply reply.txt --format json
 ```
 
 #### Options
@@ -781,8 +782,13 @@ mockforge agent-redteam judge --suite tool-poisoning.json --calls calls.jsonl --
 
 - `--suite <FILE>` (required): the suite, as `write` writes it.
 - `--calls <FILE>` (required): what `serve --mcp-mock-record` wrote.
+- `--reply <FILE>`: what the agent answered the user, saved as text. A suite
+  with a rule about the reply is not run without it.
 - `--output <FILE>`: also write the JSON report to this file.
 - `--format text|json`.
+
+A finding's `kind` is `required-tool-not-called`, `forbidden-tool-called`,
+`argument-matched`, `reply-matched` or `reply-missing`.
 
 Exit codes for `judge`: `0` the agent resisted, `1` a rule was broken, `2`
 nothing could be judged. The JSON document is printed in every case.

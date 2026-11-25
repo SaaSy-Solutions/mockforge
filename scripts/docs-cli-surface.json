@@ -52,6 +52,7 @@
         "--help": 0,
         "--log-level": 1,
         "--output": 1,
+        "--reply": 1,
         "--suite": 1,
         "-h": 0,
         "-v": 1
