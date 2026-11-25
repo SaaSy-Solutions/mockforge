@@ -617,9 +617,7 @@ impl Scrubber {
                 continue;
             };
             let inside = &after[..end];
-            let width = inside
-                .strip_prefix(':')
-                .and_then(|width| width.parse::<usize>().ok());
+            let width = inside.strip_prefix(':').and_then(|width| width.parse::<usize>().ok());
             if !inside.is_empty() && width.is_none() {
                 // Text that only starts like a marker, such as `{{counterfeit}}`.
                 rendered.push_str(MARKER);
@@ -640,16 +638,12 @@ impl Scrubber {
     /// given the first time it was seen, so it reads the same everywhere.
     fn number_for(&self, kind: Pseudonym, value: &str) -> u64 {
         let key = (kind, value.to_string());
-        let mut pseudonyms = self
-            .pseudonyms
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut pseudonyms =
+            self.pseudonyms.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         if let Some(number) = pseudonyms.get(&key) {
             return *number;
         }
-        let number = self
-            .deterministic_counter
-            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let number = self.deterministic_counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         if pseudonyms.len() < self.pseudonym_cache {
             pseudonyms.insert(key, number);
         }
@@ -722,10 +716,8 @@ impl Scrubber {
 fn redact_headers(headers: &mut String) {
     let redacted = match serde_json::from_str::<HashMap<String, String>>(headers) {
         Ok(map) => {
-            let redacted: HashMap<String, String> = map
-                .keys()
-                .map(|name| (name.clone(), REDACTED.to_string()))
-                .collect();
+            let redacted: HashMap<String, String> =
+                map.keys().map(|name| (name.clone(), REDACTED.to_string())).collect();
             serde_json::to_string(&redacted)
         }
         Err(_) => Ok("{}".to_string()),
@@ -1048,7 +1040,8 @@ mod tests {
         let first = scrubber.scrub_string(&format!("user {USER}"), ScrubTarget::All);
         let again = scrubber.scrub_string(&format!("order for {USER}"), ScrubTarget::All);
         let other = scrubber.scrub_string(&format!("user {ORDER}"), ScrubTarget::All);
-        let upper = scrubber.scrub_string(&format!("user {}", USER.to_uppercase()), ScrubTarget::All);
+        let upper =
+            scrubber.scrub_string(&format!("user {}", USER.to_uppercase()), ScrubTarget::All);
         assert_eq!(first, "user 00000000-0000-0000-0000-000000000000");
         assert_eq!(
             again, "order for 00000000-0000-0000-0000-000000000000",
@@ -1098,7 +1091,10 @@ mod tests {
         let first = scrubber.scrub_string(USER, ScrubTarget::All);
         let second = scrubber.scrub_string(ORDER, ScrubTarget::All);
         assert_eq!(first, "00000000-0000-0000-0000-000000000000");
-        assert_eq!(first, second, "a constant replacement still collapses every value, as configured");
+        assert_eq!(
+            first, second,
+            "a constant replacement still collapses every value, as configured"
+        );
         assert_eq!(
             scrubber.deterministic_counter.load(std::sync::atomic::Ordering::SeqCst),
             0,
@@ -1132,7 +1128,11 @@ mod tests {
             "a value past the cache still gets its own number"
         );
         assert_eq!(scrubber.scrub_string(ORDER, ScrubTarget::All), "2", "but is not remembered");
-        assert_eq!(scrubber.scrub_string(USER, ScrubTarget::All), "0", "while a remembered one keeps it");
+        assert_eq!(
+            scrubber.scrub_string(USER, ScrubTarget::All),
+            "0",
+            "while a remembered one keeps it"
+        );
     }
 
     #[test]
@@ -1166,7 +1166,10 @@ mod tests {
         assert_eq!(Scrubber::render_counter("id-{{counter:04}}", 42), "id-0042");
         assert_eq!(Scrubber::render_counter("{{counter:6}}/{{counter}}", 42), "000042/42");
         // Text that only looks like a marker is left alone.
-        assert_eq!(Scrubber::render_counter("{{counterfeit}} {{counter", 42), "{{counterfeit}} {{counter");
+        assert_eq!(
+            Scrubber::render_counter("{{counterfeit}} {{counter", 42),
+            "{{counterfeit}} {{counter"
+        );
     }
 
     #[test]
@@ -1174,7 +1177,10 @@ mod tests {
         assert!(!Scrubber::default().redacts_everything());
         assert!(!uuid_scrubber("{{counter}}", 0).redacts_everything());
         assert!(Scrubber::redact_everything().redacts_everything());
-        assert!(REDACTED_BODY.contains("MOCKFORGE_CAPTURE_SCRUB"), "a recording says why it is redacted");
+        assert!(
+            REDACTED_BODY.contains("MOCKFORGE_CAPTURE_SCRUB"),
+            "a recording says why it is redacted"
+        );
     }
 
     #[test]

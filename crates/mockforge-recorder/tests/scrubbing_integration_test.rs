@@ -583,7 +583,14 @@ async fn test_the_same_identifier_reads_the_same_across_exchanges() {
     let mut exchanges = Vec::new();
     for body in &bodies {
         let request_id = recorder
-            .record_http_request("POST", "/api/events", None, &headers, Some(body.as_bytes()), &RequestContext::new(None, None, None))
+            .record_http_request(
+                "POST",
+                "/api/events",
+                None,
+                &headers,
+                Some(body.as_bytes()),
+                &RequestContext::new(None, None, None),
+            )
             .await
             .unwrap();
         exchanges.push(recorder.database().get_exchange(&request_id).await.unwrap().unwrap());
@@ -592,8 +599,14 @@ async fn test_the_same_identifier_reads_the_same_across_exchanges() {
     let body = |at: usize| exchanges[at].request.body.clone().unwrap();
     let user_pseudonym = "00000000-0000-0000-0000-000000000000";
     assert!(body(0).contains(user_pseudonym));
-    assert!(body(1).contains(user_pseudonym), "the same user is the same user in the next exchange");
-    assert!(body(1).contains("00000000-0000-0000-0000-000000000001"), "another identifier gets its own");
+    assert!(
+        body(1).contains(user_pseudonym),
+        "the same user is the same user in the next exchange"
+    );
+    assert!(
+        body(1).contains("00000000-0000-0000-0000-000000000001"),
+        "another identifier gets its own"
+    );
     assert!(body(2).contains(user_pseudonym));
     for recorded in exchanges.iter().map(|exchange| exchange.request.body.as_ref().unwrap()) {
         assert!(!recorded.contains(user));
@@ -604,14 +617,17 @@ async fn test_the_same_identifier_reads_the_same_across_exchanges() {
 #[tokio::test]
 async fn test_redact_everything_when_nothing_can_be_scrubbed_selectively() {
     let db = RecorderDatabase::new_in_memory().await.unwrap();
-    let recorder = Recorder::with_scrubbing(db, Scrubber::redact_everything(), CaptureFilter::default());
+    let recorder =
+        Recorder::with_scrubbing(db, Scrubber::redact_everything(), CaptureFilter::default());
 
     let headers = HashMap::from([
         ("authorization".to_string(), "Bearer s3cret-token".to_string()),
         ("content-type".to_string(), "application/json".to_string()),
     ]);
-    let body = json!({ "email": "john.doe@company.com", "card": "4111-1111-1111-1111" }).to_string();
-    let context = RequestContext::new(Some("203.0.113.7"), Some("trace-secret"), Some("span-secret"));
+    let body =
+        json!({ "email": "john.doe@company.com", "card": "4111-1111-1111-1111" }).to_string();
+    let context =
+        RequestContext::new(Some("203.0.113.7"), Some("trace-secret"), Some("span-secret"));
     let request_id = recorder
         .record_http_request(
             "POST",
@@ -655,7 +671,10 @@ async fn test_redact_everything_when_nothing_can_be_scrubbed_selectively() {
             "{secret} was recorded although nothing could be scrubbed selectively"
         );
     }
-    assert!(recorded.contains("MOCKFORGE_CAPTURE_SCRUB"), "the recording says why: {recorded}");
+    assert!(
+        recorded.contains("MOCKFORGE_CAPTURE_SCRUB"),
+        "the recording says why: {recorded}"
+    );
     // What an exchange is routed and matched by is kept.
     assert_eq!(
         (exchange.request.method.as_str(), exchange.request.path.as_str()),
