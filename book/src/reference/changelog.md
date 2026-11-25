@@ -8,9 +8,14 @@
 
 - **[Contracts][AI]** `mockforge mcp-contract pin` records what an MCP tool server declares, and `mockforge mcp-contract check` fails CI when it changes: a rewritten tool description, a new tool, an argument that becomes required, annotations that claim less restraint. It speaks the 2026-07-28 protocol and the earlier `initialize` handshake, never calls a tool, and never writes a credential into a contract. A server that cannot be asked exits 2 rather than passing as unchanged.
 - **[Contracts][AI]** The MCP mock behind `serve --mcp-mock` answers protocol revision 2026-07-28: `server/discover`, the per-request `_meta` fields, the `Mcp-Method`, `MCP-Protocol-Version` and `Mcp-Name` header checks, and `resultType` on every result. The `initialize` handshake of earlier revisions is unchanged.
+- **[Contracts][AI]** `mockforge serve --mcp-mock-catalog FILE` serves the MCP mock from a file. A catalog (`kind` `mockforge-mcp-catalog`) declares the server, its tools, resources and prompts, and what each tool answers: fixed text, an error, or the value of an argument. A pinned contract written by `mockforge mcp-contract pin` is replayed as the server that was pinned, with the same declarations, instructions and identity, so an agent can be tested against a real tool surface without its credential. A file that cannot be served stops startup and says why. `examples/mcp-mock-catalog.json` is a starting point.
 - **[Reality]** `mockforge cve detect` runs a passive, detection-only version check for the PHP2Shell (CVE-2026-109618, CVE-2026-109619) and Node2Shell (CVE-2026-111497) advisories. It sends one read-only `GET /`, compares the announced PHP or Node.js version with the fixed releases, and reports likely-affected, not-affected or unknown. Node.js usually reports unknown because it rarely announces its version.
 - **[Reality]** CVE lab runs against an operator `--target` require an authorization attestation (`--i-am-authorized`, `MOCKFORGE_CVE_AUTHORIZED=1`, or an interactive confirmation) and record it in `report.json`. (#1682)
 - **[Reality]** New managed CVE lab pack for CVE-2026-33017: one reviewed request against the pinned Langflow 1.8.1 image reproduces unauthenticated code execution through the public flow build, verified on a lab host.
+
+### Changed
+
+- **[Contracts][AI]** In `mockforge_http::mcp_mock`, a tool keeps its whole declaration. `McpTool` now has `declaration` and `result` (build one with `McpTool::new`), and `McpMockConfig` has `server_info`, `instructions` and `capabilities` in place of `server_name` and `server_version`. The `echo` tool of the default catalog reflects its argument because its result says so, not because of its name.
 
 ### Fixed
 

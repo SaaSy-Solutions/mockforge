@@ -4331,6 +4331,7 @@
       "--llm-mock-upstream": 1,
       "--log-level": 1,
       "--mcp-mock": 0,
+      "--mcp-mock-catalog": 1,
       "--merge-conflicts": 1,
       "--metrics": 0,
       "--metrics-port": 1,

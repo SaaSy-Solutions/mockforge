@@ -575,6 +575,18 @@ struct ServeCliArgs {
     #[arg(long, help_heading = "AI Features")]
     pub mcp_mock: bool,
 
+    /// Serve the mock MCP server from a catalog file instead of the built-in
+    /// catalog: a `mockforge-mcp-catalog` document, or a pinned contract that
+    /// `mockforge mcp-contract pin` wrote, replayed as the server that was
+    /// pinned. A file that cannot be served stops startup
+    #[arg(
+        long,
+        help_heading = "AI Features",
+        requires = "mcp_mock",
+        value_name = "FILE"
+    )]
+    pub mcp_mock_catalog: Option<PathBuf>,
+
     /// Admin UI port (defaults to config or 9080)
     #[arg(long, help_heading = "Admin & UI")]
     pub admin_port: Option<u16>,
@@ -3121,6 +3133,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 llm_mock_api_key: args.llm_mock_api_key,
                 llm_mock_cassette: args.llm_mock_cassette,
                 mcp_mock: args.mcp_mock,
+                mcp_mock_catalog: args.mcp_mock_catalog,
                 metrics: args.observability.metrics,
                 metrics_port: args.observability.metrics_port,
                 tracing: args.observability.tracing,

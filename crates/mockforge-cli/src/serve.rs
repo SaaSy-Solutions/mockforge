@@ -133,6 +133,9 @@ pub(crate) struct ServeArgs {
     /// `--mcp-mock` (#913): mount the mock MCP server (JSON-RPC over HTTP at
     /// `/mcp`).
     pub(crate) mcp_mock: bool,
+    /// `--mcp-mock-catalog`: the mock MCP server's catalog file, a catalog or
+    /// a pinned contract to replay. The built-in catalog when absent.
+    pub(crate) mcp_mock_catalog: Option<PathBuf>,
     /// `--conformance-buffer-size` (round 31). Mirrors
     /// `MOCKFORGE_CONFORMANCE_BUFFER_SIZE`. None = honour env or default 256.
     pub(crate) conformance_buffer_size: Option<usize>,
@@ -230,6 +233,7 @@ impl Default for ServeArgs {
             llm_mock_api_key: None,
             llm_mock_cassette: None,
             mcp_mock: false,
+            mcp_mock_catalog: None,
             conformance_buffer_size: None,
             conformance_buffer_unique: false,
             inject_response_violations: false,
@@ -2258,12 +2262,27 @@ pub async fn handle_serve(
         // Mount the mock MCP server (#913) so an agent acting as an MCP client can
         // talk to MockForge over JSON-RPC. Opt-in via --mcp-mock.
         if serve_args.mcp_mock {
-            http_app = http_app.merge(mockforge_http::mcp_mock::router(
-                mockforge_http::mcp_mock::McpMockConfig::default(),
-            ));
+            // A catalog file is read before anything listens, so a file that
+            // cannot be served stops startup with the reason.
+            let catalog = match &serve_args.mcp_mock_catalog {
+                Some(path) => mockforge_http::mcp_mock::McpMockConfig::from_file(path)?,
+                None => mockforge_http::mcp_mock::McpMockConfig::default(),
+            };
+            http_app = http_app.merge(mockforge_http::mcp_mock::router(catalog.clone()));
             println!(
                 "✅ Mock MCP server available at POST /mcp (JSON-RPC: initialize, tools/list, tools/call, resources/list, prompts/list)"
             );
+            if let Some(path) = &serve_args.mcp_mock_catalog {
+                println!(
+                    "📖 Mock MCP catalog {}: server `{}` {}, {} tool(s), {} resource(s), {} prompt(s)",
+                    path.display(),
+                    catalog.server_info["name"].as_str().unwrap_or("?"),
+                    catalog.server_info["version"].as_str().unwrap_or("?"),
+                    catalog.tools.len(),
+                    catalog.resources.len(),
+                    catalog.prompts.len()
+                );
+            }
         }
 
         // Mount the recorder API on the public HTTP app so callers can list,

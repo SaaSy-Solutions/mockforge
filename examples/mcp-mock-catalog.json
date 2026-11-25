@@ -1,0 +1,62 @@
+{
+  "kind": "mockforge-mcp-catalog",
+  "schema_version": 1,
+  "server": {
+    "name": "acme-tools",
+    "version": "1.2.3",
+    "instructions": "Use `search` before `fetch_page`. `fetch_page` fails on purpose, so an agent can be tested against a tool that breaks."
+  },
+  "tools": [
+    {
+      "name": "search",
+      "title": "Search",
+      "description": "Search the web.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["q"],
+        "properties": {
+          "q": { "type": "string", "description": "What to search for." }
+        }
+      },
+      "annotations": { "readOnlyHint": true },
+      "result": { "reflect": "q" }
+    },
+    {
+      "name": "count",
+      "description": "Count the rows of a table.",
+      "inputSchema": { "type": "object" },
+      "result": "7 rows"
+    },
+    {
+      "name": "fetch_page",
+      "description": "Fetch one page.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["url"],
+        "properties": {
+          "url": { "type": "string", "description": "The page to fetch." }
+        }
+      },
+      "result": { "text": "upstream timed out", "isError": true }
+    }
+  ],
+  "resources": [
+    {
+      "uri": "file:///readme.md",
+      "name": "README",
+      "description": "The project's readme.",
+      "mimeType": "text/markdown",
+      "text": "# Acme tools\n\nA mock.\n"
+    }
+  ],
+  "prompts": [
+    {
+      "name": "summarize",
+      "description": "Summarize a page.",
+      "arguments": [
+        { "name": "url", "description": "The page to summarize.", "required": true }
+      ],
+      "text": "Summarize the page at the given address in three sentences."
+    }
+  ]
+}
