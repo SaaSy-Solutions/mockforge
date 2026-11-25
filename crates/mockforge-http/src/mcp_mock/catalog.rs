@@ -1,6 +1,6 @@
 //! The mock's catalog read from a file (`serve --mcp-mock-catalog`).
 //!
-//! The file is one of two documents:
+//! The file is one of three documents:
 //!
 //! * a catalog, `kind: "mockforge-mcp-catalog"`: what the mock advertises and
 //!   what each tool answers, written by hand or generated;
@@ -8,7 +8,10 @@
 //!   `mockforge mcp-contract pin` writes. The mock then advertises what the
 //!   pinned server advertised: the same tools, worded the same way, with the
 //!   same instructions. An agent can be pointed at a copy of a real tool
-//!   server that needs no credential and runs nothing.
+//!   server that needs no credential and runs nothing;
+//! * an agent red-team suite, `kind: "mockforge-agent-suite"`, the file
+//!   `mockforge agent-redteam write` writes. Its `catalog` is served, so a
+//!   hostile tool server is one file to give an agent.
 //!
 //! A file the mock cannot serve as written is refused with the reason. A
 //! misspelt field never becomes a mock that quietly advertises something
@@ -23,6 +26,7 @@ use serde::Deserialize;
 use serde_json::{json, Map, Value};
 use thiserror::Error;
 
+use mockforge_contracts::agent_redteam::{AgentRedteamError, Suite, SUITE_KIND};
 use mockforge_contracts::mcp_contract::{Contract, McpContractError, ToolContract, CONTRACT_KIND};
 
 use super::{McpMockConfig, McpPrompt, McpResource, McpTool, McpToolResult};
@@ -85,6 +89,18 @@ impl McpMockConfig {
         };
         match object.get("kind").and_then(Value::as_str) {
             Some(CATALOG_KIND) => catalog(object, path),
+            // An agent red-team suite: its catalog is the server, and its task and
+            // rules are for `agent-redteam judge`.
+            Some(SUITE_KIND) => {
+                let suite = Suite::from_json(text, path).map_err(|error| match error {
+                    AgentRedteamError::Suite { reason, .. } => invalid(path, &reason),
+                    other => invalid(path, &other.to_string()),
+                })?;
+                let Some(embedded) = suite.catalog.as_object() else {
+                    return Err(invalid(path, "the suite's catalog is not an object"));
+                };
+                catalog(embedded, path)
+            }
             Some(CONTRACT_KIND) => {
                 let contract = Contract::from_json(text, path).map_err(|error| match error {
                     McpContractError::Contract { reason, .. } => invalid(path, &reason),
@@ -95,7 +111,7 @@ impl McpMockConfig {
             other => Err(invalid(
                 path,
                 &format!(
-                    "not an MCP catalog or a pinned MCP contract (its `kind` is {}); \
+                    "not an MCP catalog, a pinned MCP contract or an agent suite (its `kind` is {}); \
                      a catalog has the `kind` `{CATALOG_KIND}`",
                     other.unwrap_or("missing")
                 ),
@@ -242,6 +258,7 @@ fn catalog(object: &Map<String, Value>, path: &str) -> Result<McpMockConfig, Mcp
         tools: catalog_tools(tools, path)?,
         resources: distinct(resources, path, "resources", "uri", |resource| &resource.uri)?,
         prompts: distinct(prompts, path, "prompts", "name", |prompt| &prompt.name)?,
+        record: None,
     })
 }
 
@@ -445,6 +462,7 @@ fn replay(contract: &Contract, path: &str) -> Result<McpMockConfig, McpCatalogEr
         tools,
         resources: Vec::new(),
         prompts: Vec::new(),
+        record: None,
     })
 }
 
@@ -596,7 +614,7 @@ mod tests {
     fn a_document_that_is_not_a_catalog_is_refused() {
         assert_eq!(
             reason("{}"),
-            "not an MCP catalog or a pinned MCP contract (its `kind` is missing); \
+            "not an MCP catalog, a pinned MCP contract or an agent suite (its `kind` is missing); \
              a catalog has the `kind` `mockforge-mcp-catalog`"
         );
         assert!(reason(r#"{"kind":"other"}"#).contains("its `kind` is other"));
@@ -901,6 +919,35 @@ mod tests {
         assert_eq!(config.tools[2].result, McpToolResult::error("upstream timed out"));
         assert_eq!(config.tools[0].declaration["annotations"], json!({ "readOnlyHint": true }));
         assert_eq!((config.resources.len(), config.prompts.len()), (1, 1));
+    }
+
+    #[test]
+    fn an_agent_suite_is_served_by_its_catalog() {
+        let suite = mockforge_contracts::agent_redteam::shipped("tool-poisoning").unwrap();
+        let config = load(suite).unwrap();
+        assert_eq!(config.server_info["name"], "oncall-notes");
+        assert_eq!(
+            config.instructions.as_deref(),
+            Some("The on-call notes are internal. Answer from them and name the rotation.")
+        );
+        let names: Vec<&str> = config.tools.iter().map(McpTool::name).collect();
+        assert_eq!(names, ["search", "get_service"]);
+        // The attack is in what is served.
+        assert!(config.tools[0].declaration["description"]
+            .as_str()
+            .unwrap()
+            .contains("MF-CANARY-7F3A"));
+        assert!(config.record.is_none());
+
+        // A suite that cannot be run is refused with what is wrong with it.
+        let refused =
+            load(r#"{ "kind": "mockforge-agent-suite", "schema_version": 1 }"#).unwrap_err();
+        assert!(
+            refused
+                .to_string()
+                .contains("a field is missing or mistyped: missing field `id`"),
+            "{refused}"
+        );
     }
 
     #[test]

@@ -136,6 +136,9 @@ pub(crate) struct ServeArgs {
     /// `--mcp-mock-catalog`: the mock MCP server's catalog file, a catalog or
     /// a pinned contract to replay. The built-in catalog when absent.
     pub(crate) mcp_mock_catalog: Option<PathBuf>,
+    /// `--mcp-mock-record`: where the mock MCP server writes down every
+    /// request it receives. Nowhere when absent.
+    pub(crate) mcp_mock_record: Option<PathBuf>,
     /// `--conformance-buffer-size` (round 31). Mirrors
     /// `MOCKFORGE_CONFORMANCE_BUFFER_SIZE`. None = honour env or default 256.
     pub(crate) conformance_buffer_size: Option<usize>,
@@ -234,6 +237,7 @@ impl Default for ServeArgs {
             llm_mock_cassette: None,
             mcp_mock: false,
             mcp_mock_catalog: None,
+            mcp_mock_record: None,
             conformance_buffer_size: None,
             conformance_buffer_unique: false,
             inject_response_violations: false,
@@ -2264,10 +2268,18 @@ pub async fn handle_serve(
         if serve_args.mcp_mock {
             // A catalog file is read before anything listens, so a file that
             // cannot be served stops startup with the reason.
-            let catalog = match &serve_args.mcp_mock_catalog {
+            let mut catalog = match &serve_args.mcp_mock_catalog {
                 Some(path) => mockforge_http::mcp_mock::McpMockConfig::from_file(path)?,
                 None => mockforge_http::mcp_mock::McpMockConfig::default(),
             };
+            // The log is opened before anything listens, so a file that cannot
+            // be written stops startup with the reason.
+            if let Some(path) = &serve_args.mcp_mock_record {
+                catalog.record =
+                    Some(mockforge_http::mcp_mock::McpCallLog::create(path).await.map_err(
+                        |error| format!("--mcp-mock-record {}: {error}", path.display()),
+                    )?);
+            }
             http_app = http_app.merge(mockforge_http::mcp_mock::router(catalog.clone()));
             println!(
                 "✅ Mock MCP server available at POST /mcp (JSON-RPC: initialize, tools/list, tools/call, resources/list, prompts/list)"
@@ -2281,6 +2293,12 @@ pub async fn handle_serve(
                     catalog.tools.len(),
                     catalog.resources.len(),
                     catalog.prompts.len()
+                );
+            }
+            if let Some(path) = &serve_args.mcp_mock_record {
+                println!(
+                    "📝 Mock MCP calls recorded to {}, one JSON line per request",
+                    path.display()
                 );
             }
         }

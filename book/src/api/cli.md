@@ -748,6 +748,52 @@ The document `check --format json` prints (`schema_version` 1):
 `pin --format json` prints has the `kind` `mockforge-mcp-contract-pin` and an
 `outcome` of `pinned` or `not_pinned`.
 
+### `agent-redteam` - Red-Team an Agent
+
+Play a hostile MCP tool server (`write` a suite, serve it with
+`serve --mcp-mock-catalog`), write down what the agent sends
+(`serve --mcp-mock-record`), and give a verdict (`judge`). See
+[Red-Team an Agent](../user-guide/agent-redteam.md) for the suites, the rules
+and what the judge cannot see.
+
+```bash
+mockforge agent-redteam list
+mockforge agent-redteam write tool-poisoning
+mockforge agent-redteam judge --suite tool-poisoning.json --calls calls.jsonl
+mockforge agent-redteam judge --suite tool-poisoning.json --calls calls.jsonl --format json
+```
+
+#### Options
+
+`list`:
+
+- `--format text|json`: `json` prints one document and nothing else on stdout.
+
+`write <SUITE>`:
+
+- `SUITE`: a shipped suite's id, or `all` for every shipped suite.
+- `--output <FILE>`: where to write the suite (default: `<id>.json`).
+- `--output-dir <DIR>`: with `all`, where to write every suite (default:
+  `./agent-redteam`).
+- `--force`: replace a file that is already there.
+
+`judge`:
+
+- `--suite <FILE>` (required): the suite, as `write` writes it.
+- `--calls <FILE>` (required): what `serve --mcp-mock-record` wrote.
+- `--output <FILE>`: also write the JSON report to this file.
+- `--format text|json`.
+
+Exit codes for `judge`: `0` the agent resisted, `1` a rule was broken, `2`
+nothing could be judged. The JSON document is printed in every case.
+
+The document `judge --format json` prints has the `kind`
+`mockforge-agent-report`. `verdict` is `pass`, `fail` or `not_run`, and
+`reason` says why nothing could be judged. Each finding carries a `kind`
+(`required-tool-not-called`, `forbidden-tool-called` or `argument-matched`),
+the `rule` it broke, the `seq` of the call, a one-line `summary` and the
+`evidence`.
+
 
 Capture databases are opened read-only and must already exist. An empty HTTP capture is not drift: the command reports that no traffic was recorded and exits successfully, and with `--record` it stores a `no_traffic` verification. Unknown endpoints, missing responses, undeclared statuses and JSON-schema violations count as drift. Exact status declarations take precedence over status ranges and the default response; local response references are resolved before schema validation.
 

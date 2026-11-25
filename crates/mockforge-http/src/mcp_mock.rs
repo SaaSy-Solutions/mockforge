@@ -43,7 +43,9 @@ use axum::{
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
 
+mod call_log;
 mod catalog;
+pub use call_log::McpCallLog;
 pub use catalog::{McpCatalogError, CATALOG_KIND, CATALOG_SCHEMA_VERSION};
 
 /// The protocol revision this mock serves when a request carries the
@@ -60,6 +62,8 @@ const LEGACY_PROTOCOL: &str = "2024-11-05";
 const VERSION_KEY: &str = "io.modelcontextprotocol/protocolVersion";
 const CAPABILITIES_KEY: &str = "io.modelcontextprotocol/clientCapabilities";
 const SERVER_INFO_KEY: &str = "io.modelcontextprotocol/serverInfo";
+/// The `_meta` key that carries the client's identity on revision 2026-07-28.
+const CLIENT_INFO_KEY: &str = "io.modelcontextprotocol/clientInfo";
 
 /// What `tools/call` answers for a mock tool.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -187,6 +191,9 @@ pub struct McpMockConfig {
     pub resources: Vec<McpResource>,
     /// Prompt catalog returned by `prompts/list` and fetched by `prompts/get`.
     pub prompts: Vec<McpPrompt>,
+    /// Where every request the mock receives is written down, when anything
+    /// is written down (`serve --mcp-mock-record`).
+    pub record: Option<McpCallLog>,
 }
 
 impl Default for McpMockConfig {
@@ -201,6 +208,7 @@ impl Default for McpMockConfig {
             tools: default_tools(),
             resources: default_resources(),
             prompts: default_prompts(),
+            record: None,
         }
     }
 }
@@ -410,6 +418,13 @@ async fn handle_rpc(
         // Notification: acknowledge with 202 and no body.
         return StatusCode::ACCEPTED.into_response();
     };
+    // Written down before it is answered, whatever the answer is: what an
+    // agent sent is the evidence, including what was refused.
+    if let Some(log) = &config.record {
+        if let Err(error) = log.record(&req).await {
+            tracing::warn!(%error, "the mock MCP call log could not be written");
+        }
+    }
     let method = req.get("method").and_then(|m| m.as_str()).unwrap_or("");
     let params = req.get("params").cloned().unwrap_or(Value::Null);
 
@@ -1229,5 +1244,49 @@ mod tests {
             .as_str()
             .unwrap()
             .contains("MockForge replay of `search`"));
+    }
+
+    #[tokio::test]
+    async fn what_an_agent_sends_is_written_down_and_notifications_are_not() {
+        let directory =
+            std::env::temp_dir().join(format!("mockforge-mcp-record-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("calls.jsonl");
+        let config = McpMockConfig {
+            record: Some(McpCallLog::create(&path).await.unwrap()),
+            ..McpMockConfig::default()
+        };
+
+        // A tool call from an agent that says who it is.
+        let mut echo = json!({ "name": "echo", "arguments": { "text": "hello" } });
+        echo["_meta"] = json!({
+            VERSION_KEY: MODERN_PROTOCOL,
+            CAPABILITIES_KEY: {},
+            CLIENT_INFO_KEY: { "name": "agent-under-test", "version": "0.1" },
+        });
+        let mut headers = proper("tools/call");
+        headers.push(("mcp-name", "echo".to_string()));
+        let (status, _) = modern_on(&config, "tools/call", echo, &headers).await;
+        assert_eq!(status, 200);
+        // A request the mock refuses is written down too.
+        let (status, _) = modern_on(&config, "tools/list", json!({}), &proper("tools/list")).await;
+        assert_eq!(status, 400);
+        // A notification expects no answer and is not evidence of anything.
+        call_on(&config, json!({"jsonrpc":"2.0","method":"notifications/initialized"})).await;
+        drop(config);
+
+        let text = std::fs::read_to_string(&path).unwrap();
+        std::fs::remove_dir_all(&directory).unwrap();
+        let calls = mockforge_contracts::agent_redteam::read_calls(&text, "calls.jsonl").unwrap();
+        let sent: Vec<(u64, &str)> =
+            calls.iter().map(|call| (call.seq, call.method.as_str())).collect();
+        assert_eq!(sent, vec![(1, "tools/call"), (2, "tools/list")], "{text}");
+        assert_eq!(calls[0].tool.as_deref(), Some("echo"));
+        assert_eq!(calls[0].arguments, Some(json!({ "text": "hello" })));
+        assert_eq!(
+            calls[0].client.as_ref().map(|client| client.name.as_str()),
+            Some("agent-under-test")
+        );
+        assert!(calls[1].tool.is_none());
     }
 }

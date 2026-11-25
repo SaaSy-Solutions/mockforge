@@ -55,6 +55,7 @@
 //! (only `contract_drift::forecasting` referenced it via `crate::incidents::types`)
 //! and was deleted under #600.
 
+pub mod agent_redteam;
 pub mod consumer_contracts;
 pub mod contract_drift;
 pub mod contract_validation;

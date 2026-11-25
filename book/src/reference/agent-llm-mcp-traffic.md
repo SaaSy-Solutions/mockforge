@@ -215,6 +215,11 @@ What the mock advertises is the built-in catalog, or the file that
 eras are answered from that one catalog. See
 [MCP Contract Pinning](../user-guide/mcp-contract.md).
 
+With `--mcp-mock-record FILE` the mock also writes down every request it
+receives, one JSON line each, in full. `mockforge agent-redteam judge` reads
+that file and checks what an agent sent against a suite's rules: see
+[Red-Team an Agent](../user-guide/agent-redteam.md).
+
 ### 2c. Handshake: `initialize` (earlier revisions)
 
 A request that carries none of the above gets the handshake that earlier

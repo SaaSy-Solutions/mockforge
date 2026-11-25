@@ -57,6 +57,7 @@
 
 - [Mock Fidelity and Drift Detection](user-guide/mock-fidelity.md)
 - [MCP Contract Pinning](user-guide/mcp-contract.md)
+- [Red-Team an Agent](user-guide/agent-redteam.md)
 - [Load Testing](user-guide/load-testing.md)
   - [Security Rule Test Packs](user-guide/security-rule-test-packs.md)
   - [Per-CVE Rule Packs](user-guide/cve-packs.md)

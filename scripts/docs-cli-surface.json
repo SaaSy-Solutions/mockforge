@@ -28,6 +28,69 @@
      "subcommands": {},
      "variadic": false
     },
+    "agent-redteam": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--log-level": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {
+      "help": {
+       "aliases": {},
+       "flags": {},
+       "free": true,
+       "subcommands": {}
+      },
+      "judge": {
+       "aliases": {},
+       "flags": {
+        "--calls": 1,
+        "--format": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "--output": 1,
+        "--suite": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 2,
+       "subcommands": {},
+       "variadic": false
+      },
+      "list": {
+       "aliases": {},
+       "flags": {
+        "--format": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "write": {
+       "aliases": {},
+       "flags": {
+        "--force": 0,
+        "--help": 0,
+        "--log-level": 1,
+        "--output": 1,
+        "--output-dir": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      }
+     },
+     "variadic": false
+    },
     "ai": {
      "aliases": {},
      "flags": {
@@ -4332,6 +4395,7 @@
       "--log-level": 1,
       "--mcp-mock": 0,
       "--mcp-mock-catalog": 1,
+      "--mcp-mock-record": 1,
       "--merge-conflicts": 1,
       "--metrics": 0,
       "--metrics-port": 1,

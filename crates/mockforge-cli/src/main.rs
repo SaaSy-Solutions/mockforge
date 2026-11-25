@@ -6,6 +6,7 @@ use std::path::PathBuf;
 #[cfg(feature = "http")]
 use tokio::net::TcpListener;
 
+mod agent_redteam_commands;
 mod ai_bake_commands;
 mod ai_commands;
 #[cfg(feature = "amqp")]
@@ -586,6 +587,18 @@ struct ServeCliArgs {
         value_name = "FILE"
     )]
     pub mcp_mock_catalog: Option<PathBuf>,
+
+    /// Write down every request the mock MCP server receives, one JSON line
+    /// per request: the method, the tool and the arguments of a `tools/call`,
+    /// and the client when it says who it is. `mockforge agent-redteam judge`
+    /// reads it. Arguments are written in full
+    #[arg(
+        long,
+        help_heading = "AI Features",
+        requires = "mcp_mock",
+        value_name = "FILE"
+    )]
+    pub mcp_mock_record: Option<PathBuf>,
 
     /// Admin UI port (defaults to config or 9080)
     #[arg(long, help_heading = "Admin & UI")]
@@ -1211,6 +1224,24 @@ enum Commands {
     ///   mockforge mcp-contract check --contract acme-mcp.json
     #[command(verbatim_doc_comment)]
     McpContract(mcp_contract_commands::McpContractArgs),
+    /// Red-team an agent with a hostile MCP tool server, and judge what the
+    /// agent did
+    ///
+    /// A suite is a tool server that tries something, such as a tool
+    /// description that tells the agent what to do, with the task to give the
+    /// agent and the rules an agent that resists keeps. `list` shows the
+    /// suites MockForge ships and `write` puts one in a file. Serve it with
+    /// `serve --mcp-mock --mcp-mock-catalog --mcp-mock-record`, point the
+    /// agent at the mock, then `judge` what the agent sent. Exits 0 when the
+    /// agent resisted, 1 when a rule was broken, and 2 when nothing could be
+    /// judged.
+    ///
+    /// Examples:
+    ///   mockforge agent-redteam list
+    ///   mockforge agent-redteam write tool-poisoning
+    ///   mockforge agent-redteam judge --suite tool-poisoning.json --calls calls.jsonl
+    #[command(verbatim_doc_comment)]
+    AgentRedteam(agent_redteam_commands::AgentRedteamArgs),
 
     /// API governance and safety features
     ///
@@ -2961,6 +2992,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         mcp_contract_commands::handle_mcp_contract_command(args).await?;
         return Ok(());
     }
+    // A verdict is a CI gate too: it prints its own document and exits by
+    // verdict, before telemetry or analytics are initialized.
+    if let Commands::AgentRedteam(args) = cli.command {
+        agent_redteam_commands::handle_agent_redteam_command(args)?;
+        return Ok(());
+    }
     if let Commands::Cve { args } = cli.command {
         return tools_commands::cve(args).map_err(Into::into);
     }
@@ -3044,6 +3081,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Commands::Tools { .. } => unreachable!("tools handled before service initialization"),
         Commands::McpContract(_) => {
             unreachable!("mcp-contract handled before service initialization")
+        }
+        Commands::AgentRedteam(_) => {
+            unreachable!("agent-redteam handled before service initialization")
         }
         Commands::Serve(args) => {
             // Issue #79 round 15 — `--shadow` is a thin alias for the
@@ -3134,6 +3174,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 llm_mock_cassette: args.llm_mock_cassette,
                 mcp_mock: args.mcp_mock,
                 mcp_mock_catalog: args.mcp_mock_catalog,
+                mcp_mock_record: args.mcp_mock_record,
                 metrics: args.observability.metrics,
                 metrics_port: args.observability.metrics_port,
                 tracing: args.observability.tracing,
