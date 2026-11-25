@@ -366,18 +366,17 @@ fn add_security_headers(
     operation: &Operation,
     headers: &mut HashMap<String, String>,
 ) -> Result<(), String> {
-    // Get security requirements for this operation, or fall back to global security
-    let security_requirements = if let Some(ref security_reqs) = operation.security {
-        if !security_reqs.is_empty() {
-            security_reqs.clone()
-        } else {
-            spec.get_global_security_requirements()
-        }
-    } else {
-        spec.get_global_security_requirements()
+    // An operation's own `security` decides on its own: a non-empty list is
+    // what it requires, and an empty list is an explicit opt-out from the
+    // top-level requirement (OpenAPI: "To remove a top-level security
+    // requirement, an empty array can be used"). Only an operation that has
+    // no `security` of its own inherits it.
+    let security_requirements = match operation.security {
+        Some(ref security_reqs) => security_reqs.clone(),
+        None => spec.get_global_security_requirements(),
     };
 
-    // If no security requirements, nothing to do
+    // No security requirements, or an explicit opt-out from them: nothing to add
     if security_requirements.is_empty() {
         return Ok(());
     }
@@ -519,4 +518,50 @@ fn generate_httpie_command(
     }
 
     cmd
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn spec() -> OpenApiSpec {
+        OpenApiSpec::from_json(json!({
+            "openapi": "3.0.0",
+            "info": {"title": "Keys", "version": "1.0"},
+            "security": [{"bearerAuth": []}],
+            "paths": {
+                "/inherited": {"get": {"responses": {"200": {"description": "OK"}}}},
+                "/public": {
+                    "get": {"responses": {"200": {"description": "OK"}}, "security": []}
+                }
+            },
+            "components": {
+                "securitySchemes": {"bearerAuth": {"type": "http", "scheme": "bearer"}}
+            }
+        }))
+        .expect("spec parses")
+    }
+
+    fn security_headers(spec: &OpenApiSpec, path: &str) -> HashMap<String, String> {
+        let operations = spec.operations_for_path(path);
+        let operation = operations.values().next().expect("the operation is there");
+        let mut headers = HashMap::new();
+        add_security_headers(spec, operation, &mut headers).expect("the schemes resolve");
+        headers
+    }
+
+    #[test]
+    fn an_empty_security_list_opts_out_of_the_global_requirement() {
+        let spec = spec();
+        assert_eq!(
+            security_headers(&spec, "/inherited").get("Authorization").map(String::as_str),
+            Some("Bearer YOUR_TOKEN_HERE"),
+            "an operation without `security` of its own inherits the top-level requirement"
+        );
+        assert!(
+            security_headers(&spec, "/public").is_empty(),
+            "`security: []` removes the top-level requirement for that operation"
+        );
+    }
 }

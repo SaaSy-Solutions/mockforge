@@ -3,6 +3,7 @@
 ### Security
 
 - **[DevX]** Update `brotli` to 9.1.3 and `brotli-decompressor` to 6.4.0. The decompressor now rejects a block switch that the stream made impossible with a format error, matching the C decoder's fix for CVE-2026-111497 (Node2Shell), instead of reporting that it needs more input. The Rust decoder already bounds-checked the buffer involved, so this was not memory-unsafe in MockForge.
+- **[DevX]** Update `kube` to 4.2.1 for RUSTSEC-2026-0600: with the `openssl-tls` connector, `kube-client` trusted the system's CA store beside the configured cluster CA, so a root installed locally, a TLS inspection proxy's for one, could complete the handshake. MockForge enables only `rustls-tls` for `kube`, which the advisory does not concern, so nothing was exposed in its build. The manifest asks for the patched version, so a fresh resolution cannot pick the old one.
 
 ### Added
 
@@ -13,7 +14,9 @@
 
 ### Fixed
 
+- **[Contracts]** An operation with `security: []` is now treated as opting out of the top-level security requirement, as OpenAPI defines it, in request validation and in generated client commands. Both treated the empty list as "fall back to the top-level requirement", so an operation the spec deliberately leaves open was validated and called as secured.
 - **[Reality]** CVE labs materialize a single-file lab app shipped as `application_script` to its mount host path, so Node-style packs start instead of the runtime mounting an empty directory and the app failing with MODULE_NOT_FOUND. (#1620)
+- **[Reality]** Scrubbing keeps identifiers consistent. The same UUID is replaced by the same pseudonym wherever it appears in a recording instead of by a new counter each time, and `{{counter}}` now works in the `email`, `ip_address` and `credit_card` rules too, so different values can be told apart. An unreadable `MOCKFORGE_CAPTURE_SCRUB` now redacts everything but the method, path and status instead of recording raw data with only a warning.
 - **[Reality]** `mockforge cve run` no longer returns inconclusive on every host. The network-namespace probe called `/bin/readlink`, which the pinned Nuclei runner image does not have (its busybox installs `readlink` at `/usr/bin/readlink`), so the probe failed with an OCI "no such file" error. It now runs `/bin/busybox readlink`.
 - **[Reality]** The Node.js Node2Shell pack (CVE-2026-111497) reproduced on a lab host with its pinned image, so it is verified and listed by default.
 - **[Reality]** Lab scanner templates send a request body as a string. The pinned runner rejected the list form, so no pack with a request body could run.
