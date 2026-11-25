@@ -10,6 +10,7 @@
 
 ### Fixed
 
+- **[Reality]** Scrubbing keeps identifiers consistent. The same UUID is replaced by the same pseudonym wherever it appears in a recording instead of by a new counter each time, and `{{counter}}` now works in the `email`, `ip_address` and `credit_card` rules too, so different values can be told apart. An unreadable `MOCKFORGE_CAPTURE_SCRUB` now redacts everything but the method, path and status instead of recording raw data with only a warning.
 - **[Reality]** `mockforge cve run` no longer returns inconclusive on every host. The network-namespace probe called `/bin/readlink`, which the pinned Nuclei runner image does not have (its busybox installs `readlink` at `/usr/bin/readlink`), so the probe failed with an OCI "no such file" error. It now runs `/bin/busybox readlink`.
 
 ## [0.3.249] - 2026-11-23
