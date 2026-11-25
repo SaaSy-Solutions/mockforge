@@ -10,6 +10,7 @@
 - **[Reality]** CVE lab runs against an operator `--target` require an authorization attestation (`--i-am-authorized`, `MOCKFORGE_CVE_AUTHORIZED=1`, or an interactive confirmation) and record it in `report.json`. (#1682)
 - **[Reality]** New managed CVE lab pack for CVE-2026-33017: one reviewed request against the pinned Langflow 1.8.1 image reproduces unauthenticated code execution through the public flow build, verified on a lab host.
 - **[Reality]** New managed CVE lab pack for CVE-2024-27199: one reviewed path-traversal request reaches a TeamCity 2023.11.3 administrative page with no session, with two more traversal prefixes and benign controls, verified on a lab host through the runner. A pack may now declare, as reviewed data, that its application needs more memory or a longer start than the default 1 GB and 90 seconds, up to 4 GB and 300 seconds; TeamCity declares 1536 MB and 240 seconds.
+- **[DevX]** A CI job runs every lab the catalog marks verified against its pinned image on a GitHub-hosted runner, when a pull request changes the lab runner or its tests and on demand. A pack listed as verified that cannot run fails the run.
 
 ### Fixed
 
