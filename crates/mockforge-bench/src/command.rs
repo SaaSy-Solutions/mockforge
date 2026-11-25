@@ -305,6 +305,12 @@ pub struct BenchCommand {
     /// browser-choking HTML file by default.
     pub report_missed_cap: Option<u32>,
 
+    /// What `--conformance-fail-on` makes a conformance self-test run fail
+    /// for. `Off` keeps the behaviour the self-test always had: report,
+    /// and succeed. A gate that is on fails the run, and refuses to pass
+    /// when the run cannot judge the target.
+    pub conformance_fail_on: crate::conformance::self_test::SelfTestGate,
+
     /// Round 57 (#79) — when true, run k6 load with
     /// `K6_DISCARD_RESPONSE_BODIES=true` so it does not buffer response bodies
     /// in memory. Exposes the r56 env var as a first-class flag for scale /
@@ -711,6 +717,15 @@ impl BenchCommand {
             Self::parse_duration(&self.duration)?,
         );
 
+        // Conformance testing comes before the k6 check: its driver makes
+        // its own requests and needs no k6, and its one k6-based path,
+        // `--use-k6`, checks for k6 itself. Checking first made every
+        // conformance run fail on a machine without k6, the self-test
+        // included, so it could not be used as a CI gate there.
+        if self.conformance {
+            return self.execute_conformance_test().await;
+        }
+
         // Validate k6 installation
         if !K6Executor::is_k6_installed() {
             TerminalReporter::print_error("k6 is not installed");
@@ -720,11 +735,6 @@ impl BenchCommand {
             return Err(BenchError::K6NotFound);
         }
         K6Executor::warn_if_pre_v1().await;
-
-        // Check for conformance testing mode (before spec loading — conformance doesn't need a user spec)
-        if self.conformance {
-            return self.execute_conformance_test().await;
-        }
 
         // Load and parse spec(s).
         //
@@ -1251,6 +1261,7 @@ impl BenchCommand {
                 geo_source_ips: self.geo_source_ips.clone(),
                 geo_source_headers: self.geo_source_headers.clone(),
                 report_missed_cap: None,
+                conformance_fail_on: crate::conformance::self_test::SelfTestGate::Off,
                 // Round 57 (#79) — carry the flag through; the multi-target
                 // plain-load path already discards by default (r56), so this
                 // keeps the per-target command faithful to the parent.
@@ -3210,7 +3221,7 @@ impl BenchCommand {
             // report so it's grep-able next to the buffer dump from the
             // admin endpoint.
             let json_path = self.output.join("conformance-self-test.json");
-            if let Ok(json) = serde_json::to_string_pretty(&report) {
+            if let Ok(json) = serde_json::to_string_pretty(&report.to_json_value()) {
                 let _ = std::fs::write(&json_path, json);
                 TerminalReporter::print_progress(&format!(
                     "Self-test report written to {}",
@@ -3345,6 +3356,11 @@ impl BenchCommand {
                         n
                     ));
                 }
+            }
+            // `--conformance-fail-on`: the report is on disk, so now decide
+            // whether this run may pass.
+            if let Some(reason) = self.conformance_fail_on.failure(&report) {
+                return Err(BenchError::ConformanceGateFailed(reason));
             }
             return Ok(());
         }
@@ -3615,6 +3631,10 @@ impl BenchCommand {
             .transpose()?
             .map(std::time::Duration::from_secs);
 
+        // Failures of `--conformance-fail-on`, one per target, reported after
+        // every target has been tested.
+        let mut gate_failures: Vec<String> = Vec::new();
+
         for (idx, target) in targets.iter().enumerate() {
             let target_dir = self.output.join(format!("target_{}", idx));
             std::fs::create_dir_all(&target_dir)?;
@@ -3739,7 +3759,7 @@ impl BenchCommand {
             }
 
             let json_path = target_dir.join("conformance-self-test.json");
-            if let Ok(json) = serde_json::to_string_pretty(&report) {
+            if let Ok(json) = serde_json::to_string_pretty(&report.to_json_value()) {
                 let _ = std::fs::write(&json_path, json);
             }
             // Round 58 (#79) — per-target "definite issues" sidecar (mirror of
@@ -3771,6 +3791,10 @@ impl BenchCommand {
             }
             TerminalReporter::print_progress(&report.render_summary());
 
+            if let Some(reason) = self.conformance_fail_on.failure(&report) {
+                gate_failures.push(format!("{}: {reason}", target.url));
+            }
+
             // Round 49 (#79) — Srikanth on 0.3.193: "I am not seeing
             // any violation requests logs when running [self-test
             // + --targets-file]". `validate_emitted_requests` was
@@ -3794,6 +3818,10 @@ impl BenchCommand {
                     ));
                 }
             }
+        }
+
+        if !gate_failures.is_empty() {
+            return Err(BenchError::ConformanceGateFailed(gate_failures.join("; ")));
         }
 
         Ok(())
@@ -4599,6 +4627,7 @@ mod tests {
             geo_source_ips: Vec::new(),
             geo_source_headers: Vec::new(),
             report_missed_cap: None,
+            conformance_fail_on: crate::conformance::self_test::SelfTestGate::Off,
             discard_response_bodies: false,
             dns_policy: None,
             no_k6_logs: false,
@@ -4789,6 +4818,7 @@ mod tests {
             geo_source_ips: Vec::new(),
             geo_source_headers: Vec::new(),
             report_missed_cap: None,
+            conformance_fail_on: crate::conformance::self_test::SelfTestGate::Off,
             discard_response_bodies: false,
             dns_policy: None,
             no_k6_logs: false,
@@ -4882,6 +4912,7 @@ mod tests {
             geo_source_ips: Vec::new(),
             geo_source_headers: Vec::new(),
             report_missed_cap: None,
+            conformance_fail_on: crate::conformance::self_test::SelfTestGate::Off,
             discard_response_bodies: false,
             dns_policy: None,
             no_k6_logs: false,
@@ -5010,6 +5041,7 @@ mod tests {
             geo_source_ips: Vec::new(),
             geo_source_headers: Vec::new(),
             report_missed_cap: None,
+            conformance_fail_on: crate::conformance::self_test::SelfTestGate::Off,
             discard_response_bodies: false,
             dns_policy: None,
             no_k6_logs: false,

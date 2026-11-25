@@ -358,11 +358,205 @@ pub struct AcceptedOwaspProbe {
     pub status: u16,
 }
 
+/// The version of the JSON shape written to `conformance-self-test.json`.
+pub const SELF_TEST_REPORT_SCHEMA_VERSION: u32 = 1;
+
+/// A security probe the target should have refused and did not: an operation
+/// whose spec declares security answered a request with no credential or an
+/// invalid one.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct SecurityGap {
+    pub method: String,
+    pub path: String,
+    /// The probe that was sent, such as `security:no-auth`.
+    pub probe: String,
+    /// The status the target answered with.
+    pub status: u16,
+    /// The OWASP API Security Top 10 category the probe points to.
+    pub owasp: &'static str,
+}
+
+/// What `--conformance-fail-on` makes a self-test run fail for.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum SelfTestGate {
+    /// Nothing: the report is written and the run succeeds, as it always did.
+    #[default]
+    Off,
+    /// A secured operation answered a request with no credential or an
+    /// invalid one.
+    Security,
+    /// Any case had the wrong outcome.
+    All,
+}
+
+impl SelfTestGate {
+    /// Why the run fails under this gate, or `None` when it passes. A run
+    /// that cannot judge the target never passes a gate: not when every
+    /// positive case failed with one status (the base path or the credential
+    /// is wrong, and the refusals mean nothing), and not when the spec
+    /// declares nothing for it to check.
+    pub fn failure(&self, report: &SelfTestReport) -> Option<String> {
+        if *self == SelfTestGate::Off {
+            return None;
+        }
+        // Every positive failing with one status is the classic
+        // misconfiguration. For a gate, no positive passing at all is
+        // enough: the run showed that something answers, and nothing about
+        // whether it works.
+        let same_status = report.detect_target_misconfiguration();
+        let none_passed = report.positive_pass == 0 && report.positive_fail > 0;
+        if same_status.is_some() || none_passed {
+            let why = match same_status {
+                Some(status) => format!("every positive case returned {status}"),
+                None => "no positive case passed".to_string(),
+            };
+            return Some(format!(
+                "the self-test cannot judge the target because {why}; fix the base path \
+                 or the credential and run again"
+            ));
+        }
+        if *self == SelfTestGate::Security {
+            let probed: usize = report
+                .operations
+                .iter()
+                .map(|operation| {
+                    operation
+                        .negatives
+                        .iter()
+                        .filter(|case| case.label.starts_with("security:"))
+                        .count()
+                })
+                .sum();
+            if probed == 0 {
+                return Some(
+                    "no operation in the spec declares a security scheme, so the security gate \
+                     checked nothing"
+                        .to_string(),
+                );
+            }
+        }
+        let gaps = report.security_gaps();
+        if !gaps.is_empty() {
+            let shown: Vec<String> = gaps
+                .iter()
+                .take(20)
+                .map(|gap| format!("{} {} ({}, {})", gap.method, gap.path, gap.probe, gap.status))
+                .collect();
+            let more = gaps.len().saturating_sub(shown.len());
+            let and_more = if more > 0 {
+                format!("; and {more} more in conformance-self-test.json")
+            } else {
+                String::new()
+            };
+            return Some(format!(
+                "{} secured operation(s) answered a request they should have refused: {}{and_more}",
+                gaps.len(),
+                shown.join("; ")
+            ));
+        }
+        if *self == SelfTestGate::Security {
+            // A refusal proves something only for an operation that answers
+            // its valid request. One that rejects everyone, because the
+            // credential is wrong or the request is not valid for it,
+            // refuses the probes too, and that is not enforcement.
+            let unexercised: Vec<String> = report
+                .operations
+                .iter()
+                .filter(|operation| {
+                    operation
+                        .negatives
+                        .iter()
+                        .any(|case| case.label.starts_with("security:"))
+                })
+                .filter(|operation| {
+                    operation
+                        .positive
+                        .as_ref()
+                        .is_none_or(|positive| !positive.passed)
+                })
+                .map(|operation| {
+                    let status = operation.positive.as_ref().map_or_else(
+                        || "no valid request was sent".to_string(),
+                        |positive| format!("its valid request returned {}", positive.actual_status),
+                    );
+                    format!("{} {} ({status})", operation.method, operation.path)
+                })
+                .collect();
+            if !unexercised.is_empty() {
+                return Some(format!(
+                    "{} secured operation(s) could not be exercised, so their refusals of the \
+                     probes prove nothing: {}",
+                    unexercised.len(),
+                    unexercised.iter().take(10).cloned().collect::<Vec<_>>().join("; ")
+                ));
+            }
+        }
+        if *self == SelfTestGate::All && !report.all_passed() {
+            return Some(format!(
+                "{} positive case(s) failed and {} negative case(s) were let through",
+                report.positive_fail,
+                report.negative_missed.values().sum::<usize>()
+            ));
+        }
+        None
+    }
+}
+
+/// The OWASP API Security Top 10 category a security probe points to. Both
+/// probes this self-test sends are about authentication: an operation that
+/// answers without a credential, or with an invalid one, does not enforce it.
+pub fn owasp_category(probe: &str) -> &'static str {
+    const AUTHENTICATION: &str = "API2:2023 Broken Authentication";
+    if probe.starts_with("security:") {
+        AUTHENTICATION
+    } else {
+        ""
+    }
+}
+
 impl SelfTestReport {
     /// All-pass means every positive case got 2xx-3xx and every
     /// negative case got 4xx.
     pub fn all_passed(&self) -> bool {
         self.positive_fail == 0 && self.negative_missed.values().sum::<usize>() == 0
+    }
+
+    /// The security probes the target let through, in the order the
+    /// operations were run.
+    pub fn security_gaps(&self) -> Vec<SecurityGap> {
+        self.operations
+            .iter()
+            .flat_map(|operation| {
+                operation
+                    .negatives
+                    .iter()
+                    .filter(|case| case.label.starts_with("security:") && !case.passed)
+                    .map(|case| SecurityGap {
+                        method: operation.method.clone(),
+                        path: operation.path.clone(),
+                        probe: case.label.clone(),
+                        status: case.actual_status,
+                        owasp: owasp_category(&case.label),
+                    })
+            })
+            .collect()
+    }
+
+    /// The report as a JSON value, with its `schema_version` so a reader can
+    /// tell the shape it was given.
+    pub fn to_json_value(&self) -> serde_json::Value {
+        let mut value = serde_json::to_value(self).unwrap_or(serde_json::Value::Null);
+        if let Some(object) = value.as_object_mut() {
+            object.insert(
+                "schema_version".to_string(),
+                serde_json::Value::from(SELF_TEST_REPORT_SCHEMA_VERSION),
+            );
+            object.insert(
+                "security_gaps".to_string(),
+                serde_json::to_value(self.security_gaps()).unwrap_or(serde_json::Value::Null),
+            );
+        }
+        value
     }
 
     /// Round 58 (#79) — the subset of findings that are unambiguously wrong, so
@@ -3372,5 +3566,217 @@ mod tests {
         let json = serde_json::to_value(&r).expect("serialises");
         assert_eq!(json["positive_pass"], serde_json::json!(1));
         assert_eq!(json["operations"][0]["positive"]["actual_status"], serde_json::json!(200));
+    }
+
+    fn case(label: &str, status: u16) -> CaseOutcome {
+        CaseOutcome {
+            label: label.into(),
+            expected_4xx: true,
+            actual_status: status,
+            passed: (400..500).contains(&status),
+        }
+    }
+
+    /// An operation whose spec declares security, with the outcome of each
+    /// negative probe chosen by the caller.
+    fn secured(no_auth: u16, validation: u16) -> OperationResult {
+        OperationResult {
+            method: "DELETE".into(),
+            path: "/users/{id}".into(),
+            positive: Some(CaseOutcome {
+                label: "positive".into(),
+                expected_4xx: false,
+                actual_status: 204,
+                passed: true,
+            }),
+            negatives: vec![
+                case("security:no-auth", no_auth),
+                case("security:bad-bearer", 401),
+                case("validation:missing_field", validation),
+            ],
+        }
+    }
+
+    fn report_with(operation: OperationResult, missed: &[(&str, usize)]) -> SelfTestReport {
+        SelfTestReport {
+            positive_pass: 1,
+            negative_missed: missed.iter().map(|(key, count)| (key.to_string(), *count)).collect(),
+            operations: vec![operation],
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn security_gaps_are_the_security_probes_the_target_let_through() {
+        let report = report_with(secured(200, 422), &[("security:no-auth", 1)]);
+        assert_eq!(
+            report.security_gaps(),
+            vec![SecurityGap {
+                method: "DELETE".into(),
+                path: "/users/{id}".into(),
+                probe: "security:no-auth".into(),
+                status: 200,
+                owasp: "API2:2023 Broken Authentication",
+            }]
+        );
+        assert!(report_with(secured(401, 422), &[]).security_gaps().is_empty());
+        let other_kind = report_with(secured(401, 200), &[("validation:missing_field", 1)]);
+        assert!(other_kind.security_gaps().is_empty(), "a missed probe of another kind is not a security gap");
+    }
+
+    #[test]
+    fn the_security_gate_fails_a_run_that_let_a_secured_operation_through() {
+        let report = report_with(secured(200, 422), &[("security:no-auth", 1)]);
+        let reason = SelfTestGate::Security.failure(&report).unwrap();
+        assert!(reason.contains("1 secured operation(s)"), "{reason}");
+        assert!(reason.contains("DELETE /users/{id} (security:no-auth, 200)"), "{reason}");
+        let other_kind = report_with(secured(401, 200), &[("validation:missing_field", 1)]);
+        assert!(
+            SelfTestGate::Security.failure(&other_kind).is_none(),
+            "the security gate looks at security probes only"
+        );
+    }
+
+    #[test]
+    fn the_all_gate_fails_a_run_with_any_wrong_outcome() {
+        let report = report_with(secured(401, 200), &[("validation:missing_field", 1)]);
+        let reason = SelfTestGate::All.failure(&report).unwrap();
+        assert!(reason.contains("1 negative case(s) were let through"), "{reason}");
+        assert!(SelfTestGate::All.failure(&report_with(secured(401, 422), &[])).is_none());
+    }
+
+    #[test]
+    fn no_gate_is_ever_on_by_default() {
+        assert_eq!(SelfTestGate::default(), SelfTestGate::Off);
+        let report = report_with(
+            secured(200, 200),
+            &[("security:no-auth", 1), ("validation:missing_field", 1)],
+        );
+        assert!(
+            SelfTestGate::Off.failure(&report).is_none(),
+            "without the flag a run succeeds, as it always did"
+        );
+    }
+
+    #[test]
+    fn a_gate_never_passes_a_run_that_cannot_judge_the_target() {
+        // Every positive failed with the same status: the base path or the
+        // credential is wrong, and what the negatives did means nothing.
+        let mut report = SelfTestReport {
+            positive_fail: 50,
+            ..Default::default()
+        };
+        for _ in 0..50 {
+            report.operations.push(OperationResult {
+                method: "GET".into(),
+                path: "/x".into(),
+                positive: Some(CaseOutcome {
+                    label: "positive".into(),
+                    expected_4xx: false,
+                    actual_status: 404,
+                    passed: false,
+                }),
+                negatives: Vec::new(),
+            });
+        }
+        for gate in [SelfTestGate::Security, SelfTestGate::All] {
+            let reason = gate
+                .failure(&report)
+                .unwrap_or_else(|| panic!("{gate:?} passed a run that cannot judge the target"));
+            assert!(reason.contains("cannot judge the target") && reason.contains("404"), "{reason}");
+        }
+    }
+
+    #[test]
+    fn the_security_gate_does_not_pass_when_it_checked_nothing() {
+        let public = OperationResult {
+            method: "GET".into(),
+            path: "/health".into(),
+            positive: None,
+            negatives: vec![case("validation:missing_field", 400)],
+        };
+        let reason = SelfTestGate::Security.failure(&report_with(public, &[])).unwrap();
+        assert!(reason.contains("checked nothing"), "{reason}");
+        let public = OperationResult {
+            method: "GET".into(),
+            path: "/health".into(),
+            positive: None,
+            negatives: vec![case("validation:missing_field", 400)],
+        };
+        assert!(
+            SelfTestGate::All.failure(&report_with(public, &[])).is_none(),
+            "the all gate is not about security alone"
+        );
+    }
+
+    #[test]
+    fn a_gate_does_not_pass_when_no_positive_case_passed_even_once() {
+        // A wrong credential on a small spec: the positive is refused, but
+        // there are too few failures for the classic misconfiguration detector.
+        let mut report = report_with(secured(401, 422), &[]);
+        report.positive_pass = 0;
+        report.positive_fail = 1;
+        for gate in [SelfTestGate::Security, SelfTestGate::All] {
+            let reason = gate
+                .failure(&report)
+                .unwrap_or_else(|| panic!("{gate:?} passed a run in which nothing worked"));
+            assert!(
+                reason.contains("cannot judge the target because no positive case passed"),
+                "{reason}"
+            );
+        }
+        assert!(SelfTestGate::Off.failure(&report).is_none());
+    }
+
+    #[test]
+    fn the_security_gate_does_not_pass_a_secured_operation_it_could_not_exercise() {
+        // The credential is wrong: the secured operation refuses its valid
+        // request, and refuses the probes just the same.
+        let mut refused_everyone = secured(401, 422);
+        refused_everyone.positive.as_mut().unwrap().actual_status = 401;
+        refused_everyone.positive.as_mut().unwrap().passed = false;
+        let mut report = SelfTestReport {
+            operations: vec![refused_everyone],
+            ..Default::default()
+        };
+        report.positive_fail = 1;
+        let reason = SelfTestGate::Security.failure(&report).unwrap();
+        assert!(
+            reason.contains("cannot judge the target because no positive case passed"),
+            "with nothing else passing, the whole run cannot judge the target: {reason}"
+        );
+        // A public operation that passes does not make the secured one exercised.
+        let public = OperationResult {
+            method: "GET".into(),
+            path: "/health".into(),
+            positive: Some(CaseOutcome {
+                label: "positive".into(),
+                expected_4xx: false,
+                actual_status: 200,
+                passed: true,
+            }),
+            negatives: Vec::new(),
+        };
+        report.operations.push(public);
+        report.positive_pass = 1;
+        let reason = SelfTestGate::Security.failure(&report).unwrap();
+        assert_eq!(
+            reason,
+            "1 secured operation(s) could not be exercised, so their refusals of the probes \
+             prove nothing: DELETE /users/{id} (its valid request returned 401)"
+        );
+    }
+
+    #[test]
+    fn the_json_report_says_which_shape_it_is_and_lists_the_gaps() {
+        let report = report_with(secured(200, 422), &[("security:no-auth", 1)]);
+        let json = report.to_json_value();
+        assert_eq!(json["schema_version"], serde_json::json!(SELF_TEST_REPORT_SCHEMA_VERSION));
+        assert_eq!(
+            json["security_gaps"][0]["owasp"],
+            serde_json::json!("API2:2023 Broken Authentication")
+        );
+        assert_eq!(json["security_gaps"][0]["path"], serde_json::json!("/users/{id}"));
+        assert!(json["negative_missed"].is_object(), "the earlier fields are still there");
     }
 }

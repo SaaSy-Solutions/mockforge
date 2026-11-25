@@ -784,6 +784,7 @@ fn default_bench_command(output_dir: &Path) -> BenchCommand {
         geo_source_ips: Vec::new(),
         geo_source_headers: Vec::new(),
         report_missed_cap: None,
+        conformance_fail_on: crate::conformance::self_test::SelfTestGate::Off,
         discard_response_bodies: false,
         dns_policy: None,
         no_k6_logs: false,

@@ -683,6 +683,28 @@ struct ServeCliArgs {
     pub ai: AiArgs,
 }
 
+/// What `--conformance-fail-on` makes a conformance self-test run fail for.
+#[cfg(feature = "bench")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+enum ConformanceFailOn {
+    /// A secured operation answered a request with no credential or an invalid one.
+    Security,
+    /// Any case had the wrong outcome.
+    All,
+}
+
+#[cfg(feature = "bench")]
+fn self_test_gate(
+    scope: Option<ConformanceFailOn>,
+) -> mockforge_bench::conformance::self_test::SelfTestGate {
+        use mockforge_bench::conformance::self_test::SelfTestGate;
+        match scope {
+            None => SelfTestGate::Off,
+            Some(ConformanceFailOn::Security) => SelfTestGate::Security,
+            Some(ConformanceFailOn::All) => SelfTestGate::All,
+        }
+}
+
 #[derive(Subcommand)]
 #[allow(clippy::large_enum_variant)]
 enum Commands {
@@ -2520,6 +2542,14 @@ enum Commands {
         #[arg(long = "report-missed-cap", value_name = "N")]
         report_missed_cap: Option<u32>,
 
+        /// Make a `--conformance-self-test` run fail: `security` when a
+        /// secured operation answered a request with no credential or an
+        /// invalid one, `all` when any case had the wrong outcome. A run
+        /// that cannot judge the target never passes. Without it the report
+        /// is written and the run succeeds, as before.
+        #[arg(long = "conformance-fail-on", value_enum, value_name = "SCOPE")]
+        conformance_fail_on: Option<ConformanceFailOn>,
+
         /// Issue #79 round 57 — run k6 with `K6_DISCARD_RESPONSE_BODIES=true`
         /// so it does not buffer response bodies in memory. For scale / stress
         /// load runs where you only care about status codes and latency: keeps
@@ -3717,6 +3747,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             geo_source_ips,
             geo_source_headers,
             report_missed_cap,
+            conformance_fail_on,
             discard_response_bodies,
             dns_policy,
         } => {
@@ -3855,6 +3886,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 geo_source_ips,
                 geo_source_headers,
                 report_missed_cap,
+                conformance_fail_on: self_test_gate(conformance_fail_on),
                 discard_response_bodies,
                 dns_policy,
             };
