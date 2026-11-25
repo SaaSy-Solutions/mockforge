@@ -1,0 +1,105 @@
+name: Advisory Watch
+
+# Runs the security audit on `main` every day and opens an issue when a
+# RustSec advisory is in `Cargo.lock`, so that it is seen on the day it is
+# published. RUSTSEC-2026-0600 was published on 2026-11-24 and was first seen
+# the next day, when the audit of every open pull request failed on it.
+# Dependabot's alerts are on for this repository and had no alert for it.
+#
+# It reads the same `audit.toml` as the audit in CI, through the same script,
+# so the two cannot disagree on what is ignored. It opens an issue and closes
+# it once the audit is clean again, as runner-health.yml does for a stuck
+# pool, and changes nothing itself.
+#
+# Runs GitHub-hosted, which is free on this public repository, so that it
+# never queues behind the pool it does not need.
+
+on:
+  schedule:
+    # Daily: RustSec advisories are published on any day. Offset from the
+    # other scheduled workflows.
+    - cron: '37 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: advisory-watch
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    name: Audit main
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TITLE: "Security audit of main: a RustSec advisory is in Cargo.lock"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install Rust toolchain
+        uses: ./.github/actions/rust-toolchain
+
+      - name: Install pinned security audit tools
+        uses: taiki-e/install-action@v2.90.6
+        with:
+          tool: cargo-audit@0.22.2
+          fallback: none
+
+      - name: Run RustSec advisory scan
+        id: scan
+        # The audit's exit status is the verdict, and its output is the
+        # evidence. The job does not stop here: the next steps put the output
+        # where it is seen.
+        run: |
+          status=0
+          python3 scripts/precommit/cargo_audit.py > audit.txt 2>&1 || status=$?
+          if [ "$status" -eq 0 ]; then
+            echo "clean=true" >> "$GITHUB_OUTPUT"
+            echo "No vulnerability in Cargo.lock."
+          else
+            echo "clean=false" >> "$GITHUB_OUTPUT"
+            cat audit.txt
+          fi
+
+      - name: Open the issue, or bring it up to date
+        if: steps.scan.outputs.clean == 'false'
+        run: |
+          {
+            echo "The security audit of \`main\` finds a vulnerability in \`Cargo.lock\`:"
+            echo
+            echo '```'
+            sed 's/\x1b\[[0-9;]*m//g' audit.txt | head -c 60000
+            echo
+            echo '```'
+            echo
+            echo "A pull request that updates the dependency fixes it, as #1708 did for RUSTSEC-2026-0600. Until it is on \`main\`, the security audit of every open pull request fails on the same advisory."
+            echo
+            echo "The Advisory Watch workflow opens and closes this issue. It changes nothing itself."
+          } > body.md
+          existing=$(gh issue list --state open --search "in:title \"$TITLE\"" --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            # Brought up to date in place: a day with the same findings is
+            # not a new comment.
+            gh issue edit "$existing" --body-file body.md
+          else
+            gh issue create --title "$TITLE" --body-file body.md
+          fi
+
+      - name: Close the issue once the audit is clean
+        if: steps.scan.outputs.clean == 'true'
+        run: |
+          for n in $(gh issue list --state open --search "in:title \"$TITLE\"" --json number --jq '.[].number'); do
+            gh issue close "$n" --comment "The security audit of \`main\` is clean; closing."
+          done
+
+      - name: Fail while an advisory is open
+        if: steps.scan.outputs.clean == 'false'
+        run: |
+          echo "::error::The security audit of main finds a vulnerability. The issue \"$TITLE\" has the audit's output."
+          exit 1

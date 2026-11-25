@@ -255,10 +255,35 @@ class HetznerRoutingTest(unittest.TestCase):
         self.assertIn('uses: ./.github/actions/setup', smoke)
         self.assertIn('if: always()', smoke)  # the container is stopped, however the job ends
 
+    def test_the_advisory_watch_audits_main_as_ci_does_and_needs_no_runner(self):
+        # RUSTSEC-2026-0600 was published on 2026-11-24 and first seen the next
+        # day, when the audit of every open pull request failed on it. The
+        # watch runs that audit on main daily, and opens an issue as the
+        # runner health check does for a stuck pool.
+        watch = (WORKFLOWS / 'advisory-watch.yml').read_text()
+        self.assertEqual(route(jobs('advisory-watch.yml')['audit']), 'ubuntu-latest')
+        header = re.search(r'^on:\n(.*?)(?=^[A-Za-z#])', watch, flags=re.M | re.S).group(1)
+        self.assertEqual(set(re.findall(r'^  ([\w_]+):', header, flags=re.M)),
+                         {'schedule', 'workflow_dispatch'})
+        self.assertEqual(re.findall(r"cron: '([^']+)'", header), ['37 6 * * *'])
+        # It reads the repository and opens issues. It writes nothing else:
+        # no branch, no pull request, no dependency change.
+        self.assertIn('permissions:\n  contents: read\n  issues: write\n', watch)
+        # The toolchain action, the pinned installer with no source fallback,
+        # and the script that applies audit.toml: the ones the audit in CI
+        # uses, so the two cannot disagree.
+        self.assertIn('uses: ./.github/actions/rust-toolchain', watch)
+        self.assertIn('uses: taiki-e/install-action@v2.90.6', watch)
+        self.assertIn('fallback: none', watch)
+        self.assertIn('python3 scripts/precommit/cargo_audit.py', watch)
+        for forbidden in ('self-hosted', 'pull_request', 'contents: write', 'cargo update'):
+            self.assertNotIn(forbidden, watch)
+
     def test_every_job_selects_hetzner_or_an_audited_exception(self):
         allowed = {HETZNER, ROUTE}
         exceptions = {('runner-health.yml', 'check'): 'ubuntu-latest',
                       ('setup-action-smoke.yml', 'smoke'): 'ubuntu-latest',
+                      ('advisory-watch.yml', 'audit'): 'ubuntu-latest',
                       ('docs-check.yml', 'docs'): 'ubuntu-latest',
                       ('production-smoke.yml', 'smoke'): 'ubuntu-latest',
                       ('release.yml', 'release-windows'): 'windows-latest',
