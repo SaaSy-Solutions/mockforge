@@ -279,6 +279,18 @@ class HetznerRoutingTest(unittest.TestCase):
         for forbidden in ('self-hosted', 'pull_request', 'contents: write', 'cargo update'):
             self.assertNotIn(forbidden, watch)
 
+    def test_the_lab_end_to_end_runs_hosted_and_takes_nothing_from_the_pool(self):
+        # A lab runs against its pinned image through a Docker engine, and
+        # builds no Rust. A hosted runner has what the two jobs need, and the
+        # pool keeps its slots for builds.
+        workflow = (WORKFLOWS / 'cve-lab-e2e.yml').read_text()
+        for job_id in ('packs', 'lab'):
+            self.assertEqual(route(jobs('cve-lab-e2e.yml')[job_id]), 'ubuntu-latest')
+            self.assertNotIn('runner-cargo-target.sh', jobs('cve-lab-e2e.yml')[job_id])
+        # It reads the repository and keeps evidence. It writes nothing.
+        for forbidden in ('self-hosted', 'contents: write', 'cargo '):
+            self.assertNotIn(forbidden, workflow)
+
     def test_every_job_selects_hetzner_or_an_audited_exception(self):
         allowed = {HETZNER, ROUTE}
         exceptions = {('runner-health.yml', 'check'): 'ubuntu-latest',
@@ -286,6 +298,8 @@ class HetznerRoutingTest(unittest.TestCase):
                       ('advisory-watch.yml', 'audit'): 'ubuntu-latest',
                       ('docs-check.yml', 'docs'): 'ubuntu-latest',
                       ('production-smoke.yml', 'smoke'): 'ubuntu-latest',
+                      ('cve-lab-e2e.yml', 'packs'): 'ubuntu-latest',
+                      ('cve-lab-e2e.yml', 'lab'): 'ubuntu-latest',
                       ('release.yml', 'release-windows'): 'windows-latest',
                       ('release.yml', 'release'): RELEASE_HETZNER,
                       ('release.yml', 'publish'): RELEASE_HETZNER,
