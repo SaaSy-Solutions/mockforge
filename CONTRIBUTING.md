@@ -192,6 +192,11 @@ The release process will automatically validate that new changelog entries have 
 2. Address any feedback or requested changes
 3. Once approved, your PR will be merged
 
+A pull request can merge only when CI has finished on its latest commit: the
+security audit, the registry end-to-end suite when the registry changed, and
+`Test (1.96.0)`, which passes only when the Rust lane (format, lint, build and
+tests) succeeded. A change to documentation alone has it skipped.
+
 ## Code Style
 
 ### Rust Code

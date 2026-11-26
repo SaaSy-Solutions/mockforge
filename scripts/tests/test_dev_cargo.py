@@ -149,18 +149,35 @@ class DevelopmentCargoTests(unittest.TestCase):
             policy.build_environment(["run", "--", "--jobs=20"])
 
     def test_second_shared_slot_when_first_busy(self):
-        with tempfile.TemporaryDirectory() as directory:
+        # Two shared slots and one held in reserve, whatever the machine: the
+        # built-in policy counts slots, and the memory admission waits for,
+        # from the host it runs on. A four-core host gets one slot, and a
+        # session that asks for a slot nobody frees waits for it.
+        budgets = patch.object(
+            sys.modules["rust_policy_config"], "host_budgets", return_value=(65536, 800)
+        )
+        runtime = sys.modules["rust_policy_runtime"]
+        memory = patch.object(runtime, "available_memory_mib", return_value=65536)
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            budgets,
+            memory,
+        ):
             root = Path(directory) / "admission"
+            runtime.apply_policy(
+                {**policy.default_policy(), "max_concurrent": 3, "reserved_checks": 1},
+                root,
+            )
             with (
                 policy.Session(["check"], root) as first,
                 policy.Session(["check"], root) as second,
             ):
                 first.acquire()
                 second.acquire()
-                self.assertTrue((root / "slot-2").exists())
-                self.assertFalse((root / "slot-3").exists())
+                self.assertEqual((first.slot_number, second.slot_number), (1, 2))
             with policy.Session(["check"], root) as again:
                 again.acquire()
+                self.assertEqual(again.slot_number, 1)
 
     def test_unsafe_lock_directory_rejected(self):
         with tempfile.TemporaryDirectory() as directory:

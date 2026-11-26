@@ -15,10 +15,21 @@ ROUTE = '${{ (github.event_name != \'pull_request\' || github.event.pull_request
 HETZNER = '[self-hosted, linux, x64, rust]'
 RELEASE_HETZNER = "[self-hosted, linux, x64, \"${{ vars.MOCKFORGE_RELEASE_RUNNER_LABEL || 'rust' }}\"]"
 PLUGIN_MATRIX_ROUTE = '${{ matrix.os == \'ubuntu-latest\' && fromJSON(\'["self-hosted","linux","x64","rust"]\') || matrix.os }}'
+# Jobs on the trusted route: the shared Hetzner pool for trusted events,
+# GitHub-hosted for forks.
 TARGETS = {
-    'ci.yml': ['changes', 'test', 'ui-test', 'warning-gate',
-               'security-audit', 'msrv'],
-    'registry-e2e.yml': ['changes', 'registry-e2e', 'registry-e2e-rls'],
+    'ci.yml': ['test', 'ui-test', 'warning-gate', 'msrv'],
+    'registry-e2e.yml': ['registry-e2e', 'registry-e2e-rls'],
+}
+# Jobs that took a slot in the shared pool to do seconds of work which every
+# pull request waits for. They run GitHub-hosted on every event, which is free
+# on this public repository, so that the two required checks and the
+# `Test (1.96.0)` aggregate stop queueing behind builds. On 2026-11-25 the
+# audit did 39 seconds of work after two hours in that queue, and the
+# aggregate waited 21 minutes after the tests had finished.
+HOSTED = {
+    'ci.yml': ['changes', 'security-audit', 'test-complete'],
+    'registry-e2e.yml': ['changes'],
 }
 
 
@@ -82,7 +93,8 @@ printf '%s %s (fixture)\n' "$probe" "$version"
 
 def rust_preflights():
     for filename, ids in TARGETS.items():
-        for job_id in ids:
+        # The audit keeps its Hetzner preflight beside the hosted steps.
+        for job_id in ids + HOSTED[filename]:
             block = jobs(filename)[job_id]
             marker = 'name: Verify provisioned Rust toolchain on Hetzner'
             if marker not in block:
@@ -130,7 +142,7 @@ class HetznerRoutingTest(unittest.TestCase):
 
     def test_native_bootstrap_and_system_deletion_are_hosted_only(self):
         for filename in ('ci.yml', 'registry-e2e.yml'):
-            for job_id in TARGETS[filename]:
+            for job_id in TARGETS[filename] + HOSTED[filename]:
                 block = jobs(filename)[job_id]
                 steps = re.split(r'(?=^\s+- (?:name|uses):)', block, flags=re.M)
                 for step in steps:
@@ -152,7 +164,7 @@ class HetznerRoutingTest(unittest.TestCase):
 
     def test_rust_jobs_isolate_cargo_home_by_existing_runner_identity(self):
         for filename in ('ci.yml', 'registry-e2e.yml'):
-            for job_id in TARGETS[filename]:
+            for job_id in TARGETS[filename] + HOSTED[filename]:
                 block = jobs(filename)[job_id]
                 if 'uses: ./.github/actions/rust-toolchain' in block:
                     step = block.split('name: Set per-runner CARGO_HOME on Hetzner', 1)[1].split('- name:', 1)[0]
@@ -233,6 +245,10 @@ class HetznerRoutingTest(unittest.TestCase):
                       ('release.yml', 'publish'): RELEASE_HETZNER,
                       ('release.yml', 'helm'): RELEASE_HETZNER,
                       ('plugin-publish.yml', 'build'): PLUGIN_MATRIX_ROUTE}
+        # See HOSTED: the prompt verdicts a merge waits for never queue
+        # behind the shared Rust pool.
+        exceptions.update({(filename, job_id): 'ubuntu-latest'
+                          for filename, ids in HOSTED.items() for job_id in ids})
         for wf in sorted(WORKFLOWS.glob('*.yml')):
             for job_id, block in jobs(wf.name).items():
                 selector = re.search(r'^    runs-on: (.+)$', block, flags=re.M)
@@ -262,6 +278,19 @@ class HetznerRoutingTest(unittest.TestCase):
                         if re.search(r'^\s*(?:run: )?sudo (?:apt-get|rm)', step, flags=re.M):
                             self.assertIn("if: runner.environment == 'github-hosted'", step)
 
+    def test_prompt_verdicts_run_hosted_and_need_nothing_from_the_pool(self):
+        for filename, ids in HOSTED.items():
+            for job_id in ids:
+                with self.subTest(workflow=filename, job=job_id):
+                    self.assertEqual(route(jobs(filename)[job_id]), 'ubuntu-latest')
+                    # None of them uses the pool's persistent build directory.
+                    self.assertNotIn('scripts/ci/runner-cargo-target.sh', jobs(filename)[job_id])
+        # The heavy lanes keep the warm pool and its build cache.
+        for filename, ids in TARGETS.items():
+            for job_id in ids:
+                with self.subTest(workflow=filename, job=job_id):
+                    self.assertEqual(route(jobs(filename)[job_id]), ROUTE)
+
     def test_registry_service_jobs_use_trusted_route_and_read_only_preflight(self):
         for job_id in ('registry-e2e', 'registry-e2e-rls'):
             block = jobs('registry-e2e.yml')[job_id]
@@ -278,7 +307,7 @@ class HetznerRoutingTest(unittest.TestCase):
 
     def test_newly_moved_rust_actions_cannot_change_shared_defaults(self):
         for filename, ids in TARGETS.items():
-            for job_id in ids:
+            for job_id in ids + HOSTED[filename]:
                 block = jobs(filename)[job_id]
                 if 'uses: ./.github/actions/rust-toolchain' not in block:
                     continue
