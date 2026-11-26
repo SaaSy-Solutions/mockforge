@@ -1608,6 +1608,7 @@
        "aliases": {},
        "flags": {
         "--help": 0,
+        "--i-am-authorized": 0,
         "--output-dir": 1,
         "--skip-tls-verify": 0,
         "--target": 1,

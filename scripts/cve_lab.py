@@ -507,6 +507,12 @@ def main(argv=None):
     detector.add_argument("cve", choices=sorted(DETECT_PACKS))
     detector.add_argument("--target", required=True, help="HTTP(S) origin to fingerprint")
     detector.add_argument("--skip-tls-verify", action="store_true")
+    detector.add_argument(
+        "--i-am-authorized",
+        action="store_true",
+        help="Attest you are authorized to test --target (or set "
+        "MOCKFORGE_CVE_AUTHORIZED=1); recorded in report.json",
+    )
     detector.add_argument("--output-dir", required=True, help="New report directory")
     down = commands.add_parser(
         "down", help="Recover owned containers after an interrupted run"

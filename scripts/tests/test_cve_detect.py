@@ -97,6 +97,7 @@ class DetectRun(unittest.TestCase):
         class Args:
             cve = "CVE-2026-109618"
             skip_tls_verify = False
+            i_am_authorized = True
 
         with tempfile.TemporaryDirectory() as tmp:
             args = Args()
@@ -125,6 +126,27 @@ class DetectRun(unittest.TestCase):
         self.assertEqual((rc, report["verdict"]), (0, "not-affected"))
         rc, report, _ = self.run_detect({})
         self.assertEqual((rc, report["verdict"]), (0, "unknown"))
+        self.assertTrue(report["authorization"]["authorized"])
+
+    def test_refused_without_attestation_sends_nothing(self):
+        class Args:
+            cve = "CVE-2026-109618"
+            skip_tls_verify = False
+            i_am_authorized = False
+            target = "http://mock.invalid"
+
+        calls = []
+        with tempfile.TemporaryDirectory() as tmp:
+            args = Args()
+            args.output_dir = str(Path(tmp) / "out")
+            with patch.dict("os.environ", {}, clear=True), patch(
+                "sys.stdin", None
+            ), patch.object(transport, "request", lambda *a, **k: calls.append(a)):
+                with self.assertRaises(SystemExit) as ctx:
+                    detect.detect(args)
+            self.assertEqual(ctx.exception.code, 2)
+            self.assertFalse(Path(args.output_dir).exists())
+        self.assertEqual(calls, [])
 
 
 if __name__ == "__main__":
