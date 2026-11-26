@@ -28,6 +28,7 @@
 - **[Reality]** The Node.js Node2Shell pack (CVE-2026-111497) reproduced on a lab host with its pinned image, so it is verified and listed by default.
 - **[Reality]** Lab scanner templates send a request body as a string. The pinned runner rejected the list form, so no pack with a request body could run.
 - **[DevX]** The CLI tools bundle uses forward-slash keys on every platform, so a bundle generated on Windows matches the one CI checks.
+- **[DevX]** The SARIF files the conformance and the OWASP API checks write name the schema OASIS publishes for 2.1.0. The address they named returned 404, so a tool that went to the address for the schema found none.
 
 ## [0.3.249] - 2026-11-23
 
