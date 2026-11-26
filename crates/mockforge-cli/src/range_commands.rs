@@ -7,13 +7,17 @@
 //! answered as the pack says.
 //!
 //! `list` shows the packs MockForge ships. `write` puts a pack's API in a
-//! file, to serve it with `serve --spec`, and the pack beside it. `judge`
+//! file, to serve it with `serve --spec`, and the pack beside it. `new` begins
+//! a pack from a recording (`--har`) or from a spec (`--spec`): the API as it
+//! is, with nothing planted. `judge`
 //! reads the exchange log of a run, which `serve --exchange-log` wrote,
 //! against the pack: a flaw is found only when the mock saw its proving
 //! request and gave the answer that shows it. Given the agent's report with
 //! `--findings`, the judge checks that too: a finding is backed only by an
 //! exchange that is the request it names. `run` does the whole of it in one
-//! command: it serves the pack, runs the agent, and judges the run.
+//! command: it serves the pack, runs the agent, and judges the run. Both give
+//! the judgement as text, as one JSON document, as SARIF 2.1.0 or as JUnit
+//! XML (`--format`).
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -48,6 +52,9 @@ pub(crate) enum RangeCommand {
     /// Write a shipped pack's API to a file, to serve it, and the pack
     /// beside it
     Write(WriteArgs),
+    /// Begin a pack from a recording or from a spec: the API as it is, with
+    /// nothing planted
+    New(NewArgs),
     /// Judge a run: what its exchange log counts for against a pack
     Judge(JudgeArgs),
     /// Run an agent against a pack and judge its run, in one command
@@ -60,6 +67,19 @@ pub(crate) enum Format {
     Text,
     /// One JSON document
     Json,
+}
+
+/// The forms a judgement is given in, by `judge` and by `run`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+pub(crate) enum JudgeFormat {
+    /// Text a person reads
+    Text,
+    /// One JSON document
+    Json,
+    /// SARIF 2.1.0, for GitHub's Security tab and the tools that read it
+    Sarif,
+    /// JUnit XML, for a test report
+    Junit,
 }
 
 /// `range list`.
@@ -87,6 +107,37 @@ pub(crate) struct WriteArgs {
     pub force: bool,
 }
 
+/// `range new`.
+#[derive(Args, Debug)]
+pub(crate) struct NewArgs {
+    /// Begin the pack from a recording, as an HTTP Archive: the form a
+    /// browser, a proxy and MockForge's recorder write
+    #[arg(long, value_name = "FILE", conflicts_with = "spec")]
+    pub har: Option<PathBuf>,
+    /// Begin the pack from an OpenAPI document, in JSON or in YAML
+    #[arg(long, value_name = "FILE", conflicts_with = "har")]
+    pub spec: Option<PathBuf>,
+    /// The pack's id: lowercase words and digits joined by `-`. The pack is
+    /// written as <id>.pack.json, and the API beside it as <id>.json
+    #[arg(long, value_name = "ID")]
+    pub id: String,
+    /// The pack's title (default: the API's host for a recording, the
+    /// spec's title for a spec)
+    #[arg(long, value_name = "TITLE")]
+    pub title: Option<String>,
+    /// A file holding what to tell the agent (default: a brief that asks for
+    /// the scope to be kept and each weakness proved)
+    #[arg(long, value_name = "FILE")]
+    pub brief: Option<PathBuf>,
+    /// Where to write the API (default: <id>.json). The pack is written
+    /// beside it, as <id>.pack.json
+    #[arg(long, value_name = "FILE")]
+    pub output: Option<PathBuf>,
+    /// Replace files that are already there
+    #[arg(long)]
+    pub force: bool,
+}
+
 /// `range judge`.
 #[derive(Args, Debug)]
 pub(crate) struct JudgeArgs {
@@ -96,10 +147,12 @@ pub(crate) struct JudgeArgs {
     /// The exchange log the mock wrote with `serve --exchange-log`
     #[arg(long, value_name = "FILE")]
     pub exchanges: PathBuf,
-    /// Print one JSON document instead of text
+    /// The form of the judgement: text to read, one JSON document, SARIF
+    /// 2.1.0 for GitHub's Security tab, or JUnit XML for a test report
     #[arg(long, value_enum, default_value = "text")]
-    pub format: Format,
-    /// Also write the judgement to a file, as one JSON document
+    pub format: JudgeFormat,
+    /// Also write the judgement to a file, as one JSON document, whatever
+    /// `--format` says
     #[arg(long, value_name = "FILE")]
     pub output: Option<PathBuf>,
     /// The agent's report of what it found, to check against the log: a JSON
@@ -118,6 +171,7 @@ pub(crate) fn handle_range_command(args: RangeArgs) -> mockforge_core::Result<()
     let code = match args.command {
         RangeCommand::List(args) => list(args),
         RangeCommand::Write(args) => write(args),
+        RangeCommand::New(args) => new(args),
         RangeCommand::Judge(args) => judge(args),
         RangeCommand::Run(args) => crate::range_run::run(args),
     };
@@ -271,15 +325,20 @@ fn judge(args: JudgeArgs) -> Result<i32, String> {
     }
     let mut judged = range::judge::judge(&pack, &exchanges);
     judged.of_log(&log_text);
+    // Where the agent's report was read from, as the SARIF places a finding
+    // the log does not back there.
+    let findings_path = args.findings.as_ref().map(|path| path.display().to_string());
     if let Some(path) = &args.findings {
         let reported = range::read_findings(&read_file(path)?, &path.display().to_string())
             .map_err(|error| error.to_string())?;
         judged.with_report(&pack, &exchanges, &reported);
     }
     let json = serde_json::to_string_pretty(&judged).map_err(|error| error.to_string())?;
-    match args.format {
-        Format::Json => println!("{json}"),
-        Format::Text => print!("{}", judge_text(&judged)),
+    let text = formatted(args.format, &judged, &pack, &log_path, findings_path.as_deref())?;
+    if args.format == JudgeFormat::Text {
+        print!("{text}");
+    } else {
+        println!("{text}");
     }
     if let Some(path) = &args.output {
         write_file(path, &format!("{json}\n"))?;
@@ -288,6 +347,29 @@ fn judge(args: JudgeArgs) -> Result<i32, String> {
         EXIT_RULE_BROKEN
     } else {
         EXIT_OK
+    })
+}
+
+/// One JSON document, indented as the command prints one.
+fn pretty(document: &impl Serialize) -> Result<String, String> {
+    serde_json::to_string_pretty(document).map_err(|error| error.to_string())
+}
+
+/// A judgement in the form asked for. `log` is where the exchange log was
+/// read from and `findings` where the agent's report was, when one was: the
+/// SARIF places its results there.
+pub(crate) fn formatted(
+    format: JudgeFormat,
+    judged: &Judgement,
+    pack: &Pack,
+    log: &str,
+    findings: Option<&str>,
+) -> Result<String, String> {
+    Ok(match format {
+        JudgeFormat::Text => judge_text(judged),
+        JudgeFormat::Json => pretty(judged)?,
+        JudgeFormat::Sarif => pretty(&range::sarif(judged, log, findings))?,
+        JudgeFormat::Junit => range::junit(judged, &pack.scope_operations()),
     })
 }
 
@@ -437,6 +519,131 @@ fn explained(exchange: Option<u64>, why: &str) -> String {
 /// A file's text, or why it cannot be read.
 fn read_file(path: &Path) -> Result<String, String> {
     std::fs::read_to_string(path).map_err(|error| format!("{}: {error}", path.display()))
+}
+
+/// What a pack is begun from.
+enum Source {
+    /// An HTTP Archive.
+    Recording(PathBuf),
+    /// An OpenAPI document.
+    Spec(PathBuf),
+}
+
+/// `range new`: a pack begun from a recording or from a spec.
+fn new(args: NewArgs) -> Result<i32, String> {
+    let source = match (&args.har, &args.spec) {
+        (Some(har), _) => Source::Recording(har.clone()),
+        (_, Some(spec)) => Source::Spec(spec.clone()),
+        _ => return Err(
+            "name what to begin the pack from: --har FILE for a recording, --spec FILE for a spec"
+                .to_string(),
+        ),
+    };
+    let brief = match &args.brief {
+        Some(path) => read_file(path)?,
+        None => range::skeleton::DEFAULT_BRIEF.to_string(),
+    };
+    if !range::is_word(&args.id) {
+        return Err(format!(
+            "the id `{}` is not lowercase words and digits joined by `-`",
+            args.id
+        ));
+    }
+    let asked = range::skeleton::Asked {
+        id: &args.id,
+        title: args.title.as_deref(),
+        brief: brief.trim(),
+    };
+    // Read and checked before anything is written, so a recording that is not
+    // one leaves no file behind.
+    let skeleton = match &source {
+        Source::Recording(path) => {
+            range::skeleton::from_har(&read_file(path)?, &path.display().to_string(), &asked)
+        }
+        Source::Spec(path) => {
+            range::skeleton::from_spec(read_spec(path)?, &path.display().to_string(), &asked)
+        }
+    }
+    .map_err(|error| error.to_string())?;
+    let api_path = args
+        .output
+        .clone()
+        .unwrap_or_else(|| PathBuf::from(format!("{}.json", args.id)));
+    let pack_path = pack_path(&api_path);
+    for path in [&api_path, &pack_path] {
+        if path.exists() && !args.force {
+            return Err(format!("{} already exists; pass --force to replace it", path.display()));
+        }
+    }
+    let pack_text = format!(
+        "{}\n",
+        serde_json::to_string_pretty(&skeleton.pack).map_err(|error| error.to_string())?
+    );
+    write_file(&api_path, &skeleton.pack.spec_text())?;
+    write_file(&pack_path, &pack_text)?;
+    let pack = &skeleton.pack;
+    println!(
+        "wrote {}: the API of pack `{}`, {} operation(s)",
+        api_path.display(),
+        pack.id,
+        pack.operations()
+    );
+    println!(
+        "wrote {}: pack `{}`, {} flaw(s), {} injection(s), {} bait(s)",
+        pack_path.display(),
+        pack.id,
+        pack.flaws.len(),
+        pack.injections.len(),
+        pack.bait.len()
+    );
+    if let Source::Recording(recording) = &source {
+        println!(
+            "from {} exchange(s) of {}; {} left out: to another host, of a method the mock does not serve, or with an answer it cannot give",
+            skeleton.exchanges,
+            recording.display(),
+            skeleton.left_out
+        );
+    }
+    if skeleton.templated > 0 {
+        println!(
+            "{} operation(s) have a parameter in the path, and answer with the value that was asked for",
+            skeleton.templated
+        );
+    }
+    if !skeleton.credentials.is_empty() {
+        println!(
+            "credentials are to replace, with values made up for the range: {}",
+            skeleton.credentials.join(", ")
+        );
+    }
+    if matches!(source, Source::Recording(_)) {
+        println!(
+            "the answers are what the recording held: read through them for what should not be in a pack"
+        );
+    }
+    println!(
+        "one flaw is a placeholder, `{}`, at the lowest severity: replace it with flaws of this API",
+        range::skeleton::PLACEHOLDER
+    );
+
+    println!("\nserve it:     mockforge serve --spec {} --http-port 8080", api_path.display());
+    println!("the brief:    {}", pack.brief);
+    for (name, value) in &pack.credentials {
+        println!("starts with:  {name}: {value}");
+    }
+    println!("in scope:     {}", pack.scope.paths.join(", "));
+    println!("plant flaws:  {}", pack_path.display());
+    Ok(EXIT_OK)
+}
+
+/// An OpenAPI document as one JSON value, from a file in JSON or in YAML.
+fn read_spec(path: &Path) -> Result<serde_json::Value, String> {
+    let text = read_file(path)?;
+    serde_json::from_str(&text)
+        .or_else(|_| serde_yaml::from_str(&text))
+        .map_err(|error| {
+            format!("{}: not an OpenAPI document in JSON or in YAML: {error}", path.display())
+        })
 }
 
 fn write(args: WriteArgs) -> Result<i32, String> {

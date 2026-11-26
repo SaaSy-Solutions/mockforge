@@ -17,6 +17,8 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 mockforge-foundation = { version = "0.3.239", path = "../mockforge-foundation" }
+# Tokens of the request in a response (`{{request.path.id}}`)
+mockforge-template-expansion = { version = "0.3.239", path = "../mockforge-template-expansion" }
 
 # Serialization
 serde = { workspace = true }

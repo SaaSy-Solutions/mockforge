@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 use clap::Args;
 use mockforge_contracts::range::{self, Pack};
 
-use crate::range_commands::judge_text;
+use crate::range_commands::{formatted, JudgeFormat};
 
 /// The run was judged and kept the rules.
 const EXIT_OK: i32 = 0;
@@ -46,6 +46,11 @@ pub(crate) struct RunArgs {
     /// reached the mock
     #[arg(long, value_name = "DURATION", default_value = "15m")]
     pub timeout: String,
+    /// The form of the judgement printed: text to read, one JSON document,
+    /// SARIF 2.1.0 for GitHub's Security tab, or JUnit XML for a test report.
+    /// The run's judgement.json is written as ever
+    #[arg(long, value_enum, default_value = "text")]
+    pub format: JudgeFormat,
 }
 
 /// The files of a run, and the mock's address.
@@ -98,7 +103,18 @@ pub(crate) fn run(args: RunArgs) -> Result<i32, String> {
         url: String::new(),
     };
 
-    println!("pack `{}`, in {named}", pack.id);
+    // What the run says of itself goes to the error stream unless the
+    // judgement is text: then what is printed is one document, as a build
+    // expects.
+    let note = |text: String| {
+        if args.format == JudgeFormat::Text {
+            println!("{text}");
+        } else {
+            eprintln!("{text}");
+        }
+    };
+
+    note(format!("pack `{}`, in {named}", pack.id));
     let mock = Mock::start(&api, &place.log, &directory)?;
     let place = Place {
         url: format!("http://127.0.0.1:{}", mock.port),
@@ -112,10 +128,12 @@ pub(crate) fn run(args: RunArgs) -> Result<i32, String> {
     mock.stop();
     let agent = agent?;
     match &agent {
-        Agent::Done(Some(code)) if *code != 0 => println!("the agent ended with exit code {code}"),
+        Agent::Done(Some(code)) if *code != 0 => {
+            note(format!("the agent ended with exit code {code}"))
+        }
         Agent::Done(_) => {}
         Agent::TimedOut => {
-            println!("the agent was still running after {}; it was stopped", args.timeout)
+            note(format!("the agent was still running after {}; it was stopped", args.timeout))
         }
     }
 
@@ -130,17 +148,29 @@ pub(crate) fn run(args: RunArgs) -> Result<i32, String> {
                 .map_err(|error| error.to_string())?;
         judged.with_report(&pack, &exchanges, &reported);
     } else {
-        println!(
+        note(format!(
             "the agent wrote no report to {}: what it says it found is not checked",
             place.report.display()
-        );
+        ));
     }
     let json = serde_json::to_string_pretty(&judged)
         .map_err(|error| format!("the judgement could not be written as JSON: {error}"))?;
     let judgement = directory.join("judgement.json");
     std::fs::write(&judgement, format!("{json}\n"))
         .map_err(|error| format!("{}: {error}", judgement.display()))?;
-    print!("{}", judge_text(&judged));
+    let findings = place.report.is_file().then(|| place.report.display().to_string());
+    let text = formatted(
+        args.format,
+        &judged,
+        &pack,
+        &place.log.display().to_string(),
+        findings.as_deref(),
+    )?;
+    if args.format == JudgeFormat::Text {
+        print!("{text}");
+    } else {
+        println!("{text}");
+    }
     Ok(if judged.rule_broken() {
         EXIT_RULE_BROKEN
     } else {

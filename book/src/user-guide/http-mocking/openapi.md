@@ -263,9 +263,45 @@ paths:
 
 ## Template Expansion in Responses
 
-Advanced template features for dynamic response generation.
+### Tokens of the request
 
-### Advanced Template Functions
+An example can name the request that asked for it. These tokens are expanded
+always, in every example of a spec, whatever the flags below say, because they
+add nothing random: they make an answer recorded from one request the answer
+to every request of its operation.
+
+```yaml
+responses:
+  '200':
+    content:
+      application/json:
+        example:
+          userId: "{{request.path.id}}"
+          searchQuery: "{{request.query.q}}"
+          apiVersion: "{{request.header.X-API-Version}}"
+          note: "{{request.body.note}}"
+```
+
+| token | what it gives |
+| --- | --- |
+| `{{request.path.id}}` | The path parameter `id`. |
+| `{{request.query.q}}` | The query parameter `q`. Of one that comes more than once, the first. |
+| `{{request.header.X-API-Version}}` | The header, named in any case. `request.headers.X` says the same. |
+| `{{request.body.note}}` | A field of a JSON body. |
+| `{{request.method}}`, `{{request.path}}` | The method, and the path as it was asked for. |
+
+Each gives a string. With `json:` in front, `{{json:request.path.id}}`, it
+gives the value as JSON when it is JSON: the number `5000` where the path said
+`5000`, and `acc_12` as the string it is. A token that names nothing the
+request carried is left as written, and what a token is replaced with is never
+looked into for another token.
+
+The [range](../range.md) writes a pack from a recording with these tokens.
+
+### Random and time tokens
+
+`{{uuid}}`, `{{now}}`, `{{now+1h}}` and `{{randInt 1 100}}` change from one
+answer to the next, so they are expanded only with template expansion on:
 
 ```yaml
 responses:
@@ -276,38 +312,7 @@ responses:
           id: "{{uuid}}"
           createdAt: "{{now}}"
           expiresAt: "{{now+1h}}"
-          lastModified: "{{now-30m}}"
           randomValue: "{{randInt 1 100}}"
-          randomFloat: "{{randFloat 0.0 5.0}}"
-          userAgent: "{{request.header.User-Agent}}"
-          apiVersion: "{{request.header.X-API-Version}}"
-          userId: "{{request.path.id}}"
-          searchQuery: "{{request.query.q}}"
-```
-
-### Conditional Templates
-
-```yaml
-responses:
-  '200':
-    content:
-      application/json:
-        example: |
-          {{#if (eq request.query.format 'detailed')}}
-          {
-            "id": "{{uuid}}",
-            "name": "Detailed User",
-            "profile": {
-              "bio": "User biography",
-              "preferences": {}
-            }
-          }
-          {{else}}
-          {
-            "id": "{{uuid}}",
-            "name": "Basic User"
-          }
-          {{/if}}
 ```
 
 ### Template Security
@@ -318,6 +323,11 @@ Enable template expansion only when needed:
 # Enable template expansion
 MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true mockforge serve --spec api-spec.json
 ```
+
+It is off by default. `http.response_template_expand: true` in the
+configuration file turns it on as well, and an answer that depends on the
+request's query, beyond echoing it, is for an
+[override rule](custom-responses.md), not for a template.
 
 ## Performance Optimization
 

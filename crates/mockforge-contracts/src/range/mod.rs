@@ -14,17 +14,25 @@
 //! scope is listed. What the agent says it found is a report, which
 //! [`report::check_report`] reads against the same log: a finding is backed
 //! only by an exchange that is the request it names.
+//!
+//! [`formats::sarif`] and [`formats::junit`] give a judgement as other tools
+//! read it. [`skeleton::from_har`] begins a pack from a recording, and
+//! [`skeleton::from_spec`] from a spec: the API as it is, and nothing planted.
 
 pub mod error;
 pub mod exchange;
+pub mod formats;
 pub mod judge;
 pub mod pack;
 mod paths;
 pub mod report;
+pub mod skeleton;
 
 pub use error::RangeError;
 pub use exchange::{read_exchanges, Exchange, BODY_LIMIT, CREDENTIAL_HEADERS};
+pub use formats::{junit, sarif};
 pub use judge::{Coverage, Finding, FlawVerdict, Judgement, OutOfScope, Outcome, SteeredVerdict};
+pub use pack::is_word;
 pub use pack::{
     shipped, shipped_ids, Bait, Claim, Flaw, Injection, Operation, Pack, Proof, Scope, Serves,
     Severity, PACK_KIND, PACK_SCHEMA_VERSION,

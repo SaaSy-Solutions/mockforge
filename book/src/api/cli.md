@@ -818,6 +818,7 @@ holds and what the mock cannot model yet.
 mockforge range list
 mockforge range write shop
 mockforge range write all --output-dir range
+mockforge range new --har traffic.har --id orders
 mockforge serve --spec shop.json --http-port 8080 --exchange-log exchanges.jsonl
 mockforge range judge --pack shop.pack.json --exchanges exchanges.jsonl
 mockforge range run --pack shop.pack.json --agent "my-agent --target {url} --report {report}"
@@ -838,12 +839,28 @@ mockforge range run --pack shop.pack.json --agent "my-agent --target {url} --rep
   `./range`).
 - `--force`: replace files that are already there.
 
+`new`:
+
+- `--har <FILE>`: a recording, as an HTTP Archive.
+- `--spec <FILE>`: an OpenAPI document, in JSON or in YAML.
+- `--id <ID>`: the pack's id, lowercase words and digits joined by `-`. The
+  pack is written as `<id>.pack.json`, and the API beside it as `<id>.json`.
+- `--title <TITLE>`: the pack's title (default: the API's host for a
+  recording, the spec's title for a spec).
+- `--brief <FILE>`: a file holding what to tell the agent.
+- `--output <FILE>`: where to write the API (default: `<id>.json`). The pack
+  is written beside it.
+- `--force`: replace files that are already there.
+
 `judge`:
 
 - `--pack <FILE>`: the pack the run was against.
 - `--exchanges <FILE>`: the exchange log `serve --exchange-log` wrote.
-- `--format text|json`: `json` prints the judgement as one document.
-- `--output <FILE>`: also write that document to a file.
+- `--format text|json|sarif|junit`: `json` prints the judgement as one
+  document; `sarif` prints it as SARIF 2.1.0, for GitHub's Security tab and
+  the tools that read it; `junit` prints it as JUnit XML, for a test report.
+- `--output <FILE>`: also write the judgement to a file, as one JSON document,
+  whatever `--format` says.
 - `--findings <FILE>`: the agent's report, a JSON array of findings, each
   with the request it says shows it, to check against the log.
 
@@ -859,6 +876,10 @@ mockforge range run --pack shop.pack.json --agent "my-agent --target {url} --rep
   `./range-run/<pack>-<time>`).
 - `--timeout <DURATION>`: how long the agent may take, as `30s`, `15m` or
   `2h` (default: `15m`).
+- `--format text|json|sarif|junit`: the form of the judgement printed
+  (default: `text`). The run's `judgement.json` is written as ever. What the
+  run says of itself goes to the error stream unless the form is `text`, so
+  that what it prints is one document.
 
 `list --format json` prints an array with one object per pack: `id`, `title`,
 `brief`, `credentials`, `operations` (how many operations the API has),
@@ -895,12 +916,41 @@ read makes it `2`, naming the finding that is mistyped.
 exchange log as it was read, so that a verdict is tied to both, beside the
 verdicts and the coverage.
 
+`judge --format sarif` gives the judgement as SARIF 2.1.0. Each flaw,
+injection and bait of the pack is a rule, and so is each verdict that is none
+of those: a request out of the scope, a finding the log does not back, a flaw
+found and left out of the report, and an operation of the scope no exchange
+asked for. A result is written for each verdict that has something to show,
+at the line of the exchange log that shows it, and its `properties` say which
+kind it is (`found`, `requested`, `missed`, `taken`, `out-of-scope`,
+`unbacked`, `unreported`, `unreached`). An injection that was resisted, or
+never served, is counted among the run's properties and is not a result.
+
+`judge --format junit` gives the agent's examination as JUnit XML. A case
+fails when a flaw was missed, an injection or a bait was taken, a request left
+the scope, or, with `--findings`, a finding is unbacked or a flaw left out of
+the report. A case for each operation of the scope is skipped when no exchange
+asked for it. The exit code is the judge's in every form.
+
+`range new` begins a pack from a recording (`--har`) or from a spec
+(`--spec`): the API as it is, with nothing planted. Paths that differ only in
+an id are one operation, `GET /v1/orders/{orderId}`, and its answer echoes the
+id it is asked for. An operation answers as the recording answered it most
+often. A header that carries a credential is named with a value to replace and
+never copied; answer bodies are copied as they were recorded. The pack holds
+one flaw, `nothing-planted-yet`, at the `info` severity, so that it can be
+served and judged before any is planted: a pack that plants nothing is
+refused. The exit code is `2` when the recording or the spec cannot be read,
+holds nothing the mock can answer, or a file is there and `--force` was not
+given.
+
 `range run` does the whole of it in one command: it serves the pack with the
 exchange log on, runs the agent, and judges the run when the agent is done,
 report and all. The run's files are in one directory: the API the mock
 served, `exchanges.jsonl`, `brief.md`, the agent's `report.json` and
 `judgement.json`. An agent still running when its time is up is stopped, and
-the run is judged with what reached the mock. The exit code is the judge's.
+the run is judged with what reached the mock. The exit code is the judge's,
+and `--format` gives the judgement in any of the four forms.
 
 Capture databases are opened read-only and must already exist. An empty HTTP capture is not drift: the command reports that no traffic was recorded and exits successfully, and with `--record` it stores a `no_traffic` verification. Unknown endpoints, missing responses, undeclared statuses and JSON-schema violations count as drift. Exact status declarations take precedence over status ranges and the default response; local response references are resolved before schema validation.
 

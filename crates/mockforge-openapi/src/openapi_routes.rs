@@ -966,6 +966,21 @@ impl OpenApiRouteRegistry {
                     }
                 }
 
+                // Tokens that name the request itself, `{{request.path.id}}`
+                // among them, are expanded whatever the flag above says: they
+                // add nothing random, and they are how an answer recorded from
+                // one request is the answer to every request of its operation.
+                let asked = crate::request_template::Asked::of(
+                    &method,
+                    &path_template,
+                    &path_params,
+                    crate::request_template::Query::Text(raw_query.as_deref()),
+                    &headers,
+                    &body,
+                );
+                final_response =
+                    crate::request_template::expand(std::mem::take(&mut final_response), &asked);
+
                 // (h) Apply override rules
                 if let Some(ref overrides) = ctx.overrides {
                     let request = OverrideRequest {
@@ -1950,7 +1965,7 @@ impl OpenApiRouteRegistry {
                     context.body = body.map(|Json(b)| b);
 
                     // Generate AI response if AI generator is available and route has AI config
-                    let (status, response) = if let (Some(generator), Some(_ai_config)) =
+                    let (status, mut response) = if let (Some(generator), Some(_ai_config)) =
                         (ai_generator, &route.ai_config)
                     {
                         route
@@ -1960,6 +1975,24 @@ impl OpenApiRouteRegistry {
                         // No AI support, use static response
                         route.mock_response_with_status()
                     };
+
+                    // Tokens that name the request itself, `{{request.path.id}}`
+                    // among them, are expanded whatever any flag says, as every
+                    // router of a spec expands them.
+                    let query_pairs: Vec<(String, String)> = query_params
+                        .iter()
+                        .map(|(name, value)| (name.clone(), value.clone()))
+                        .collect();
+                    let asked = crate::request_template::Asked::of(
+                        &route.method,
+                        &route.path,
+                        &path_params,
+                        crate::request_template::Query::Pairs(&query_pairs),
+                        &headers,
+                        &body_bytes,
+                    );
+                    response =
+                        crate::request_template::expand(std::mem::take(&mut response), &asked);
 
                     (
                         axum::http::StatusCode::from_u16(status)
@@ -2464,6 +2497,23 @@ impl OpenApiRouteRegistry {
                         &body_bytes,
                         &mut response,
                     );
+                    // Tokens that name the request itself, `{{request.path.id}}`
+                    // among them, are expanded whatever any flag says, as every
+                    // router of a spec expands them.
+                    let query_pairs: Vec<(String, String)> = mockai_query
+                        .iter()
+                        .map(|(name, value)| (name.clone(), value.clone()))
+                        .collect();
+                    let asked = crate::request_template::Asked::of(
+                        &route.method,
+                        &route.path,
+                        &path_params,
+                        crate::request_template::Query::Pairs(&query_pairs),
+                        &headers,
+                        &body_bytes,
+                    );
+                    response =
+                        crate::request_template::expand(std::mem::take(&mut response), &asked);
                     let status_code = axum::http::StatusCode::from_u16(status)
                         .unwrap_or(axum::http::StatusCode::OK);
                     let mut resp = (status_code, Json(response)).into_response();

@@ -568,7 +568,7 @@ impl Pack {
 }
 
 /// Lowercase words and digits joined by `-`.
-fn is_word(id: &str) -> bool {
+pub fn is_word(id: &str) -> bool {
     !id.is_empty()
         && id.split('-').all(|part| {
             !part.is_empty()

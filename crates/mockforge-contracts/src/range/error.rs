@@ -52,6 +52,16 @@ pub enum RangeError {
     /// No shipped pack has the id that was named.
     #[error("no shipped pack has the id `{0}`; the shipped packs are {1}")]
     NoSuchPack(String, String),
+
+    /// The recording, or the spec, a pack was to be begun from cannot be
+    /// read, or holds nothing a pack can be made of.
+    #[error("{path}: {reason}")]
+    Recording {
+        /// The file that was named.
+        path: String,
+        /// What is wrong with it.
+        reason: String,
+    },
 }
 
 /// Printed as the reason. A program that returns the error, as `mockforge`
@@ -62,8 +72,15 @@ impl fmt::Debug for RangeError {
     }
 }
 
-/// The result of reading a pack or an exchange log.
+/// The result of reading a pack, a recording or an exchange log.
 pub type Result<T> = std::result::Result<T, RangeError>;
+
+pub(super) fn bad_recording(path: &str, reason: &str) -> RangeError {
+    RangeError::Recording {
+        path: path.to_string(),
+        reason: reason.trim().to_string(),
+    }
+}
 
 pub(super) fn invalid_pack(path: &str, reason: &str) -> RangeError {
     RangeError::Pack {
