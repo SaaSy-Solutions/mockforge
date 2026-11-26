@@ -492,6 +492,9 @@ jobs:
     - name: Test plugin publication request boundary
       run: python3 scripts/tests/test_plugin_publish_request.py
 
+    - name: Test which crates a push runs the tests of
+      run: python3 scripts/tests/test_unit_tests_scoped.py
+
     - name: Set per-runner CARGO_HOME on Hetzner
       if: runner.environment == 'self-hosted'
       run: echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"

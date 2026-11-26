@@ -176,11 +176,26 @@ pip install pre-commit
 pre-commit run --all-files
 ```
 
-The `pre-push` hook runs the publish-list drift guard
+One `pre-push` hook runs the publish-list drift guard
 (`scripts/check-publish-drift.sh`): it blocks a push when a publishable
 workspace member is missing from `scripts/publish-crates.sh`, the failure mode
 that breaks a release when `publish-crates.sh` later can't resolve the missing
 dependency on crates.io.
+
+Another runs the tests of the crates the pushed commits changed
+(`scripts/prepush/unit_tests_scoped.py`): the unit tests of their libraries
+and binaries in one `cargo test`, and the integration test a changed file
+under a crate's `tests/` belongs to. A file deeper in that directory may be in
+any test, so then all of them run. A file under a crate counts whether or
+not it is Rust, since a crate includes suites and schemas when it compiles. The
+hook tests the crates changed, not the crates that depend on them, and only
+what is committed. A change to the workspace manifest or a Rust file outside
+`crates/` is not scoped to crates: the hook says so and lets the push through,
+and CI runs the whole workspace's tests. To push past it once:
+
+```bash
+SKIP=unit-tests git push
+```
 
 ## Project Structure
 

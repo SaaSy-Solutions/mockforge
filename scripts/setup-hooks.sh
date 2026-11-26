@@ -69,8 +69,9 @@ pre-commit install
 echo "🔧 Installing commit-msg hook..."
 pre-commit install --hook-type commit-msg
 
-# Install the pre-push hook (publish-list drift guard — see .pre-commit-config.yaml
-# id: publish-drift, and scripts/check-publish-drift.sh).
+# Install the pre-push hooks (the publish-list drift guard, id: publish-drift,
+# and the tests of the crates a push changes, id: unit-tests — see
+# .pre-commit-config.yaml).
 echo "🔧 Installing pre-push hook..."
 pre-commit install --hook-type pre-push
 
