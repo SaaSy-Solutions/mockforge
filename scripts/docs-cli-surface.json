@@ -3867,6 +3867,7 @@
        "aliases": {},
        "flags": {
         "--exchanges": 1,
+        "--findings": 1,
         "--format": 1,
         "--help": 0,
         "--log-level": 1,

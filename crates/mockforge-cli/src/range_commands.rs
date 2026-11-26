@@ -10,14 +10,16 @@
 //! file, to serve it with `serve --spec`, and the pack beside it. `judge`
 //! reads the exchange log of a run, which `serve --exchange-log` wrote,
 //! against the pack: a flaw is found only when the mock saw its proving
-//! request and gave the answer that shows it.
+//! request and gave the answer that shows it. Given the agent's report with
+//! `--findings`, the judge checks that too: a finding is backed only by an
+//! exchange that is the request it names.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use clap::{Args, Subcommand};
 use mockforge_contracts::range::{
-    self, Bait, Finding, Flaw, Injection, Judgement, Pack, SteeredVerdict,
+    self, Bait, Finding, Flaw, Injection, Judgement, Pack, Severity, SteeredVerdict,
 };
 use serde::Serialize;
 
@@ -97,6 +99,10 @@ pub(crate) struct JudgeArgs {
     /// Also write the judgement to a file, as one JSON document
     #[arg(long, value_name = "FILE")]
     pub output: Option<PathBuf>,
+    /// The agent's report of what it found, to check against the log: a JSON
+    /// array of findings, each with the request it says shows it
+    #[arg(long, value_name = "FILE")]
+    pub findings: Option<PathBuf>,
 }
 
 /// What to write when every shipped pack is asked for.
@@ -258,7 +264,12 @@ fn judge(args: JudgeArgs) -> Result<i32, String> {
     if exchanges.is_empty() {
         return Err(format!("{log_path} holds no exchange: nothing could be judged"));
     }
-    let judged = range::judge::judge(&pack, &exchanges);
+    let mut judged = range::judge::judge(&pack, &exchanges);
+    if let Some(path) = &args.findings {
+        let reported = range::read_findings(&read_file(path)?, &path.display().to_string())
+            .map_err(|error| error.to_string())?;
+        judged.with_report(&pack, &exchanges, &reported);
+    }
     let json = serde_json::to_string_pretty(&judged).map_err(|error| error.to_string())?;
     match args.format {
         Format::Json => println!("{json}"),
@@ -330,6 +341,61 @@ fn judge_text(judged: &Judgement) -> String {
         judged.bait_taken(),
         judged.bait.len(),
         judged.out_of_scope.len()
+    ));
+    if judged.report.is_some() {
+        text.push_str(&report_text(judged));
+    }
+    text
+}
+
+/// The agent's report as a person reads it: one line per finding, then each
+/// flaw the log shows that the report leaves out, and a line that sums it up.
+fn report_text(judged: &Judgement) -> String {
+    let report = judged.report.as_ref().expect("a report was checked");
+    // The id column is as wide as its longest id, so that what follows the
+    // ids starts at one place.
+    let width = report
+        .findings
+        .iter()
+        .filter_map(|check| check.flaw.as_deref().or(check.shows.as_deref()))
+        .chain(report.unreported.iter().map(String::as_str))
+        .map(str::len)
+        .max()
+        .unwrap_or(0);
+    let mut text = String::from("\nreport\n");
+    for check in &report.findings {
+        text.push_str(&format!(
+            "  {:<9} {:<8} {:<2} {:<width$}  {}\n",
+            check.support.label(),
+            check.severity.map(Severity::label).unwrap_or("-"),
+            check.index,
+            check.flaw.as_deref().or(check.shows.as_deref()).unwrap_or("-"),
+            explained(check.exchange, &check.why)
+        ));
+    }
+    for id in &report.unreported {
+        // The exchange that shows the flaw the report leaves out.
+        let shown = judged
+            .flaws
+            .iter()
+            .find(|verdict| &verdict.id == id)
+            .and_then(|verdict| verdict.exchange);
+        let why = match shown {
+            Some(seq) => format!("exchange {seq} shows it; the report does not tell of it"),
+            None => "the report does not tell of it".to_string(),
+        };
+        text.push_str(&format!(
+            "  {:<9} {:<8} {:<2} {:<width$}  {}\n",
+            "left out", "-", "", id, why
+        ));
+    }
+    text.push_str(&format!(
+        "\n{} finding(s) reported: {} backed by the log, {} not. \
+         {} found and left out of the report.\n",
+        report.findings.len(),
+        report.backed(),
+        report.unbacked(),
+        report.unreported.len()
     ));
     text
 }

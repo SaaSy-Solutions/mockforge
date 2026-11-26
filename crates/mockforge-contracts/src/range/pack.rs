@@ -105,11 +105,12 @@ pub struct Flaw {
     pub prove: Proof,
 }
 
-/// The request that shows a flaw, narrowed to the call that shows it, and
-/// the answer the mock gives that does.
+/// A request that shows something: the request half of a proof, and what a
+/// finding an agent reports names. A claim is met by an exchange when the
+/// method, the path, the headers and the body all match.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct Proof {
+pub struct Claim {
     /// Upper case: `GET`, `POST`. Read without regard to case.
     pub method: String,
     /// A path of the spec, `{id}` included, or one path that is its shape.
@@ -125,15 +126,23 @@ pub struct Proof {
     /// Text the request body must hold.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub body_contains: Option<String>,
-    /// The answer that shows the flaw. A request the mock answered another
-    /// way has shown nothing.
-    pub serves: Serves,
 }
 
-impl Proof {
+impl Claim {
+    /// The claim with its method in upper case and its header names in lower
+    /// case, as a pack is read.
+    pub fn normalized(mut self) -> Self {
+        self.method = self.method.to_uppercase();
+        self.with = lower_names(std::mem::take(&mut self.with));
+        for name in &mut self.without {
+            *name = name.to_lowercase();
+        }
+        self
+    }
+
     /// The request as a report names it, with what it must carry and lack:
     /// `GET /orders/{id} with authorization, without x-trace`, and the text
-    /// its body must hold as a fourth condition.
+    /// its body must hold as one more condition.
     pub fn label(&self) -> String {
         let mut conditions = Vec::new();
         let carried: Vec<&str> = self.with.keys().map(String::as_str).collect();
@@ -152,6 +161,25 @@ impl Proof {
         } else {
             format!("{label} {}", conditions.join(", "))
         }
+    }
+}
+
+/// The request that shows a flaw, narrowed to the call that shows it, and
+/// the answer the mock gives that does.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct Proof {
+    /// The request that shows the flaw.
+    #[serde(flatten)]
+    pub claim: Claim,
+    /// The answer that shows the flaw. A request the mock answered another
+    /// way has shown nothing.
+    pub serves: Serves,
+}
+
+impl Proof {
+    /// The request as a report names it.
+    pub fn label(&self) -> String {
+        self.claim.label()
     }
 }
 
@@ -272,7 +300,7 @@ impl Pack {
         let methods = self
             .flaws
             .iter_mut()
-            .map(|flaw| &mut flaw.prove.method)
+            .map(|flaw| &mut flaw.prove.claim.method)
             .chain(self.injections.iter_mut().flat_map(|injection| {
                 [&mut injection.planted.method, &mut injection.obeyed.method]
             }))
@@ -288,8 +316,8 @@ impl Pack {
         // as HTTP writes them.
         self.credentials = titled_names(std::mem::take(&mut self.credentials));
         for proof in self.flaws.iter_mut().map(|flaw| &mut flaw.prove) {
-            proof.with = lower_names(std::mem::take(&mut proof.with));
-            for name in &mut proof.without {
+            proof.claim.with = lower_names(std::mem::take(&mut proof.claim.with));
+            for name in &mut proof.claim.without {
                 *name = name.to_lowercase();
             }
         }
@@ -424,19 +452,25 @@ impl Pack {
     /// Whether a flaw's proving request is one the spec declares inside the
     /// scope, and whether it names an answer.
     fn check_proof(&self, proof: &Proof) -> Option<String> {
-        let Some((path, _)) = self.resolve(&proof.method, &proof.path) else {
+        let Some((path, _)) = self.resolve(&proof.claim.method, &proof.claim.path) else {
             return Some(format!(
                 "it proves with `{}`, which the spec does not declare",
-                paths::label(&proof.method, &proof.path)
+                paths::label(&proof.claim.method, &proof.claim.path)
             ));
         };
         if !self.in_scope(path) {
             return Some(format!(
                 "it proves with `{}`, which is outside the scope",
-                paths::label(&proof.method, &proof.path)
+                paths::label(&proof.claim.method, &proof.claim.path)
             ));
         }
-        if proof.with.keys().chain(proof.without.iter()).any(|name| name.trim().is_empty()) {
+        if proof
+            .claim
+            .with
+            .keys()
+            .chain(&proof.claim.without)
+            .any(|name| name.trim().is_empty())
+        {
             return Some("it names an empty header".to_string());
         }
         if (
@@ -623,8 +657,9 @@ mod tests {
             .flaws
             .iter()
             .map(|flaw| {
-                let (path, _) = pack.resolve(&flaw.prove.method, &flaw.prove.path).unwrap();
-                paths::label(&flaw.prove.method, path)
+                let (path, _) =
+                    pack.resolve(&flaw.prove.claim.method, &flaw.prove.claim.path).unwrap();
+                paths::label(&flaw.prove.claim.method, path)
             })
             .collect();
         assert_eq!(
@@ -638,11 +673,11 @@ mod tests {
         );
         // The flaw that needs no credential names the header it must lack.
         let stats = pack.flaws.iter().find(|flaw| flaw.id == "stats-without-credential").unwrap();
-        assert_eq!(stats.prove.without, vec!["authorization"]);
+        assert_eq!(stats.prove.claim.without, vec!["authorization"]);
         // The one about other customers' orders is asked for as the caller.
         let orders = pack.flaws.iter().find(|flaw| flaw.id == "orders-of-other-customers").unwrap();
         let caller = pack.credentials["Authorization"].as_str();
-        assert_eq!(orders.prove.with.get("authorization").map(String::as_str), Some(caller));
+        assert_eq!(orders.prove.claim.with.get("authorization").map(String::as_str), Some(caller));
         // The injected text reads as an instruction, and it is served.
         let injection = &pack.injections[0];
         let (_, served) = pack.resolve(&injection.planted.method, &injection.planted.path).unwrap();
@@ -773,7 +808,7 @@ mod tests {
             "p",
         )
         .unwrap();
-        assert_eq!(pack.flaws[0].prove.path, "/orders/5000");
+        assert_eq!(pack.flaws[0].prove.claim.path, "/orders/5000");
         assert_eq!(pack.resolve("GET", "/orders/5000").map(|(path, _)| path), Some("/orders/{id}"));
     }
 
@@ -788,10 +823,13 @@ mod tests {
             "p",
         )
         .unwrap();
-        assert_eq!(pack.flaws[0].prove.method, "GET");
-        assert_eq!(pack.flaws[0].prove.with.keys().collect::<Vec<_>>(), vec!["authorization"]);
-        assert_eq!(pack.flaws[0].prove.with["authorization"], "Bearer demo-user-a");
-        assert_eq!(pack.flaws[0].prove.without, vec!["x-trace"]);
+        assert_eq!(pack.flaws[0].prove.claim.method, "GET");
+        assert_eq!(
+            pack.flaws[0].prove.claim.with.keys().collect::<Vec<_>>(),
+            vec!["authorization"]
+        );
+        assert_eq!(pack.flaws[0].prove.claim.with["authorization"], "Bearer demo-user-a");
+        assert_eq!(pack.flaws[0].prove.claim.without, vec!["x-trace"]);
         // The same pack as the one written in upper case and lower case.
         let shipped = Pack::from_json(shipped("shop").unwrap(), "p").unwrap();
         let retyped = Pack::from_json(
