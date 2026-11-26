@@ -139,6 +139,9 @@ pub(crate) struct ServeArgs {
     /// `--mcp-mock-record`: where the mock MCP server writes down every
     /// request it receives. Nowhere when absent.
     pub(crate) mcp_mock_record: Option<PathBuf>,
+    /// `--exchange-log`: where the mock writes down every request it receives
+    /// and the answer it gives. Nowhere when absent.
+    pub(crate) exchange_log: Option<PathBuf>,
     /// `--conformance-buffer-size` (round 31). Mirrors
     /// `MOCKFORGE_CONFORMANCE_BUFFER_SIZE`. None = honour env or default 256.
     pub(crate) conformance_buffer_size: Option<usize>,
@@ -238,6 +241,7 @@ impl Default for ServeArgs {
             mcp_mock: false,
             mcp_mock_catalog: None,
             mcp_mock_record: None,
+            exchange_log: None,
             conformance_buffer_size: None,
             conformance_buffer_unique: false,
             inject_response_violations: false,
@@ -2263,6 +2267,20 @@ pub async fn handle_serve(
             );
         }
 
+        // The exchange log is opened before anything listens, so a file that
+        // cannot be written stops startup with the reason.
+        let exchange_log = match &serve_args.exchange_log {
+            Some(path) => Some(std::sync::Arc::new(
+                mockforge_http::exchange_log::ExchangeLog::create(path)
+                    .await
+                    .map_err(|error| format!("--exchange-log {}: {error}", path.display()))?,
+            )),
+            None => None,
+        };
+        if let Some(path) = &serve_args.exchange_log {
+            println!("📝 Exchanges recorded to {}, one JSON line per request", path.display());
+        }
+
         // Mount the mock MCP server (#913) so an agent acting as an MCP client can
         // talk to MockForge over JSON-RPC. Opt-in via --mcp-mock.
         if serve_args.mcp_mock {
@@ -2592,6 +2610,21 @@ pub async fn handle_serve(
             );
         }
         let http_app = mockforge_http::management_auth::install(http_app, control_plane_policy);
+
+        // The exchange log is the outermost layer, after every other: it
+        // writes down a request whoever answered it, the mock's API, its
+        // management API, or no route at all.
+        let http_app = match exchange_log {
+            Some(log) => {
+                use axum::extract::Request as AxumRequest;
+                use axum::middleware::{from_fn, Next};
+                http_app.layer(from_fn(move |req: AxumRequest, next: Next| {
+                    let log = log.clone();
+                    async move { mockforge_http::exchange_log::record(log, req, next).await }
+                }))
+            }
+            None => http_app,
+        };
 
         #[cfg(feature = "chaos")]
         let chaos_listener_cfg = if chaos_config.enabled

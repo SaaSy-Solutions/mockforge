@@ -818,7 +818,7 @@ holds and what the mock cannot model yet.
 mockforge range list
 mockforge range write shop
 mockforge range write all --output-dir range
-mockforge serve --spec shop.json --http-port 8080
+mockforge serve --spec shop.json --http-port 8080 --exchange-log exchanges.jsonl
 ```
 
 #### Options
@@ -839,6 +839,13 @@ mockforge serve --spec shop.json --http-port 8080
 `list --format json` prints an array with one object per pack: `id`, `title`,
 `brief`, `credentials`, `operations` (how many operations the API has),
 `scope` (the paths that are in scope), `flaws`, `injections` and `bait`.
+
+`serve --exchange-log <FILE>` writes down every request the mock receives and
+the answer it gives, one JSON line per exchange, whoever answered it. The log
+is opened before the server listens, and a file that is there is replaced. A
+header that carries a credential (`Authorization`, `Proxy-Authorization`,
+`Cookie`, `Set-Cookie`) is written as `sha256:` and the digest of its value,
+never as sent. A body is held up to 16 KiB, and what is cut is marked.
 
 Capture databases are opened read-only and must already exist. An empty HTTP capture is not drift: the command reports that no traffic was recorded and exits successfully, and with `--record` it stores a `no_traffic` verification. Unknown endpoints, missing responses, undeclared statuses and JSON-schema violations count as drift. Exact status declarations take precedence over status ranges and the default response; local response references are resolved before schema validation.
 

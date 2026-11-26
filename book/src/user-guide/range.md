@@ -65,6 +65,45 @@ Give the agent the brief, the credential and the scope, and point it at
 `http://127.0.0.1:8080`. The credential is made up and the API is the mock, so
 the agent cannot reach anything real, whatever it does.
 
+## Write down every exchange
+
+Serve the API with an exchange log:
+
+```bash
+mockforge serve --spec shop.json --http-port 8080 --exchange-log exchanges.jsonl
+```
+
+The mock then writes one JSON line per exchange: each request it received,
+and the answer it gave. This is what a finding is checked against. A flaw
+counts only when its proving request is in the log, with the answer that
+shows it.
+
+| field | what it holds |
+| --- | --- |
+| `seq`, `at` | Its number, and when the request arrived. |
+| `method`, `path`, `query` | What was asked. |
+| `request_headers`, `request_body` | What the request carried. |
+| `status`, `response_headers`, `response_body` | What the mock answered. |
+| `duration_ms` | How long the mock took. |
+
+- **Every request is written down, whoever answered it**: the API, the mock's
+  own management API, or no route at all. A request to a path the spec does
+  not declare is in the log, with its `404`.
+- **A credential is never written as sent.** `Authorization`,
+  `Proxy-Authorization`, `Cookie` and `Set-Cookie` are written as `sha256:`
+  and the digest of the value. A judge compares a credential the pack names
+  by digesting it the same way.
+- **A body is held up to 16 KiB.** What is cut is marked
+  `request_body_truncated` or `response_body_truncated`.
+- **The log is opened before the server listens.** A file that cannot be
+  written stops startup with the reason, and a file that is there is replaced.
+- **An exchange is in the file before its answer is sent.** Whoever reads the
+  log after an exchange finds it; the last one is not left in a buffer.
+- **An answer is held whole before it is sent.** With the log on, an answer
+  that streams arrives at its end. An answer over 64 MiB is refused.
+
+A log is evidence. Keep it beside the pack it was written against.
+
 ## What a pack holds
 
 A pack is a JSON document whose `kind` is `mockforge-range-pack`:

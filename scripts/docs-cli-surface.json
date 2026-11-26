@@ -4424,6 +4424,7 @@
       "--conformance-buffer-size": 1,
       "--conformance-buffer-unique": 0,
       "--dry-run": 0,
+      "--exchange-log": 1,
       "--graphql": 1,
       "--graphql-port": 1,
       "--graphql-upstream": 1,

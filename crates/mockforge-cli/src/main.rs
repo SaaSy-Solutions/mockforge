@@ -601,6 +601,12 @@ struct ServeCliArgs {
     )]
     pub mcp_mock_record: Option<PathBuf>,
 
+    /// Write down every request the mock receives and the answer it gives,
+    /// one JSON line per exchange. `mockforge range judge` reads it. A header
+    /// that carries a credential is written as a digest of its value
+    #[arg(long, help_heading = "AI Features", value_name = "FILE")]
+    pub exchange_log: Option<PathBuf>,
+
     /// Admin UI port (defaults to config or 9080)
     #[arg(long, help_heading = "Admin & UI")]
     pub admin_port: Option<u16>,
@@ -3199,6 +3205,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 mcp_mock: args.mcp_mock,
                 mcp_mock_catalog: args.mcp_mock_catalog,
                 mcp_mock_record: args.mcp_mock_record,
+                exchange_log: args.exchange_log,
                 metrics: args.observability.metrics,
                 metrics_port: args.observability.metrics_port,
                 tracing: args.observability.tracing,
