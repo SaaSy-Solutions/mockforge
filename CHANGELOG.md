@@ -7,6 +7,7 @@
 
 ### Added
 
+- **[Reality]** New managed CVE lab pack for CVE-2024-27199: one reviewed path-traversal request reaches a TeamCity 2023.11.3 administrative page with no session, with two more traversal prefixes and benign controls, verified on a lab host through the runner. A pack may now declare, as reviewed data, that its application needs more memory or a longer start than the default 1 GB and 90 seconds, up to 4 GB and 300 seconds; TeamCity declares 1536 MB and 240 seconds.
 - **[Contracts][AI]** `mockforge mcp-contract pin` records what an MCP tool server declares, and `mockforge mcp-contract check` fails CI when it changes: a rewritten tool description, a new tool, an argument that becomes required, annotations that claim less restraint. It speaks the 2026-07-28 protocol and the earlier `initialize` handshake, never calls a tool, and never writes a credential into a contract. A server that cannot be asked exits 2 rather than passing as unchanged.
 - **[Reality]** `mockforge cve detect` runs a passive, detection-only version check for the PHP2Shell (CVE-2026-109618, CVE-2026-109619) and Node2Shell (CVE-2026-111497) advisories. It sends one read-only `GET /`, compares the announced PHP or Node.js version with the fixed releases, and reports likely-affected, not-affected or unknown. Node.js usually reports unknown because it rarely announces its version.
 - **[Reality]** CVE lab runs against an operator `--target` require an authorization attestation (`--i-am-authorized`, `MOCKFORGE_CVE_AUTHORIZED=1`, or an interactive confirmation) and record it in `report.json`. (#1682)
@@ -19,6 +20,7 @@
 
 ### Fixed
 
+- **[Reality]** The CVE-2024-4577 PHP-CGI pack is no longer listed as verified. Its lab image is still pending review, so nobody can reproduce its request through the runner. It is hidden by default like every other unverified pack, and a run without `--include-unverified` says that is why.
 - **[DevX]** A pull request from a fork runs its CI again. `Detect change scope` waited forever on a GitHub-hosted runner, was cancelled at its 15-minute limit, and every other job was skipped: one of the local Cargo launcher's tests asked for a second build slot, and the built-in policy gives a four-core machine only one. Each fork run since that step was added on 2026-10-22 ended this way, without naming a failing test. The test now states the machine and the policy it means.
 - **[Contracts]** An operation with `security: []` is now treated as opting out of the top-level security requirement, as OpenAPI defines it, in request validation and in generated client commands. Both treated the empty list as "fall back to the top-level requirement", so an operation the spec deliberately leaves open was validated and called as secured.
 - **[Reality]** CVE labs materialize a single-file lab app shipped as `application_script` to its mount host path, so Node-style packs start instead of the runtime mounting an empty directory and the app failing with MODULE_NOT_FOUND. (#1620)
