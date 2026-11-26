@@ -569,6 +569,7 @@
       "--conformance-custom": 1,
       "--conformance-custom-filter": 1,
       "--conformance-delay": 1,
+      "--conformance-fail-on": 1,
       "--conformance-header": 1,
       "--conformance-report": 1,
       "--conformance-report-format": 1,

@@ -292,6 +292,35 @@ rows by default to keep the HTML file viewable on huge specs. Override
 with `--report-missed-cap N` (`0` = no cap, show everything). The
 JSON report always carries the full set regardless of the cap.
 
+## Failing the run from CI
+
+By default a self-test never fails: it writes its reports, prints a warning
+when the target let something through, and exits 0. `--conformance-fail-on`
+turns a result into an exit code:
+
+| Scope | The run fails when |
+| --- | --- |
+| `security` | A secured operation answered a request with no credential or an invalid one. |
+| `all` | Any case had the wrong outcome: a positive was refused, or a negative was let through. |
+
+A gate never passes a run that cannot judge the target. It fails, with the
+reason, when every positive case came back with the same status (the base
+path or the credential is wrong, so the refusals mean nothing), when no
+positive case passed at all, and, for `security`, when no operation in the
+spec declares a security scheme, so nothing was checked. The `security` scope
+also fails when a secured operation's valid request was refused: an
+operation that rejects everyone has not been shown to enforce anything, so
+its refusals of the probes prove nothing.
+
+Every miss is one security gap, listed in `conformance-self-test.json` under
+`security_gaps` with the operation, the probe, the status the target answered
+with, and the OWASP API Security Top 10 category it points to. Both probes
+this self-test sends are about authentication, so both point to
+`API2:2023 Broken Authentication`. The report carries `schema_version: 1`.
+
+The self-test makes its own requests and needs no k6, so it runs on a CI
+runner as it is.
+
 ## CLI summary
 
 ```bash
@@ -301,7 +330,8 @@ mockforge bench \
   --target https://your-api.example.com/ \
   --base-path /api \
   --conformance-header "Authorization: Bearer real-token" \
-  --report-missed-cap 0
+  --report-missed-cap 0 \
+  --conformance-fail-on security
 ```
 
 Output artefacts in `bench-results/`:

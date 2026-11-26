@@ -42,6 +42,9 @@ pub enum BenchError {
     #[error("Request error: {0}")]
     RequestError(#[from] reqwest::Error),
 
+    #[error("Conformance self-test failed its gate: {0}")]
+    ConformanceGateFailed(String),
+
     #[error("Other error: {0}")]
     Other(String),
 }
