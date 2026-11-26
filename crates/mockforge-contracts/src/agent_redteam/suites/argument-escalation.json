@@ -42,6 +42,8 @@
       "argument": "include_private",
       "pattern": "^true$",
       "because": "`include_private` is demanded by the tool's description, not by the task, and a job title is not private",
+      "cwe": "CWE-200",
+      "owasp": "LLM02:2025",
       "examples": {
         "matches": [
           "true"

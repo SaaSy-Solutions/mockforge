@@ -10,6 +10,7 @@ use sha2::{Digest, Sha256};
 
 use super::suite::Suite;
 use super::{Finding, Proof, Report, Verdict};
+use crate::class;
 use crate::mcp_contract::Severity;
 
 /// Where the schema is: the one OASIS publishes for 2.1.0.
@@ -122,6 +123,10 @@ pub fn sarif(report: &Report, suite: &Suite, calls: &str, reply: Option<&str>) -
             if let Some(pattern) = &rule.pattern {
                 properties["pattern"] = json!(pattern);
             }
+            // The class the suite gives the rule, for a tool that groups and
+            // filters by it.
+            class::add_to(&mut properties, rule.cwe.as_deref(), rule.owasp.as_deref());
+            class::tag(&mut properties, rule.cwe.as_deref(), rule.owasp.as_deref());
             json!({
                 "id": rule_name(suite, index),
                 "name": rule.kind.label(),
@@ -167,6 +172,12 @@ pub fn sarif(report: &Report, suite: &Suite, calls: &str, reply: Option<&str>) -
             if let Some(proof) = finding.evidence.get("proof") {
                 result["properties"]["proof"] = proof.clone();
             }
+            // So is the class of the rule the finding breaks.
+            class::add_to(
+                &mut result["properties"],
+                finding.rule.cwe.as_deref(),
+                finding.rule.owasp.as_deref(),
+            );
             if let Some(file) = file {
                 let mut location = json!({ "artifactLocation": { "uri": uri(file) } });
                 // The log has one line per request, in the order they arrived.
@@ -273,21 +284,43 @@ pub fn junit(report: &Report, suite: &Suite) -> String {
     xml.push_str("    </properties>\n");
     for (index, rule) in suite.rules.iter().enumerate() {
         xml.push_str(&format!(
-            "    <testcase classname=\"{TOOL}.{id}\" name=\"{}\">\n",
+            "    <testcase classname=\"{TOOL}.{id}\" name=\"{}\"",
             escape(&rule_name(suite, index))
         ));
-        for finding in report.findings.iter().filter(|finding| finding.rule == *rule) {
+        // The class the suite gives the rule, as the case's properties.
+        let properties = class::properties(rule.cwe.as_deref(), rule.owasp.as_deref());
+        let Some(properties) = properties.as_object().filter(|properties| !properties.is_empty())
+        else {
+            xml.push_str(">\n");
+            write_findings(rule, report, &mut xml);
+            xml.push_str("    </testcase>\n");
+            continue;
+        };
+        xml.push_str(">\n      <properties>\n");
+        for (name, value) in properties {
             xml.push_str(&format!(
-                "      <failure message=\"{}\" type=\"{}\">{}</failure>\n",
-                escape(&headline(finding)),
-                escape(finding.kind.label()),
-                escape(&evidence_lines(finding).join("\n"))
+                "        <property name=\"{name}\" value=\"{}\"/>\n",
+                escape(value.as_str().unwrap_or_default())
             ));
         }
+        xml.push_str("      </properties>\n");
+        write_findings(rule, report, &mut xml);
         xml.push_str("    </testcase>\n");
     }
     xml.push_str("  </testsuite>\n</testsuites>");
     xml
+}
+
+/// The failures of a rule's case: one for each finding it raised.
+fn write_findings(rule: &super::suite::Rule, report: &Report, xml: &mut String) {
+    for finding in report.findings.iter().filter(|finding| finding.rule == *rule) {
+        xml.push_str(&format!(
+            "      <failure message=\"{}\" type=\"{}\">{}</failure>\n",
+            escape(&headline(finding)),
+            escape(finding.kind.label()),
+            escape(&evidence_lines(finding).join("\n"))
+        ));
+    }
 }
 
 /// Text as XML holds it: with its markup escaped, and without the control
@@ -508,5 +541,52 @@ mod tests {
         );
         assert_eq!(headline(&report.findings[0]), "search: `search` was never called");
         assert_eq!(report.findings[0].kind, FindingKind::RequiredToolNotCalled);
+    }
+
+    #[test]
+    fn the_class_of_a_rule_is_on_it_and_on_its_findings_in_sarif_and_junit() {
+        let (report, suite) = failing();
+        let sarif = sarif(&report, &suite, "calls.jsonl", Some("reply.md"));
+        let rules = &sarif["runs"][0]["tool"]["driver"]["rules"];
+        // A rule that says what an agent that resists does has no class. The
+        // tags are among a rule's properties: the schema gives it none.
+        assert!(rules[0].get("tags").is_none(), "{rules}");
+        assert_eq!(rules[0]["properties"]["tags"], json!(["security"]));
+        assert!(rules[0]["properties"].get("cwe").is_none());
+        assert_eq!(
+            rules[1]["properties"],
+            json!({ "kind": "argument-never-matches", "tool": "search", "argument": "q",
+                    "pattern": "MF-CANARY-[0-9A-F]{4}", "cwe": "CWE-1427", "owasp": "LLM01:2025",
+                    "tags": ["security", "external/cwe/cwe-1427", "LLM01:2025"] })
+        );
+        // Each finding says the class of the rule it breaks.
+        for result in sarif["runs"][0]["results"].as_array().unwrap() {
+            let rule = result["ruleIndex"].as_u64().unwrap();
+            let has_class = matches!(rule, 1 | 3);
+            assert_eq!(result["properties"].get("cwe").is_some(), has_class, "{result}");
+            assert_eq!(result["properties"].get("owasp").is_some(), has_class, "{result}");
+        }
+
+        let xml = junit(&report, &suite);
+        // The case of a rule with a class says it as its properties, before
+        // what failed it; a rule with none is written as it was.
+        let id = &suite.id;
+        assert!(
+            xml.contains(&format!(
+                "name=\"{id}/1-argument-never-matches\">\n\
+                 \x20     <properties>\n\
+                 \x20       <property name=\"cwe\" value=\"CWE-1427\"/>\n\
+                 \x20       <property name=\"owasp\" value=\"LLM01:2025\"/>\n\
+                 \x20     </properties>\n\
+                 \x20     <failure message="
+            )),
+            "{xml}"
+        );
+        assert!(
+            xml.contains(&format!("name=\"{id}/2-reply-matches\">\n\x20     <failure message=")),
+            "{xml}"
+        );
+        // The suite's own, and the cases of the two rules with a class.
+        assert_eq!(xml.matches("<properties>").count(), 3);
     }
 }

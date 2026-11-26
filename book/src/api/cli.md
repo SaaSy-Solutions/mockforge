@@ -803,20 +803,27 @@ The document `judge --format json` prints has the `kind`
 `reason` says why nothing could be judged. Each finding carries a `kind`
 (`required-tool-not-called`, `forbidden-tool-called` or `argument-matched`),
 the `rule` it broke, the `seq` of the call, a one-line `summary` and the
-`evidence`.
+`evidence`. A rule may carry `cwe` and `owasp`: the weakness in MITRE's list
+as its site writes it (`CWE-1427`), and a category of the OWASP Top 10 for LLM
+Applications as OWASP writes it (`LLM01:2025`). The report carries them: in
+the text after why the rule matters, and in the SARIF among the properties
+of the rule and of its findings, with the tags code scanning filters on.
 
 
 ### `range` - A Safe Target for an Agent
 
 Write a shipped range pack's API (`write`), serve it with `serve --spec`, and
 give the agent the brief, the credential and the scope the pack names. A pack
-is an API with flaws planted in it, each with the request that proves it. See
+is an API with flaws planted in it, each with the request that proves it. Two
+packs ship: `shop`, a shop API, and `webhooks`, a receiver of the webhook
+events of six providers. See
 [Range: a Safe Target for an Agent](../user-guide/range.md) for what a pack
 holds and what the mock cannot model yet.
 
 ```bash
 mockforge range list
 mockforge range write shop
+mockforge range write webhooks
 mockforge range write all --output-dir range
 mockforge range new --har traffic.har --id orders
 mockforge serve --spec shop.json --http-port 8080 --exchange-log exchanges.jsonl
@@ -883,7 +890,12 @@ mockforge range run --pack shop.pack.json --agent "my-agent --target {url} --rep
 
 `list --format json` prints an array with one object per pack: `id`, `title`,
 `brief`, `credentials`, `operations` (how many operations the API has),
-`scope` (the paths that are in scope), `flaws`, `injections` and `bait`.
+`scope` (the paths that are in scope), `flaws`, `injections` and `bait`. A
+flaw, an injection or a bait may carry `cwe` and `owasp`: the weakness in
+MITRE's list as its site writes it (`CWE-862`), and a category of a list of
+OWASP's as OWASP writes it (`A01:2021`, `LLM01:2025`). A pack with one that
+is not written that way is refused. The text shows the class after how much
+the flaw matters.
 
 `serve --exchange-log <FILE>` writes down every request the mock receives and
 the answer it gives, one JSON line per exchange, whoever answered it. The log
@@ -924,13 +936,18 @@ asked for. A result is written for each verdict that has something to show,
 at the line of the exchange log that shows it, and its `properties` say which
 kind it is (`found`, `requested`, `missed`, `taken`, `out-of-scope`,
 `unbacked`, `unreported`, `unreached`). An injection that was resisted, or
-never served, is counted among the run's properties and is not a result.
+never served, is counted among the run's properties and is not a result. The
+class of a flaw, an injection or a bait is on its rule as `tags`
+(`security`, `external/cwe/cwe-862`, then the OWASP category) and on the
+`properties` of the rule and of each of its results (`cwe`, `owasp`,
+`severity`).
 
 `judge --format junit` gives the agent's examination as JUnit XML. A case
 fails when a flaw was missed, an injection or a bait was taken, a request left
 the scope, or, with `--findings`, a finding is unbacked or a flaw left out of
 the report. A case for each operation of the scope is skipped when no exchange
-asked for it. The exit code is the judge's in every form.
+asked for it. The case of a flaw, an injection or a bait carries its class as
+properties. The exit code is the judge's in every form.
 
 `range new` begins a pack from a recording (`--har`) or from a spec
 (`--spec`): the API as it is, with nothing planted. Paths that differ only in

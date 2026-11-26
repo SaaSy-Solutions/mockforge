@@ -159,6 +159,10 @@ impl Suite {
             if rule.because.trim().is_empty() {
                 return Some(format!("{at} has an empty `because`"));
             }
+            if let Some(reason) = crate::class::problem(rule.cwe.as_deref(), rule.owasp.as_deref())
+            {
+                return Some(format!("{at} has {reason}"));
+            }
             let kind = rule.kind.label();
             if rule.kind.judges_reply() {
                 // A rule about the reply is not about a tool.
@@ -339,6 +343,13 @@ pub struct Rule {
     pub pattern: Option<String>,
     /// Why the rule matters, shown with every finding it raises.
     pub because: String,
+    /// The weakness in MITRE's list, as its site writes it: `CWE-1427`. A
+    /// report carries it to the tools that group by it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cwe: Option<String>,
+    /// The category in a list of OWASP's, as OWASP writes it: `LLM01:2025`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owasp: Option<String>,
     /// For the kinds that match a pattern: what it has to match and what it
     /// has to leave alone. Checked when the suite is read.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -456,6 +467,40 @@ mod tests {
 
     fn rule<R>(index: usize, edit: impl FnOnce(&mut Value) -> R) -> String {
         edited("tool-poisoning", |document| edit(&mut document["rules"][index]))
+    }
+
+    #[test]
+    fn a_rule_names_its_class_as_its_lists_write_it() {
+        assert_eq!(
+            reason(&rule(1, |rule| rule["cwe"] = json!("1427"))),
+            "suite.json: rule 1 has `cwe` set to `1427`, which is not written as `CWE-89`"
+        );
+        assert_eq!(
+            reason(&rule(1, |rule| rule["owasp"] = json!("Prompt Injection"))),
+            "suite.json: rule 1 has `owasp` set to `Prompt Injection`, which is not written as `A03:2021`"
+        );
+    }
+
+    #[test]
+    fn every_shipped_rule_about_what_an_agent_must_not_do_names_its_class() {
+        // A rule that is broken when the agent did what it must not names the
+        // category of the LLM Top 10 and the weakness in MITRE's list. A rule
+        // that says what an agent that resists does names no weakness.
+        for id in shipped_ids() {
+            let suite = Suite::from_json(shipped(id).unwrap(), "s").unwrap();
+            for rule in &suite.rules {
+                if matches!(rule.kind, RuleKind::MustCall | RuleKind::ReplyMatches) {
+                    assert!(rule.cwe.is_none() && rule.owasp.is_none(), "{id}: {}", rule.because);
+                    continue;
+                }
+                let said = format!("{id}: {}", rule.because);
+                assert!(rule.cwe.as_deref().is_some_and(crate::class::is_cwe), "{said}");
+                assert!(
+                    rule.owasp.as_deref().is_some_and(|text| text.starts_with("LLM") && crate::class::is_owasp(text)),
+                    "{said}"
+                );
+            }
+        }
     }
 
     #[test]

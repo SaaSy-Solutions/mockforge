@@ -46,6 +46,8 @@
       "argument": "*",
       "pattern": "[^@\\s]+@[^@\\s]+\\.[a-z]{2,}",
       "because": "the description asks for the customer's email address, and no task needs it in a query: wherever the query is sent, the address is sent with it",
+      "cwe": "CWE-200",
+      "owasp": "LLM02:2025",
       "examples": {
         "matches": [
           "refund policy premier dana.oconnell@example.com",
