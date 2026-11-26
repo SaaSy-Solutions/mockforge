@@ -3,17 +3,37 @@
 ### Security
 
 - **[DevX]** Update `brotli` to 9.1.3 and `brotli-decompressor` to 6.4.0. The decompressor now rejects a block switch that the stream made impossible with a format error, matching the C decoder's fix for CVE-2026-111497 (Node2Shell), instead of reporting that it needs more input. The Rust decoder already bounds-checked the buffer involved, so this was not memory-unsafe in MockForge.
+- **[DevX]** Update `kube` to 4.2.1 for RUSTSEC-2026-0600: with the `openssl-tls` connector, `kube-client` trusted the system's CA store beside the configured cluster CA, so a root installed locally, a TLS inspection proxy's for one, could complete the handshake. MockForge enables only `rustls-tls` for `kube`, which the advisory does not concern, so nothing was exposed in its build. The manifest asks for the patched version, so a fresh resolution cannot pick the old one.
 
 ### Added
 
+- **[Reality]** New managed CVE lab pack for CVE-2024-27199: one reviewed path-traversal request reaches a TeamCity 2023.11.3 administrative page with no session, with two more traversal prefixes and benign controls, verified on a lab host through the runner. A pack may now declare, as reviewed data, that its application needs more memory or a longer start than the default 1 GB and 90 seconds, up to 4 GB and 300 seconds; TeamCity declares 1536 MB and 240 seconds.
+- **[Contracts][AI]** `mockforge mcp-contract pin` records what an MCP tool server declares, and `mockforge mcp-contract check` fails CI when it changes: a rewritten tool description, a new tool, an argument that becomes required, annotations that claim less restraint. It speaks the 2026-07-28 protocol and the earlier `initialize` handshake, never calls a tool, and never writes a credential into a contract. A server that cannot be asked exits 2 rather than passing as unchanged.
 - **[Reality]** `mockforge cve detect` runs a passive, detection-only version check for the PHP2Shell (CVE-2026-109618, CVE-2026-109619) and Node2Shell (CVE-2026-111497) advisories. It sends one read-only `GET /`, compares the announced PHP or Node.js version with the fixed releases, and reports likely-affected, not-affected or unknown. Node.js usually reports unknown because it rarely announces its version.
 - **[Reality]** `mockforge cve detect` now requires the same authorization attestation as lab runs against `--target` and records it in `report.json`.
 - **[Reality]** CVE lab runs against an operator `--target` require an authorization attestation (`--i-am-authorized`, `MOCKFORGE_CVE_AUTHORIZED=1`, or an interactive confirmation) and record it in `report.json`. (#1682)
+- **[Reality]** New managed CVE lab pack for CVE-2026-33017: one reviewed request against the pinned Langflow 1.8.1 image reproduces unauthenticated code execution through the public flow build, verified on a lab host.
+- **[DevX]** A daily advisory watch runs the security audit on `main`, on a GitHub-hosted runner. When a RustSec advisory is in `Cargo.lock` it opens an issue with the audit's output and fails, and it closes the issue once the audit is clean. RUSTSEC-2026-0600 was published on 2026-11-24 and first seen the next day, when the audit of every open pull request failed on it.
+- **[DevX]** A GitHub Action starts a MockForge mock in a workflow. `SaaSy-Solutions/mockforge/.github/actions/setup` runs the published image with a spec, waits until the port answers, and gives the url. It takes a port, a tag of the image, a timeout and settings for the mock. It needs a Linux runner, since it runs a container.
+
+### Changed
+
+- **[DevX]** A pull request waits less for the shared self-hosted runners. The security audit, the two jobs that detect what changed, and the `Test (1.96.0)` summary run on GitHub-hosted runners, which are free on a public repository. On 2026-11-25 the audit did 39 seconds of work after two hours in that queue. `Test (1.96.0)` is a required check: a pull request cannot merge when the Rust lane failed, was cancelled or never ran.
 
 ### Fixed
 
+- **[Reality]** The CVE-2024-4577 PHP-CGI pack is no longer listed as verified. Its lab image is still pending review, so nobody can reproduce its request through the runner. It is hidden by default like every other unverified pack, and a run without `--include-unverified` says that is why.
+- **[DevX]** A pull request from a fork runs its CI again. `Detect change scope` waited forever on a GitHub-hosted runner, was cancelled at its 15-minute limit, and every other job was skipped: one of the local Cargo launcher's tests asked for a second build slot, and the built-in policy gives a four-core machine only one. Each fork run since that step was added on 2026-10-22 ended this way, without naming a failing test. The test now states the machine and the policy it means.
+- **[Contracts]** An operation with `security: []` is now treated as opting out of the top-level security requirement, as OpenAPI defines it, in request validation and in generated client commands. Both treated the empty list as "fall back to the top-level requirement", so an operation the spec deliberately leaves open was validated and called as secured.
 - **[Reality]** CVE labs materialize a single-file lab app shipped as `application_script` to its mount host path, so Node-style packs start instead of the runtime mounting an empty directory and the app failing with MODULE_NOT_FOUND. (#1620)
+- **[DevX]** The contract diff workflow no longer takes `scripts/docs-cli-surface.json` for an OpenAPI spec. Its detector matched an indented `"openapi":` key, which the CLI snapshot has as a subcommand, so a pull request that changed the snapshot and triggered the workflow built the whole CLI and then failed. A JSON candidate is now parsed and must carry `openapi` or `swagger` at the top level.
+- **[Reality]** Scrubbing keeps identifiers consistent. The same UUID is replaced by the same pseudonym wherever it appears in a recording instead of by a new counter each time, and `{{counter}}` now works in the `email`, `ip_address` and `credit_card` rules too, so different values can be told apart. An unreadable `MOCKFORGE_CAPTURE_SCRUB` now redacts everything but the method, path and status instead of recording raw data with only a warning.
+- **[DevX]** The SMTP integration tests wait for their server instead of sleeping for a fixed 100 ms first. On a loaded runner the server was not listening yet, and a test failed with `Connection refused`, failing an unrelated pull request (#1692).
 - **[Reality]** `mockforge cve run` no longer returns inconclusive on every host. The network-namespace probe called `/bin/readlink`, which the pinned Nuclei runner image does not have (its busybox installs `readlink` at `/usr/bin/readlink`), so the probe failed with an OCI "no such file" error. It now runs `/bin/busybox readlink`.
+- **[Reality]** The Node.js Node2Shell pack (CVE-2026-111497) reproduced on a lab host with its pinned image, so it is verified and listed by default.
+- **[Reality]** Lab scanner templates send a request body as a string. The pinned runner rejected the list form, so no pack with a request body could run.
+- **[DevX]** The CLI tools bundle uses forward-slash keys on every platform, so a bundle generated on Windows matches the one CI checks.
+- **[DevX]** The SARIF files the conformance and the OWASP API checks write name the schema OASIS publishes for 2.1.0. The address they named returned 404, so a tool that went to the address for the schema found none.
 
 ## [0.3.249] - 2026-11-23
 

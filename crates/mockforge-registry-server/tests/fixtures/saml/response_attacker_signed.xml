@@ -1,0 +1,30 @@
+<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="_resp1" Version="2.0" IssueInstant="2026-01-01T00:00:00Z" Destination="https://app.example/acs">
+<saml:Issuer>https://idp.example</saml:Issuer>
+<samlp:Status><samlp:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"/></samlp:Status>
+<saml:Assertion ID="_assert1" Version="2.0" IssueInstant="2026-01-01T00:00:00Z">
+<saml:Issuer>https://idp.example</saml:Issuer>
+<saml:Subject><saml:NameID Format="urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress">alice@acme.example</saml:NameID></saml:Subject>
+<saml:Conditions NotBefore="2026-01-01T00:00:00Z" NotOnOrAfter="2026-01-01T00:05:00Z"/>
+<saml:AuthnStatement AuthnInstant="2026-01-01T00:00:00Z" SessionIndex="_sess1"><saml:AuthnContext><saml:AuthnContextClassRef>urn:oasis:names:tc:SAML:2.0:ac:classes:Password</saml:AuthnContextClassRef></saml:AuthnContext></saml:AuthnStatement>
+<saml:AttributeStatement>
+<saml:Attribute Name="givenName"><saml:AttributeValue>Alice</saml:AttributeValue></saml:Attribute>
+<saml:Attribute Name="surname"><saml:AttributeValue>Anderson</saml:AttributeValue></saml:Attribute>
+</saml:AttributeStatement>
+<ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#"><ds:SignedInfo><ds:CanonicalizationMethod Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/><ds:SignatureMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"/><ds:Reference URI="#_assert1"><ds:Transforms><ds:Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/><ds:Transform Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/></ds:Transforms><ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/><ds:DigestValue>PL21hO+GoM9UbsFDxx84C8SW/fGQJBUBKcMVXzNmUiU=</ds:DigestValue></ds:Reference></ds:SignedInfo><ds:SignatureValue>kGZvkLyNeZ9BkXgdjjptm82tgaOTUfw3Eyc9+kW/j0vJmPPk3ORDVxyk+rntR/7b1ovuIxa+frfy3LA6gMZ48Qd35U/WbxS59GwcyUWmNeV5ZhBMh7apfYS9rxdJQcRWyrgc7v9HD7luefwNVLCqjyCzh8AzcrQDlep5bIOijV3xbA1H+tXW7YOaXyQ3zVKH6HLLpEib5hoimYUFcFcSLmOCsGgNceabFjBuDvHSIzIaAbk0q7Cd3yLgGCjA7OJ9j1riLNyJEWbQjV2emqacW2Y91vo22rpwygCf/AoIT7X33j8N4+13SlwyNLnHgQhGm7LDgvj4PIZyo/ro9myGrA==</ds:SignatureValue><ds:KeyInfo><ds:X509Data><ds:X509Certificate>MIIDGTCCAgGgAwIBAgIURli8H0U0Gmw8+BSNJ6STg1OaQb8wDQYJKoZIhvcNAQEL
+BQAwGzEZMBcGA1UEAwwQYXR0YWNrZXIuZXhhbXBsZTAgFw0yNjExMjUwMzUyNTRa
+GA8yMTI2MTEwMTAzNTI1NFowGzEZMBcGA1UEAwwQYXR0YWNrZXIuZXhhbXBsZTCC
+ASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAJKaADD3zgOMDjJhdkh4I+1M
+ASV4OhVDwyZ7+EkRbEfxebo6LG2IJq8LhCGyjMDXqLRf2tT7t6iGSpFoFcgMy77L
+3X+BrN3Qqn8jdPd/x42qTzFFGSB5ALU6e+nD1JjsHHQhKyHSsNkoiEvczu7pWP+k
+tmqiRzwS1YgJ8//iXlRzVTCqdh5CXOsJqJAnc1xgrFpfoQJWkhsFJCnELY3HqtPw
+1Px9IwgFpvpy4JJ4/fEAPV3gzfYLKLWaKEvlkZGGSrAQFD82I1SKww9lI+V8uyHP
+ueFOTXe5pUJRjCQCKJ3dI6vDmr84BPxCGLJSzIg8GDL+2CRvspYjeKwfFSTlCQkC
+AwEAAaNTMFEwHQYDVR0OBBYEFGwmSLtSpUE4eCKSSxOdv/JB/IACMB8GA1UdIwQY
+MBaAFGwmSLtSpUE4eCKSSxOdv/JB/IACMA8GA1UdEwEB/wQFMAMBAf8wDQYJKoZI
+hvcNAQELBQADggEBAGvaWjIHkvcoATdbBZHRa4YabuxFouwnZw+M6QCk8/vTckVT
+H+VwDV0F0PDGe7Vf9nke/Ess+I0n3zK1kX0mkVfwOiYTb2CpG6KmO6rz4bJJkz5K
+Hd3b7VTT+uPf2TpsjNTAg3WvEkFNH/w581axHC+wW2EwdFdQxwpxK/W9UEMoX1XQ
+VchmT4tq1u42B8pOIniSegomlqsuW5tsMti+V2AHmXTz0S4+0/l38aCXWepEQhPt
+vMzXvaaQQUX9u3SXJLMCNWtxm2uWz6z5gwI1NLeiFBDk8UrYzC1y9amPJnNcOgIW
+psspRmqGKNfws1V1cStSoNBjKy5HhNjeQ5lQ+Bo=
+</ds:X509Certificate></ds:X509Data></ds:KeyInfo></ds:Signature></saml:Assertion></samlp:Response>

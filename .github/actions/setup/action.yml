@@ -1,0 +1,140 @@
+name: Set up MockForge
+description: >-
+  Starts a MockForge mock server from a spec file, from the published image,
+  and waits until it answers. Needs Docker, so it runs on Linux runners.
+inputs:
+  spec:
+    description: The OpenAPI file the mock serves, such as ./openapi.json.
+    required: true
+  port:
+    description: The port the mock listens on, on the runner.
+    required: false
+    default: '3000'
+  version:
+    description: The tag of the image to run, such as 0.3.224. `latest` is the last image published.
+    required: false
+    default: 'latest'
+  image:
+    description: The image to run.
+    required: false
+    default: ghcr.io/saasy-solutions/mockforge
+  timeout:
+    description: Seconds to wait for the mock to answer.
+    required: false
+    default: '60'
+  env:
+    description: >-
+      Settings for the mock, one NAME=value a line, as the image reads them.
+      The image turns simulated latency on; `MOCKFORGE_LATENCY_ENABLED=false`
+      turns it off.
+    required: false
+    default: ''
+outputs:
+  url:
+    description: Where the mock answers, such as http://127.0.0.1:3000.
+    value: ${{ steps.start.outputs.url }}
+  image:
+    description: The image that was run, with its tag.
+    value: ${{ steps.start.outputs.image }}
+  container:
+    description: The id of the container. Stop it with `docker rm --force` when the job is done.
+    value: ${{ steps.start.outputs.container }}
+runs:
+  using: composite
+  steps:
+    - name: Start the mock
+      id: start
+      # The inputs reach the shell as variables only: nothing a workflow passes
+      # is ever part of a command.
+      shell: bash
+      env:
+        SPEC: ${{ inputs.spec }}
+        PORT: ${{ inputs.port }}
+        VERSION: ${{ inputs.version }}
+        IMAGE: ${{ inputs.image }}
+        SETTINGS: ${{ inputs.env }}
+        TIMEOUT: ${{ inputs.timeout }}
+      run: |
+        set -euo pipefail
+        if [ ! -f "$SPEC" ]; then
+          echo "::error::spec '$SPEC' is not a file. Give a path in the checkout, such as ./openapi.json."
+          exit 1
+        fi
+        if ! [[ "$PORT" =~ ^[0-9]+$ ]] || [ "$PORT" -lt 1 ] || [ "$PORT" -gt 65535 ]; then
+          echo "::error::port '$PORT' is not a port number."
+          exit 1
+        fi
+        if ! [[ "$VERSION" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; then
+          echo "::error::version '$VERSION' is not a tag of the image, such as 0.3.224 or latest."
+          exit 1
+        fi
+        if ! command -v docker >/dev/null 2>&1; then
+          echo "::error::this action runs the MockForge image and this runner has no Docker. Use a Linux runner."
+          exit 1
+        fi
+        if ! [[ "$TIMEOUT" =~ ^[0-9]+$ ]] || [ "$TIMEOUT" -lt 1 ]; then
+          echo "::error::timeout '$TIMEOUT' is not a number of seconds."
+          exit 1
+        fi
+        # The file is mounted into the container under its own name, so the
+        # mock reads its format from the extension as it does anywhere else.
+        name="$(basename "$SPEC")"
+        spec="$(cd "$(dirname "$SPEC")" && pwd)/$name"
+        image="$IMAGE:$VERSION"
+        docker pull --quiet "$image" >/dev/null
+        # Settings go to the container as a file, one NAME=value a line, and
+        # no blank line.
+        settings=()
+        if [ -n "${SETTINGS//[[:space:]]/}" ]; then
+          : > "$RUNNER_TEMP/mockforge.env"
+          while IFS= read -r setting; do
+            [ -n "${setting//[[:space:]]/}" ] || continue
+            printf '%s\n' "$setting" >> "$RUNNER_TEMP/mockforge.env"
+          done <<< "$SETTINGS"
+          settings=(--env-file "$RUNNER_TEMP/mockforge.env")
+        fi
+        container="$(docker run --detach \
+          --publish "127.0.0.1:$PORT:$PORT" \
+          --volume "$spec:/mockforge/$name:ro" \
+          "${settings[@]}" \
+          "$image" serve --spec "/mockforge/$name" --http-port "$PORT")"
+        {
+          echo "url=http://127.0.0.1:$PORT"
+          echo "image=$image"
+          echo "container=$container"
+        } >> "$GITHUB_OUTPUT"
+        echo "MockForge $image is starting with $name on port $PORT."
+
+    - name: Wait until the mock answers
+      shell: bash
+      env:
+        URL: ${{ steps.start.outputs.url }}
+        CONTAINER: ${{ steps.start.outputs.container }}
+        TIMEOUT: ${{ inputs.timeout }}
+      run: |
+        set -euo pipefail
+        # The mock server has no health route: any answer at all means it is up.
+        # When the mock does not come up, its last lines are shown and the
+        # container is removed, so that a failed step leaves nothing behind.
+        give_up() {
+          echo "::error::$1"
+          docker logs --tail 40 "$CONTAINER" 2>&1 || true
+          docker rm --force "$CONTAINER" >/dev/null 2>&1 || true
+          exit 1
+        }
+        deadline=$((SECONDS + TIMEOUT))
+        while :; do
+          running="$(docker inspect --format '{{.State.Running}}' "$CONTAINER" 2>/dev/null)" || running=false
+          if [ "$running" != "true" ]; then
+            give_up "the mock stopped before it answered. Its last lines:"
+          fi
+          code="$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 2 "$URL/" 2>/dev/null)" || code=000
+          if [ "$code" != "000" ]; then
+            echo "The mock answers at $URL."
+            exit 0
+          fi
+          if [ "$SECONDS" -ge "$deadline" ]; then
+            give_up "the mock did not answer at $URL within $TIMEOUT seconds. Its last lines:"
+          fi
+          sleep 1
+        done

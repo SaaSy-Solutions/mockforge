@@ -31,14 +31,18 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Trusted events use the existing Hetzner pool; forks retain hosted isolation.
-  # Lets the heavy registry-e2e job below be skipped (= success for branch
-  # protection) on PRs that don't touch the registry, so this can be a required
-  # check without blocking unrelated PRs. Non-PR events always run the suite.
+  # This job runs GitHub-hosted, free on this public repository: on every
+  # pull request the required check below waits for it before it can say
+  # "skipped", and it is seconds of work. The heavy registry-e2e job itself
+  # keeps to the Hetzner pool for trusted events, where its build cache is
+  # (forks retain hosted isolation). Letting it be skipped (= success for
+  # branch protection) on PRs that don't touch the registry keeps it a
+  # required check without blocking unrelated PRs. Non-PR events always run
+  # the suite.
   changes:
     name: Detect registry scope
     timeout-minutes: 15
-    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","linux","x64","rust"]') || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     outputs:
       registry: ${{ steps.filter.outputs.registry }}
     steps:

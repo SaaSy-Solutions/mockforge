@@ -681,6 +681,73 @@ OpenAPI. A document that could not be validated has one error finding whose
 `rule` is `UNREADABLE`, `INVALID_SYNTAX` or `NOT_OPENAPI`. `path` is a JSON
 pointer when the validator names the field.
 
+### `mcp-contract` - MCP Contract Pinning
+
+Record what an MCP tool server declares (`pin`), then report every change
+since (`check`). See [MCP Contract Pinning](../user-guide/mcp-contract.md) for
+the workflow, the signals and what a contract cannot see.
+
+```bash
+mockforge mcp-contract pin --url https://mcp.example.com/mcp --output contracts/acme-mcp.json
+mockforge mcp-contract check --contract contracts/acme-mcp.json
+mockforge mcp-contract check --contract contracts/acme-mcp.json --fail-on high --format json
+```
+
+#### Options
+
+`pin`:
+
+- `--url <URL>` (required): the MCP endpoint, `http` or `https`.
+- `--output <FILE>` (required): the contract to write. An existing file is
+  replaced only with `--force`.
+- `--accept-hidden`: pin although the server's text contains characters that
+  do not print.
+
+`check`:
+
+- `--contract <FILE>` (required): the pinned contract.
+- `--url <URL>`: ask at another address. Defaults to the contract's own.
+- `--fail-on info|low|medium|high`: the lowest level of finding that fails.
+  Default `low`.
+- `--output <FILE>`: also write the JSON report to this file.
+
+Both:
+
+- `--header NAME:VALUE`: a plain header sent with every request. Repeatable.
+- `--auth-env NAME:ENV_VAR`: a credential header whose value is read from the
+  environment. The value is never written to the contract.
+- `--client-name <NAME>`, `--client-version <VERSION>`: how to name yourself
+  to the server. Defaults to `mockforge` and its version.
+- `--timeout <SECONDS>`: time allowed for each request. Default `30`.
+- `--format text|json`: `json` prints one document and nothing else on stdout.
+
+For `check`, anything not given comes from the contract: the address, the
+plain headers, the credential's variable and the client identity.
+
+Exit codes: `0` pinned or unchanged, `1` changed since the contract, `2` when
+nothing could be compared. The JSON document is printed in every case.
+
+The document `check --format json` prints (`schema_version` 1):
+
+```json
+{
+  "schema_version": 1,
+  "kind": "mockforge-mcp-contract-report",
+  "contract": "contracts/acme-mcp.json",
+  "outcome": "unchanged",
+  "digest_pinned": "sha256:…",
+  "digest_now": "sha256:…",
+  "findings": [],
+  "summary": { "tools_before": 12, "tools_after": 12, "added": 0, "removed": 0, "changed": 0, "high": 0, "medium": 0, "low": 0, "info": 0 }
+}
+```
+
+`outcome` is `unchanged`, `drifted` or `not_checked`. Each finding carries a
+`kind`, a `severity`, the `tool` it is about, a one-line `summary`, the
+`changes` that make it up and the `signals` to read closely. The document
+`pin --format json` prints has the `kind` `mockforge-mcp-contract-pin` and an
+`outcome` of `pinned` or `not_pinned`.
+
 
 Capture databases are opened read-only and must already exist. An empty HTTP capture is not drift: the command reports that no traffic was recorded and exits successfully, and with `--record` it stores a `no_traffic` verification. Unknown endpoints, missing responses, undeclared statuses and JSON-schema violations count as drift. Exact status declarations take precedence over status ranges and the default response; local response references are resolved before schema validation.
 

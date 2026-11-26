@@ -70,7 +70,16 @@ async fn find_available_port() -> u16 {
     port
 }
 
-/// Connect to SMTP server and read greeting
+/// How long to keep trying to reach a server that is not listening yet.
+const CONNECT_DEADLINE: Duration = Duration::from_secs(5);
+
+/// Connect to SMTP server and read greeting.
+///
+/// Each test starts the server in a background task, so it may not be
+/// listening yet when the test gets here. On a loaded runner that took
+/// longer than the fixed wait the tests allow, and the connection was
+/// refused. A refused connection is retried until `CONNECT_DEADLINE`; any
+/// other error, or still refused at the deadline, is a failure.
 async fn connect_and_read_greeting(
     port: u16,
 ) -> (
@@ -78,10 +87,20 @@ async fn connect_and_read_greeting(
     tokio::net::tcp::OwnedWriteHalf,
     String,
 ) {
-    let stream = timeout(Duration::from_secs(5), TcpStream::connect(format!("127.0.0.1:{}", port)))
-        .await
-        .expect("Connection timeout")
-        .expect("Failed to connect");
+    let give_up_at = tokio::time::Instant::now() + CONNECT_DEADLINE;
+    let stream = loop {
+        match TcpStream::connect(format!("127.0.0.1:{}", port)).await {
+            Ok(stream) => break stream,
+            Err(error) if error.kind() == std::io::ErrorKind::ConnectionRefused => {
+                assert!(
+                    tokio::time::Instant::now() < give_up_at,
+                    "Failed to connect to port {port}: still refused after {CONNECT_DEADLINE:?}"
+                );
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+            Err(error) => panic!("Failed to connect to port {port}: {error}"),
+        }
+    };
 
     let (reader, writer) = stream.into_split();
     let mut reader = BufReader::new(reader);
@@ -94,6 +113,23 @@ async fn connect_and_read_greeting(
         .expect("Failed to read greeting");
 
     (reader, writer, greeting)
+}
+
+#[tokio::test]
+async fn test_a_server_slow_to_start_is_still_reached() {
+    let (server, port) = start_test_server().await;
+
+    // Longer than the fixed wait the other tests allow: the helper has to
+    // keep trying until the server listens. A helper that gives up at the
+    // first refusal fails here every time, which is what CI saw on a loaded
+    // runner (#1692).
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(600)).await;
+        server.start().await.expect("Server failed to start");
+    });
+
+    let (_reader, _writer, greeting) = connect_and_read_greeting(port).await;
+    assert!(greeting.starts_with("220"), "Expected SMTP greeting, got: {}", greeting);
 }
 
 #[tokio::test]

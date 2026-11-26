@@ -733,21 +733,18 @@ pub fn validate_openapi_operation_security(
     let openapi_operation =
         OpenApiOperation::from_operation(method, path.to_string(), operation, spec);
 
-    // Check operation-specific security first
-    if let Some(ref security_reqs) = openapi_operation.security {
-        if !security_reqs.is_empty() {
-            return validate_openapi_security(spec, security_reqs, auth_header, api_key);
-        }
-    }
-
-    // Fall back to global security requirements
+    // An operation's own `security` decides on its own: a non-empty list is
+    // what it requires, and an empty list is an explicit opt-out from the
+    // top-level requirement (OpenAPI: "To remove a top-level security
+    // requirement, an empty array can be used"). Only an operation that has
+    // no `security` of its own inherits it.
     let global_security = spec.get_global_security_requirements();
-    if !global_security.is_empty() {
-        return validate_openapi_security(spec, &global_security, auth_header, api_key);
+    let security_reqs = openapi_operation.security.as_deref().unwrap_or(global_security.as_slice());
+    if security_reqs.is_empty() {
+        // No security requirements, or an explicit opt-out from them.
+        return ValidationResult::success();
     }
-
-    // No security requirements
-    ValidationResult::success()
+    validate_openapi_security(spec, security_reqs, auth_header, api_key)
 }
 
 // ============================================================================

@@ -33,7 +33,9 @@ def bundle():
             "security-rule-test-packs.md",
         )
     ]
-    files = {str(p.relative_to(ROOT)): p.read_text(encoding="utf-8") for p in paths}
+    # POSIX keys: the bundle is generated on any platform and read on others,
+    # so a Windows path separator must never become part of a key.
+    files = {p.relative_to(ROOT).as_posix(): p.read_text(encoding="utf-8") for p in paths}
     files["README.md"] = (
         "# MockForge discussion and CVE tools\n\n"
         "Requires Python 3.11 or later; no pip packages or Git checkout needed.\n"

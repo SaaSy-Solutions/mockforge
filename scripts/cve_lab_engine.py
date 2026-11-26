@@ -18,6 +18,41 @@ import re
 
 ALLOWED_APP_CAPABILITIES = frozenset(("SETUID", "SETGID", "CHOWN"))
 
+# What every lab application container gets unless its pack, as reviewed
+# data, says it needs more: a memory cap and a readiness budget. Both have
+# an upper bound here so a pack cannot turn the lab into an unbounded load
+# on the host, and both are checked before anything is downloaded.
+DEFAULT_MEMORY = "1g"
+MAX_MEMORY_MIB = 4096
+DEFAULT_READINESS_SECONDS = 90
+MAX_READINESS_SECONDS = 300
+MIN_READINESS_SECONDS = 10
+
+
+def memory_limit(app):
+    """The application container's memory cap, as `--memory` takes it."""
+    value = app.get("memory", DEFAULT_MEMORY)
+    match = re.fullmatch(r"([0-9]+)([mg])", value) if isinstance(value, str) else None
+    if not match:
+        raise RuntimeError("app.memory must be a size such as 1g, 512m or 1536m")
+    mib = int(match.group(1)) * (1024 if match.group(2) == "g" else 1)
+    if not 64 <= mib <= MAX_MEMORY_MIB:
+        raise RuntimeError(f"app.memory must be between 64m and {MAX_MEMORY_MIB // 1024}g")
+    return value
+
+
+def readiness_budget(app):
+    """Seconds the application is given to answer its readiness path."""
+    value = app.get("readiness_seconds", DEFAULT_READINESS_SECONDS)
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise RuntimeError("app.readiness_seconds must be a whole number of seconds")
+    if not MIN_READINESS_SECONDS <= value <= MAX_READINESS_SECONDS:
+        raise RuntimeError(
+            f"app.readiness_seconds must be between {MIN_READINESS_SECONDS} "
+            f"and {MAX_READINESS_SECONDS}"
+        )
+    return value
+
 GUIDE_URL = "https://docs.mockforge.dev/user-guide/managed-cve-labs.html"
 
 
@@ -305,6 +340,8 @@ def lab(engine, run_id, output, pack):
             "app.cap_add entries must be from the allowlist: SETUID, SETGID, CHOWN"
         )
     name = "mockforge-cve-" + run_id
+    memory = memory_limit(app)
+    budget = readiness_budget(app)
     try:
         run_args = [
             engine,
@@ -316,7 +353,7 @@ def lab(engine, run_id, output, pack):
             f"{LABEL}={run_id}",
             "--cap-drop=ALL",
             "--security-opt=no-new-privileges",
-            "--memory=1g",
+            f"--memory={memory}",
             "--pids-limit=256",
             "-p",
             f"127.0.0.1::{app['port']}",
@@ -340,7 +377,7 @@ def lab(engine, run_id, output, pack):
                 + "; it failed to start (see application.log)"
             )
         backend = "http://" + ports[0]
-        deadline = time.monotonic() + 90
+        deadline = time.monotonic() + budget
         while time.monotonic() < deadline:
             try:
                 ready = (
@@ -353,7 +390,9 @@ def lab(engine, run_id, output, pack):
                 break
             time.sleep(0.5)
         else:
-            raise RuntimeError("Application did not become ready within 90 seconds")
+            raise RuntimeError(
+                f"Application did not become ready within {budget} seconds"
+            )
         yield backend
     finally:
         try:

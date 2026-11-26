@@ -20,7 +20,6 @@ WORKFLOW = ROOT / ".github/workflows/ci.yml"
 TRUSTED = "(github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)"
 FORK = "github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository"
 COMPLETE_IF = "${{ always() && " + TRUSTED + " && (needs.changes.result != 'success' || needs.changes.outputs.code != 'false') }}"
-LABELS = "[self-hosted, linux, x64, rust]"
 ALL_FEATURES = "cargo test --workspace --exclude mockforge-desktop --exclude mockforge-tui --all-features --verbose"
 DOCS = "cargo doc --workspace --exclude mockforge-desktop --no-deps"
 # Actual original check name: CI run38189713874/job114633625345.
@@ -176,8 +175,13 @@ class SequentialRustTest(unittest.TestCase):
 
     def test_no_new_hosted_fork_jobs_or_privileged_fork_execution(self):
         self.assertEqual(field("test-complete", "if"), COMPLETE_IF)
-        self.assertEqual(field("test-complete", "runs-on"), LABELS)
-        self.assertNotIn("ubuntu-latest", block("test-complete"))
+        # The aggregate is a five-second shell step. On the shared pool it
+        # queued behind builds after the lane had finished, so the required
+        # context was the last check to report on a pull request. It runs
+        # GitHub-hosted, free on this public repository; the `if` above is
+        # what keeps forks off it.
+        self.assertEqual(field("test-complete", "runs-on"), "ubuntu-latest")
+        self.assertNotIn("self-hosted", block("test-complete"))
         self.assertNotIn("\n  test-extended:\n", WORKFLOW.read_text())
         for head in ("untrusted/fork", "", None):
             with self.subTest(head=head):

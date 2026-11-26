@@ -259,13 +259,20 @@ class InputTests(unittest.TestCase):
             self.assertEqual(lab.main(["list"]), 0)
         packs = json.loads(output.getvalue())
         self.assertIn("CVE-2025-29927", packs)
-        for cve in ("CVE-2026-109618", "CVE-2026-109619", "CVE-2026-111497"):
+        # Reproduced on a lab host, so they are listed without --include-unverified.
+        self.assertIn("CVE-2026-111497", packs)
+        self.assertIn("CVE-2026-33017", packs)
+        self.assertIn("CVE-2024-27199", packs)
+        # Its lab image is still pending review, so nobody can reproduce it
+        # through the runner: hidden like any other unverified pack.
+        self.assertNotIn("CVE-2024-4577", packs)
+        for cve in ("CVE-2026-109618", "CVE-2026-109619"):
             self.assertNotIn(cve, packs)
 
         for action, hidden in (
             (action, hidden)
             for action in ("run", "prepare")
-            for hidden in ("CVE-2026-109618", "CVE-2026-111497")
+            for hidden in ("CVE-2026-109618", "CVE-2026-109619")
         ):
             err = io.StringIO()
             with self.subTest(action=action, cve=hidden), patch.object(lab, "prepare") as prepare, patch.object(lab, "run") as run, contextlib.redirect_stderr(err):
@@ -702,6 +709,30 @@ class Cve20244577PackTests(unittest.TestCase):
                 engine.prepare("docker", self.pack)
         command.assert_not_called()
 
+    def test_the_pack_is_hidden_and_refused_as_unverified_by_default(self):
+        # "Verified" means a run with the image the pack names has reproduced
+        # the trigger on a lab host. This image is pending review, so the pack
+        # is not listed next to packs that run, and the refusal says why.
+        self.assertIs(self.pack["verified"], False)
+        self.assertNotIn("CVE-2024-4577", lab.verified_cves())
+        self.assertIn("CVE-2024-4577", lab.verified_cves(include_unverified=True))
+        err = io.StringIO()
+        with patch.object(lab, "prepare") as prepare, patch.object(
+            lab, "run"
+        ) as run, contextlib.redirect_stderr(err):
+            self.assertEqual(
+                lab.main(["run", "CVE-2024-4577", "--output-dir", "unused-output"]), 1
+            )
+        prepare.assert_not_called()
+        run.assert_not_called()
+        self.assertIn(
+            "CVE-2024-4577 is an unverified lab pack (its lab image is still "
+            "pending review, so its trigger has not been reproduced through the "
+            "runner); pass --include-unverified to run it for development",
+            err.getvalue(),
+        )
+        self.assertNotIn("has not reproduced on a lab host", err.getvalue())
+
     def test_run_of_the_pending_pack_refuses_and_records_why(self):
         stdout = io.StringIO()
         stderr = io.StringIO()
@@ -712,11 +743,21 @@ class Cve20244577PackTests(unittest.TestCase):
         ), contextlib.redirect_stderr(stderr):
             output = Path(directory) / "out"
             self.assertEqual(
-                lab.main(["run", "CVE-2024-4577", "--output-dir", str(output)]), 1
+                lab.main(
+                    [
+                        "--include-unverified",
+                        "run",
+                        "CVE-2024-4577",
+                        "--output-dir",
+                        str(output),
+                    ]
+                ),
+                1,
             )
             command.assert_not_called()
             report = json.loads((output / "report.json").read_text())
         self.assertIn("Lab image pending review", stdout.getvalue())
+        self.assertIs(report["pack_verified"], False)
         self.assertEqual(report["verdict"], "inconclusive")
         self.assertIn("not pinned by digest", report["reason"])
 
@@ -4527,8 +4568,8 @@ class UnverifiedRunReasonTests(unittest.TestCase):
         self.assertIn("known state of the pack", reason)
         # Verified and digest-pinned, so it runs end to end and is named.
         self.assertIn("CVE-2025-29927", reason)
-        # Verified but its lab image is still pending review, so it is not
-        # named as a pack that runs end to end.
+        # Unverified, because its lab image is still pending review, so it is
+        # not named as a pack that runs end to end.
         self.assertNotIn("CVE-2024-4577", reason)
 
     def test_verified_pack_baseline_failure_keeps_the_plain_reason(self):
@@ -5011,6 +5052,360 @@ class SentRequestsLogTests(unittest.TestCase):
                 and line["destination"] == "origin"
                 for line in lines
             )
+        )
+
+
+class LangflowPackTests(unittest.TestCase):
+    """CVE-2026-33017: unauthenticated code execution through Langflow's public
+    flow build.
+
+    The build endpoint answers 200 with a job id for a malformed flow too, and
+    only the job's events show whether the reviewed code ran. So the lab's
+    baseline proves the unauthenticated build was accepted, while these tests
+    pin the flow's shape and its benign code. The execution itself (the marker
+    in the job's events) and the three LB verdicts were verified on a lab host.
+    """
+
+    def setUp(self):
+        self.pack = catalog.PACKS["CVE-2026-33017"]
+
+    def flow_code(self):
+        body = json.loads(self.pack["probe"]["body"])
+        return body["data"]["nodes"][0]["data"]["node"]["template"]["code"]["value"]
+
+    def test_pack_is_a_verified_data_driven_pack(self):
+        self.assertIs(self.pack["verified"], True)
+        self.assertEqual(self.pack["baseline_gate"], "data-driven")
+        self.assertEqual(self.pack["classifier"], "data-driven")
+        catalog.validate_data_driven_pack(self.pack)
+        pack_catalog = self.pack["catalog"]
+        self.assertEqual(pack_catalog["cve"], "CVE-2026-33017")
+        self.assertIn("1.8.1", pack_catalog["application_version"])
+        for image in (pack_catalog["application_image"], pack_catalog["runner_image"]):
+            self.assertIn("@sha256:", image)
+        self.assertIn("CVE-2026-33017", lab.verified_cves())
+        self.assertIn("CVE-2026-111497", lab.verified_cves())
+
+    def test_signature_is_the_unauthenticated_public_build(self):
+        probe = self.pack["probe"]
+        self.assertEqual(probe["method"], "POST")
+        self.assertTrue(
+            probe["path"].startswith("/api/v1/build_public_tmp/")
+            and probe["path"].endswith("/flow?__mockforge_cve={token}")
+        )
+        # The endpoint requires any client_id cookie; the run token is used.
+        self.assertEqual(probe["headers"]["Cookie"], "client_id=mockforge-{token}")
+        self.assertEqual(probe["headers"]["Content-Type"], "application/json")
+        self.assertEqual(probe["marker"], "job_id")
+
+    def test_flow_keeps_the_reviewed_node_shape(self):
+        # Langflow refuses anything else before the code runs; a wrong shape
+        # would still answer 200 with a job id and silently prove nothing.
+        body = json.loads(self.pack["probe"]["body"])
+        self.assertEqual(body["data"]["edges"], [])
+        data = body["data"]["nodes"][0]["data"]
+        self.assertEqual(data["type"], "CustomComponent")
+        node = data["node"]
+        self.assertEqual(node["template"]["_type"], "CustomComponent")
+        self.assertEqual(node["base_classes"], ["CustomComponent"])
+        self.assertEqual(
+            node["outputs"],
+            [{"types": ["CustomComponent"], "name": "Custom Component"}],
+        )
+        self.assertEqual(
+            self.flow_code().splitlines()[0], "from lfx.custom import Component"
+        )
+
+    def test_reviewed_code_only_raises_a_marker(self):
+        code = self.flow_code()
+        self.assertIn(
+            "_x = exec(\"raise Exception('MOCKFORGE-' + 'CVE-2026-33017')\")", code
+        )
+        for forbidden in (
+            "import os", "subprocess", "popen", "system(", "socket", "open(",
+            "__import__", "urllib", "requests", "eval(",
+        ):
+            self.assertNotIn(forbidden, code)
+        self.assertEqual(code.count("exec("), 1)
+        self.assertEqual(catalog.LANGFLOW_PUBLIC_BUILD_MARKER, "MOCKFORGE-CVE-2026-33017")
+        # Assembled at run time, so the marker cannot be echoed back.
+        self.assertNotIn(catalog.LANGFLOW_PUBLIC_BUILD_MARKER, code)
+
+    def test_app_and_controls_match_the_lab_application(self):
+        app = self.pack["app"]
+        self.assertEqual(app["port"], "7860/tcp")
+        self.assertEqual(app["env"]["LANGFLOW_AUTO_LOGIN"], "false")
+        self.assertEqual(app["readiness"], {"path": "/", "status": 200})
+        controls = self.pack["controls"]
+        self.assertEqual(controls["benign_path"], "/api/v1/version?__mockforge_cve={token}")
+        self.assertEqual(controls["benign_status"], 200)
+        self.assertEqual(controls["ordinary_path"], "/api/v1/flows/?__mockforge_cve={token}")
+        self.assertEqual(controls["ordinary_status"], 403)
+
+    def test_template_carries_the_json_body_as_a_string(self):
+        text = nuclei.template(self.pack, "tok")
+        # The pinned runner rejects a list: "cannot unmarshal !!seq into string".
+        self.assertIn('\n    body: "{\\"data\\":{\\"nodes\\":[', text)
+        self.assertNotIn("body:\n      - ", text)
+        self.assertIn('Cookie: "client_id=mockforge-tok"', text)
+        self.assertIn("/flow?__mockforge_cve=tok", text)
+
+    def test_plain_bodies_are_strings_byte_for_byte(self):
+        text = nuclei.template(catalog.PACKS["CVE-2024-4577"], "tok")
+        self.assertIn("\n    body: \"<?php echo 'MOCKFORGE-CVE-2024-4577'; ?>\"", text)
+
+
+class TeamcityPackTests(unittest.TestCase):
+    """CVE-2024-27199: an administrative page reached with no session through a
+    path traversal.
+
+    The traversal has to reach the application untouched to work. The lab
+    measures blocking, so a proxy that stops the request passes, while one that
+    only folds the `..` and forwards the protected page still handed the
+    attacker's request to the origin and fails. Verified on a lab host through
+    the runner: the direct baseline answers 200 with the page, the
+    application's own protection answers 401, and the two other prefixes
+    answer 200 too.
+    """
+
+    def setUp(self):
+        self.pack = catalog.PACKS["CVE-2024-27199"]
+
+    def test_pack_is_a_verified_data_driven_pack(self):
+        self.assertIs(self.pack["verified"], True)
+        self.assertEqual(self.pack["baseline_gate"], "data-driven")
+        self.assertEqual(self.pack["classifier"], "data-driven")
+        catalog.validate_data_driven_pack(self.pack)
+        pack_catalog = self.pack["catalog"]
+        self.assertEqual(pack_catalog["cve"], "CVE-2024-27199")
+        self.assertIn("2023.11.3", pack_catalog["application_version"])
+        for image in (pack_catalog["application_image"], pack_catalog["runner_image"]):
+            self.assertIn("@sha256:", image)
+        self.assertIn("CVE-2024-27199", lab.verified_cves())
+
+    def test_signature_is_the_reviewed_traversal(self):
+        probe = self.pack["probe"]
+        self.assertEqual(probe["method"], "GET")
+        # The run token rides the query: here, unlike the PHP-CGI pack, the
+        # exploit does not depend on the query string being empty.
+        self.assertEqual(
+            probe["path"], "/res/../admin/diagnostic.jsp?__mockforge_cve={token}"
+        )
+        self.assertIsNone(probe["body"])
+        self.assertIsNone(probe["signature_header"])
+        self.assertEqual(probe["headers"], {"X-Mockforge-Cve": "{token}"})
+        self.assertEqual(probe["marker"], "Debug Logging")
+
+    def test_variants_are_more_traversal_prefixes_to_the_same_page(self):
+        variants = self.pack["signature_variants"]
+        self.assertEqual(
+            [variant["id"] for variant in variants],
+            ["acme-challenge-prefix", "update-prefix"],
+        )
+        for variant in variants:
+            with self.subTest(variant=variant["id"]):
+                self.assertIn("/../", variant["path"])
+                self.assertTrue(variant["path"].endswith("admin/diagnostic.jsp"))
+                self.assertNotIn("__mockforge_cve", variant["path"])
+                self.assertEqual(variant["expect"], "blocked")
+        catalog.validate_signature_variants(self.pack)
+
+    def test_template_keeps_the_traversal_in_the_request_line(self):
+        text = nuclei.template(self.pack, "tok")
+        self.assertIn("method: GET", text)
+        self.assertIn(
+            '{{BaseURL}}/res/../admin/diagnostic.jsp?__mockforge_cve=tok', text
+        )
+        self.assertNotIn("\n    body:", text)
+
+    def test_app_declares_reviewed_allowances_within_the_engine_bounds(self):
+        app = self.pack["app"]
+        self.assertEqual(app["port"], "8111/tcp")
+        # TeamCity needs more than the default and takes longer to start:
+        # both are reviewed data, and the engine checks them against bounds.
+        self.assertEqual(app["memory"], "1536m")
+        self.assertEqual(app["readiness_seconds"], 240)
+        self.assertEqual(engine.memory_limit(app), "1536m")
+        self.assertEqual(engine.readiness_budget(app), 240)
+        # Every path answers 503 while it starts, so readiness needs a 200.
+        self.assertEqual(app["readiness"], {"path": "/login.html", "status": 200})
+        self.assertIn("teamcity.firstStart.setupAdmin.enabled=false", app["env"]["TEAMCITY_SERVER_OPTS"])
+        self.assertEqual(app["env"]["TEAMCITY_SERVER_MEM_OPTS"], "-Xmx512m")
+
+    def test_controls_are_the_login_page_and_the_protected_page(self):
+        controls = self.pack["controls"]
+        self.assertEqual(controls["benign_path"], "/login.html?__mockforge_cve={token}")
+        self.assertEqual(controls["benign_status"], 200)
+        # The application's own protection: the same page asked for directly.
+        self.assertEqual(
+            controls["ordinary_path"], "/admin/diagnostic.jsp?__mockforge_cve={token}"
+        )
+        self.assertEqual(controls["ordinary_status"], 401)
+
+    def test_the_recorder_forwards_dot_segments_untouched(self):
+        # The whole pack depends on this: a recorder that folded `..` would
+        # turn the exploit into the request the application already refuses.
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+        seen = []
+
+        class Backend(BaseHTTPRequestHandler):
+            def do_GET(self):
+                seen.append((self.command, self.path))
+                self.send_response(200)
+                self.send_header("Content-Length", "2")
+                self.end_headers()
+                self.wfile.write(b"ok")
+
+            def log_message(self, *_args):
+                pass
+
+        backend = ThreadingHTTPServer(("127.0.0.1", 0), Backend)
+        threading.Thread(target=backend.serve_forever, daemon=True).start()
+        try:
+            with socket.socket() as reservation:
+                reservation.bind(("127.0.0.1", 0))
+                port = reservation.getsockname()[1]
+            with transport.receiver(
+                port, "127.0.0.1", f"http://127.0.0.1:{backend.server_address[1]}"
+            ) as records:
+                status, _headers, _body = transport.request(
+                    f"http://127.0.0.1:{port}",
+                    "/res/../admin/diagnostic.jsp?__mockforge_cve=tok1",
+                    {"X-Mockforge-Cve": "tok1"},
+                )
+        finally:
+            backend.shutdown()
+            backend.server_close()
+        self.assertEqual(status, 200)
+        self.assertEqual(
+            seen, [("GET", "/res/../admin/diagnostic.jsp?__mockforge_cve=tok1")]
+        )
+        self.assertIn("tok1", records[0]["tokens"])
+
+
+class LabAllowanceTests(unittest.TestCase):
+    """A pack's application may ask, as reviewed data, for more memory or a
+    longer start than the default. The engine caps both."""
+
+    def test_the_defaults_every_pack_gets(self):
+        self.assertEqual(engine.memory_limit({}), "1g")
+        self.assertEqual(engine.readiness_budget({}), 90)
+
+    def test_a_pack_may_ask_for_more_within_bounds(self):
+        for value in ("512m", "1536m", "2g", "4g"):
+            with self.subTest(value=value):
+                self.assertEqual(engine.memory_limit({"memory": value}), value)
+        for value in (10, 240, 300):
+            with self.subTest(value=value):
+                self.assertEqual(engine.readiness_budget({"readiness_seconds": value}), value)
+
+    def test_malformed_or_oversized_allowances_are_refused(self):
+        for value in ("8g", "32m", "1.5g", "g", "512mb", "1536", 1536, True, None, ["1g"]):
+            with self.subTest(value=value), self.assertRaises(RuntimeError):
+                engine.memory_limit({"memory": value})
+        for value in (9, 301, "240", 90.0, True, None):
+            with self.subTest(value=value), self.assertRaises(RuntimeError):
+                engine.readiness_budget({"readiness_seconds": value})
+
+    def test_lab_runs_the_application_with_the_pack_allowances(self):
+        pack = catalog.PACKS["CVE-2024-27199"]
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(
+                engine,
+                "command",
+                side_effect=[
+                    completed(),
+                    completed("127.0.0.1:12345\n"),
+                    completed("application log"),
+                ],
+            ) as command, patch.object(engine, "request", return_value=(200, [], b"ok")), patch.object(
+                engine, "owned_remove"
+            ):
+                with engine.lab("docker", "our-run", Path(directory), pack):
+                    pass
+            run_args = command.call_args_list[0].args[0]
+            self.assertIn("--memory=1536m", run_args)
+            # The hardening is the same for every pack.
+            self.assertIn("--cap-drop=ALL", run_args)
+            self.assertIn("--security-opt=no-new-privileges", run_args)
+            self.assertIn("--pids-limit=256", run_args)
+
+    def test_a_pack_with_default_allowances_still_gets_the_defaults(self):
+        pack = catalog.PACKS["CVE-2025-29927"]
+        self.assertNotIn("memory", pack["app"])
+        self.assertNotIn("readiness_seconds", pack["app"])
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(
+                engine,
+                "command",
+                side_effect=[
+                    completed(),
+                    completed("127.0.0.1:12345\n"),
+                    completed("application log"),
+                ],
+            ) as command, patch.object(engine, "request", return_value=(200, [], b"ok")), patch.object(
+                engine, "owned_remove"
+            ):
+                with engine.lab("docker", "our-run", Path(directory), pack):
+                    pass
+            self.assertIn("--memory=1g", command.call_args_list[0].args[0])
+
+    def test_the_readiness_budget_is_honoured_and_named_when_it_runs_out(self):
+        default_app = catalog.PACKS["CVE-2025-29927"]["app"]
+        pack = {**catalog.PACKS["CVE-2025-29927"], "app": {**default_app, "readiness_seconds": 10}}
+        clock = iter([0.0, 0.0, 11.0])
+
+        def never_ready(*_args, **_kwargs):
+            raise OSError("not listening yet")
+
+        # Only this module's clock is replaced, so nothing else is affected.
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+            engine,
+            "command",
+            side_effect=[completed(), completed("127.0.0.1:12345\n"), completed("application log")],
+        ), patch.object(engine, "request", side_effect=never_ready), patch.object(
+            engine, "owned_remove"
+        ), patch.object(
+            engine,
+            "time",
+            SimpleNamespace(monotonic=lambda: next(clock), sleep=lambda _seconds: None),
+        ), self.assertRaisesRegex(RuntimeError, "within 10 seconds"):
+            with engine.lab("docker", "our-run", Path(directory), pack):
+                pass
+
+    def test_run_refuses_an_oversized_allowance_before_any_download(self):
+        import copy
+
+        pack = copy.deepcopy(catalog.PACKS["CVE-2025-29927"])
+        pack["app"]["memory"] = "8g"
+        with tempfile.TemporaryDirectory() as directory, patch.dict(
+            lab.PACKS, {"CVE-2025-29927": pack}
+        ), patch.object(lab, "prepare") as prepare, patch.object(lab, "doctor") as doctor, contextlib.redirect_stderr(
+            io.StringIO()
+        ):
+            self.assertEqual(
+                lab.main(
+                    ["run", "CVE-2025-29927", "--output-dir", str(Path(directory) / "out")]
+                ),
+                1,
+            )
+        prepare.assert_not_called()
+        doctor.assert_not_called()
+
+    def test_the_plan_names_a_pack_s_allowances(self):
+        args = SimpleNamespace(
+            cve="CVE-2024-27199", target=None, listen_address="127.0.0.1", origin_port=18082
+        )
+        lines = lab.run_plan_lines(args)
+        self.assertTrue(
+            any("1536m of memory and up to 240 seconds to start" in line for line in lines),
+            lines,
+        )
+        args.cve = "CVE-2025-29927"
+        self.assertFalse(
+            any("allowances" in line for line in lab.run_plan_lines(args)),
+            "a pack with the defaults prints nothing about allowances",
         )
 
 

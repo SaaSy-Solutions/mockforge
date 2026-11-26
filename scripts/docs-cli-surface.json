@@ -3015,6 +3015,69 @@
      "subcommands": {},
      "variadic": false
     },
+    "mcp-contract": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--log-level": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {
+      "check": {
+       "aliases": {},
+       "flags": {
+        "--auth-env": 1,
+        "--client-name": 1,
+        "--client-version": 1,
+        "--contract": 1,
+        "--fail-on": 1,
+        "--format": 1,
+        "--header": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "--output": 1,
+        "--timeout": 1,
+        "--url": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "help": {
+       "aliases": {},
+       "flags": {},
+       "free": true,
+       "subcommands": {}
+      },
+      "pin": {
+       "aliases": {},
+       "flags": {
+        "--accept-hidden": 0,
+        "--auth-env": 1,
+        "--client-name": 1,
+        "--client-version": 1,
+        "--force": 0,
+        "--format": 1,
+        "--header": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "--output": 1,
+        "--timeout": 1,
+        "--url": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      }
+     },
+     "variadic": false
+    },
     "mockai": {
      "aliases": {},
      "flags": {

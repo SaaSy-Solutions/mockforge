@@ -52,10 +52,12 @@
 - [Directory Synchronization](user-guide/sync.md)
 - [Admin UI](user-guide/admin-ui.md)
 - [IDE Integration](user-guide/ide-integration.md)
+- [GitHub Action](user-guide/github-action.md)
 
 ## Testing & Resilience
 
 - [Mock Fidelity and Drift Detection](user-guide/mock-fidelity.md)
+- [MCP Contract Pinning](user-guide/mcp-contract.md)
 - [Load Testing](user-guide/load-testing.md)
   - [Security Rule Test Packs](user-guide/security-rule-test-packs.md)
   - [Per-CVE Rule Packs](user-guide/cve-packs.md)
