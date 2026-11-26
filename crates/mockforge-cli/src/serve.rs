@@ -2270,7 +2270,7 @@ pub async fn handle_serve(
         // The exchange log is opened before anything listens, so a file that
         // cannot be written stops startup with the reason.
         let exchange_log = match &serve_args.exchange_log {
-            Some(path) => Some(std::sync::Arc::new(
+            Some(path) => Some(Arc::new(
                 mockforge_http::exchange_log::ExchangeLog::create(path)
                     .await
                     .map_err(|error| format!("--exchange-log {}: {error}", path.display()))?,
