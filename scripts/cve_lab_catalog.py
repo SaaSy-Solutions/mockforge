@@ -193,9 +193,14 @@ PACKS = {
         "classifier": "middleware-bypass",
     },
     "CVE-2024-4577": {
-        # Verified on the lab host; declared explicitly because packs without a
-        # "verified" field count as unverified.
-        "verified": True,
+        # Not verified. A pack is verified when a run with the image it names
+        # has reproduced its trigger on a lab host, and that image is still
+        # pending review (see image_status below): the request was checked on
+        # a lab host, but no one can reproduce it through the runner until a
+        # reviewed image is published. So the pack is hidden by default like
+        # every other unverified pack, instead of being listed next to packs
+        # that run.
+        "verified": False,
         "catalog": {
             "schema_version": 1,
             "pack_revision": 1,
@@ -821,6 +826,100 @@ http.createServer((req, res) => {
         },
         "baseline_gate": "data-driven",
         "classifier": "data-driven",
+    },
+    "CVE-2024-27199": {
+        # Verified on the lab host (Docker 29.1.3, Linux amd64) with the pinned
+        # images: the scanner's request reaches the application with its `..`
+        # intact and the direct baseline answers 200 with the administrative
+        # page, which answers 401 when asked for directly. The two other
+        # prefixes were sent directly and answered 200 as well.
+        "verified": True,
+        "catalog": {
+            "schema_version": 1,
+            "pack_revision": 1,
+            "cve": "CVE-2024-27199",
+            "title": "TeamCity authentication bypass through path traversal",
+            "platform": "Linux, local Docker/Podman engine, amd64",
+            "application_version": "TeamCity 2023.11.3 (Vulhub)",
+            "application_image": "docker.io/vulhub/teamcity@sha256:5afb2a6013a45045291e8182d3cc1c1a9c43d5741984f09ba7046c1c68eb23bd",
+            "runner_version": "Nuclei 3.11.1",
+            "runner_image": "docker.io/projectdiscovery/nuclei@sha256:582d5546902e67052097cb2d07296c642d50a1afc5e44623cb038845df9a32eb",
+            "references": [
+                "https://nvd.nist.gov/vuln/detail/CVE-2024-27199",
+                "https://blog.jetbrains.com/teamcity/2024/03/additional-critical-security-issues-affecting-teamcity-on-premises-cve-2024-27198-and-cve-2024-27199-update-to-2023-11-4-now/",
+                "https://github.com/vulhub/vulhub/tree/master/teamcity/CVE-2024-27198",
+            ],
+            "coverage": "One reviewed traversal that reaches an administrative page with no session, two more traversal prefixes, and benign controls. Not CVE-2024-27198 or an authenticated session",
+            "origin_port": 18082,
+            "listen_address_guidance": (
+                "The recorder defaults to 127.0.0.1:18082, which only accepts local "
+                "connections. Testing an LB/WAAP on another machine requires "
+                "--listen-address <an isolated lab interface IP>; keep that interface "
+                "restricted to the test network because the recorder forwards to the "
+                "vulnerable application."
+            ),
+        },
+        "probe": {
+            "template_id": "mockforge-teamcity-27199-observation",
+            "template_name": "MockForge TeamCity controlled lab observation",
+            "method": "GET",
+            # The traversal has to reach the application untouched to work.
+            # A proxy that stops it blocks the request. One that only folds
+            # the `..` and forwards `/admin/diagnostic.jsp` still passes the
+            # attacker's request to the origin (the application then refuses
+            # it with 401), so the lab reports that as reaching the origin.
+            "path": "/res/../admin/diagnostic.jsp?__mockforge_cve={token}",
+            "headers": {
+                "X-Mockforge-Cve": "{token}",
+            },
+            "body": None,
+            "signature_header": None,
+            # Body marker proving the administrative page was served.
+            "marker": "Debug Logging",
+        },
+        "app": {
+            "port": "8111/tcp",
+            "env": {
+                # As the Vulhub environment: no first-start wizard and no admin
+                # setup. The heap is capped so the application fits the
+                # allowance below.
+                "TEAMCITY_SERVER_OPTS": (
+                    "-Dteamcity.startup.maintenance=false "
+                    "-Dteamcity.firstStart.setupAdmin.enabled=false "
+                    "-Dteamcity.updateCheck.enabled=false"
+                ),
+                "TEAMCITY_SERVER_MEM_OPTS": "-Xmx512m",
+            },
+            # Reviewed on a lab host: TeamCity needs more than the default
+            # 1 GB, and it creates its database on first boot, which takes
+            # longer than the default 90 seconds on a loaded machine.
+            "memory": "1536m",
+            "readiness_seconds": 240,
+            # Every path answers 503 while the application is starting, so
+            # readiness is the login page's 200.
+            "readiness": {"path": "/login.html", "status": 200},
+        },
+        "controls": {
+            "benign_path": "/login.html?__mockforge_cve={token}",
+            "benign_status": 200,
+            # The application's own protection: the same page asked for directly.
+            "ordinary_path": "/admin/diagnostic.jsp?__mockforge_cve={token}",
+            "ordinary_status": 401,
+        },
+        "baseline_gate": "data-driven",
+        "classifier": "data-driven",
+        "signature_variants": [
+            {
+                "id": "acme-challenge-prefix",
+                "path": "/.well-known/acme-challenge/../../admin/diagnostic.jsp",
+                "expect": "blocked",
+            },
+            {
+                "id": "update-prefix",
+                "path": "/update/../admin/diagnostic.jsp",
+                "expect": "blocked",
+            },
+        ],
     }
 }
 

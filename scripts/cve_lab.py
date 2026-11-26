@@ -14,12 +14,16 @@ import uuid
 from cve_lab_catalog import CATALOG, CVE, DETECT_PACKS, PACKS, validate_data_driven_pack
 from cve_lab_detect import detect
 from cve_lab_engine import (
+    DEFAULT_MEMORY,
+    DEFAULT_READINESS_SECONDS,
     cleanup,
     doctor,
     host_network_probe,
     host_network_refusal,
     lab,
+    memory_limit,
     prepare,
+    readiness_budget,
     verify_images,
 )
 from cve_lab_transport import target_url, receiver, control, unverified_context
@@ -40,6 +44,20 @@ UNVERIFIED_MESSAGE = (
     "is an unverified lab pack (its trigger has not reproduced on a lab host); "
     "pass --include-unverified to run it for development"
 )
+PENDING_IMAGE_MESSAGE = (
+    "is an unverified lab pack (its lab image is still pending review, so its "
+    "trigger has not been reproduced through the runner); pass "
+    "--include-unverified to run it for development"
+)
+
+
+def unverified_message(cve):
+    """Why a pack is unverified, and how to run it anyway."""
+    pending = (
+        PACKS[cve].get("catalog", {}).get("image_status")
+        == "pending-lab-host-review"
+    )
+    return f"{cve} {PENDING_IMAGE_MESSAGE if pending else UNVERIFIED_MESSAGE}"
 
 
 def verified_cves(include_unverified=False):
@@ -52,7 +70,7 @@ def verified_cves(include_unverified=False):
 
 def require_verified(cve, include_unverified):
     if not PACKS[cve].get("verified", False) and not include_unverified:
-        raise ValueError(f"{cve} {UNVERIFIED_MESSAGE}")
+        raise ValueError(unverified_message(cve))
 
 
 def _pack_images_runnable(pack_catalog):
@@ -112,6 +130,15 @@ def run_plan_lines(args):
         f"Images: pinned {pack_catalog['application_version']} lab and "
         f"{pack_catalog['runner_version']} runner (see `mockforge cve list`)"
     )
+    app = PACKS[args.cve]["app"]
+    memory = memory_limit(app)
+    budget = readiness_budget(app)
+    if (memory, budget) != (DEFAULT_MEMORY, DEFAULT_READINESS_SECONDS):
+        lines.append(
+            f"Reviewed allowances for this pack: {memory} of memory and up to "
+            f"{budget} seconds to start (other packs: {DEFAULT_MEMORY}, "
+            f"{DEFAULT_READINESS_SECONDS} seconds)"
+        )
     if pack_catalog.get("image_status") == "pending-lab-host-review":
         lines.append(
             "Lab image pending review: this pack refuses to run until the "
@@ -129,6 +156,9 @@ def run_plan_lines(args):
 def run(args):
     require_verified(args.cve, args.include_unverified)
     pack = PACKS[args.cve]
+    # A pack's reviewed allowances are checked before anything is downloaded.
+    memory_limit(pack["app"])
+    readiness_budget(pack["app"])
     if (
         pack["baseline_gate"] == "data-driven"
         or pack["classifier"] == "data-driven"
@@ -503,7 +533,7 @@ def main(argv=None):
                     + ")"
                 )
             if args.cve not in valid_cves:
-                raise ValueError(f"{args.cve} {UNVERIFIED_MESSAGE}")
+                raise ValueError(unverified_message(args.cve))
             require_verified(args.cve, args.include_unverified)
         if args.action == "doctor":
             report = doctor(args.engine, {cve: PACKS[cve] for cve in valid_cves})
