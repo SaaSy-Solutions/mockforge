@@ -92,13 +92,16 @@ jobs:
           command -v bash >/dev/null || { echo "::error::Bash is required for security tool ownership regressions."; exit 1; }
           python3 scripts/tests/test_owned_security_tools.py
       - name: Verify local Cargo isolation and admission behavior
+        # Each suite has its own time limit. A test that waits for something
+        # the runner never gives it then fails here, naming the suite, instead
+        # of cancelling the whole job at its limit with nothing named.
         run: |
-          python3 -m unittest discover -s scripts/tests -p test_dev_cargo.py -v
-          python3 -m unittest discover -s scripts/tests -p test_rust_build_policy.py -v
-          python3 -m unittest discover -s scripts/tests -p test_workload_admission.py -v
-          python3 -m unittest discover -s scripts/tests -p test_rust_ci_scope.py -v
-          python3 scripts/tests/test_runner_cargo_target.py
-          python3 scripts/tests/test_rust_cache_guard.py
+          timeout 120 python3 -m unittest discover -s scripts/tests -p test_dev_cargo.py -v
+          timeout 120 python3 -m unittest discover -s scripts/tests -p test_rust_build_policy.py -v
+          timeout 120 python3 -m unittest discover -s scripts/tests -p test_workload_admission.py -v
+          timeout 120 python3 -m unittest discover -s scripts/tests -p test_rust_ci_scope.py -v
+          timeout 120 python3 scripts/tests/test_runner_cargo_target.py
+          timeout 120 python3 scripts/tests/test_rust_cache_guard.py
       - name: Determine whether non-docs files changed
         id: filter
         env:
@@ -746,8 +749,10 @@ jobs:
 
   typos:
     name: Spell Check
-    # Text check only; runs on the Hetzner pool like every other trusted job (#1191).
-    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","linux","x64","rust"]') || 'ubuntu-latest' }}
+    # A text check, ten seconds of it. It runs GitHub-hosted, which is free on
+    # this public repository: on 2026-11-25 it waited 34 minutes for a
+    # self-hosted runner.
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
     - name: Checkout repository
@@ -758,8 +763,10 @@ jobs:
 
   changelog-validation:
     name: Changelog Validation
-    # git diff + shell only; Hetzner pool (#1191).
-    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","linux","x64","rust"]') || 'ubuntu-latest' }}
+    # A git diff and a shell script. It runs GitHub-hosted, which is free on
+    # this public repository: on 2026-11-25 it waited 34 minutes for a
+    # self-hosted runner.
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     if: github.event_name == 'pull_request'
     steps:

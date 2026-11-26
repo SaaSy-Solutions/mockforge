@@ -82,6 +82,18 @@ class SequentialRustTest(unittest.TestCase):
         self.assertNotIn("continue-on-error", step)
         self.assertTrue(step.rstrip().endswith("python3 scripts/tests/test_rust_sequential_ci.py"))
 
+    def scope_guards_step(self):
+        return block("changes").split("      - name: Verify local Cargo isolation and admission behavior\n", 1)[1].split("\n      - name:", 1)[0]
+
+    def test_scope_guards_run_under_a_time_limit(self):
+        # One of these suites once waited forever on a four-core runner, and
+        # the job was cancelled at its own limit with nothing named.
+        script = textwrap.dedent(self.scope_guards_step().split("        run: |\n", 1)[1])
+        commands = [line for line in script.splitlines() if line.strip()]
+        self.assertEqual(len(commands), 6)
+        for command in commands:
+            self.assertTrue(command.startswith("timeout 120 python3 "), command)
+
     def test_missing_python_or_bash_fails_with_clear_prerequisite_error(self):
         script = textwrap.dedent(self.regression_step().split("        run: |\n", 1)[1])
         for missing in ("python3", "bash"):

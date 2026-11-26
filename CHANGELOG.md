@@ -18,7 +18,7 @@
 
 ### Changed
 
-- **[DevX]** A pull request waits less for the shared self-hosted runners. The security audit, the two jobs that detect what changed, and the `Test (1.96.0)` summary run on GitHub-hosted runners, which are free on a public repository. On 2026-11-25 the audit did 39 seconds of work after two hours in that queue. `Test (1.96.0)` is a required check: a pull request cannot merge when the Rust lane failed, was cancelled or never ran.
+- **[DevX]** A pull request waits less for the shared self-hosted runners. The security audit, the two jobs that detect what changed, and the `Test (1.96.0)` summary run on GitHub-hosted runners, which are free on a public repository. On 2026-11-25 the audit did 39 seconds of work after two hours in that queue. `Test (1.96.0)` is a required check: a pull request cannot merge when the Rust lane failed, was cancelled or never ran. The spell check and the changelog validation run GitHub-hosted too: each waited 34 minutes in that queue for ten seconds of work.
 
 ### Fixed
 
