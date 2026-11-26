@@ -1,0 +1,14 @@
+<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="_resp1" Version="2.0" IssueInstant="2026-01-01T00:00:00Z" Destination="https://app.example/acs">
+<saml:Issuer>https://idp.example</saml:Issuer>
+<samlp:Status><samlp:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"/></samlp:Status>
+<saml:Assertion ID="_assert1" Version="2.0" IssueInstant="2026-01-01T00:00:00Z">
+<saml:Issuer>https://idp.example</saml:Issuer>
+<saml:Subject><saml:NameID Format="urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress">alice@acme.example</saml:NameID></saml:Subject>
+<saml:Conditions NotBefore="2026-01-01T00:00:00Z" NotOnOrAfter="2026-01-01T00:05:00Z"/>
+<saml:AuthnStatement AuthnInstant="2026-01-01T00:00:00Z" SessionIndex="_sess1"><saml:AuthnContext><saml:AuthnContextClassRef>urn:oasis:names:tc:SAML:2.0:ac:classes:Password</saml:AuthnContextClassRef></saml:AuthnContext></saml:AuthnStatement>
+<saml:AttributeStatement>
+<saml:Attribute Name="givenName"><saml:AttributeValue>Alice</saml:AttributeValue></saml:Attribute>
+<saml:Attribute Name="surname"><saml:AttributeValue>Anderson</saml:AttributeValue></saml:Attribute>
+</saml:AttributeStatement>
+</saml:Assertion>
+<ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#"><ds:SignedInfo><ds:CanonicalizationMethod Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/><ds:SignatureMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"/><ds:Reference URI=""><ds:Transforms><ds:Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/><ds:Transform Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/></ds:Transforms><ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/><ds:DigestValue>U6z2QHK8V7Q4WcV4v9UV2ZouabJsFicpS2Eh9kDjJbU=</ds:DigestValue></ds:Reference></ds:SignedInfo><ds:SignatureValue>HA4EWMf+TXa8e3Bx8a4Rqg8T7JL5/jFHGCgenmkX/SNA+LP+7/cFHNqUBKfVKgETOHOWOGEYGbDfaOPd3G0lHZOeWcXbUj8PtJm10cr3geC26AgIE6tB9sLj68A40+lEyqXdGEIzTwIqz4mI9K+1d8nn86ZanwLcHGvLZBVsMZrnscj45c6vqzt5twwKaTUA12syx/qnqRYjIaHnrWVc0/AyBTfDDTtBAQi3xvZWUBT6Rz0YBPkfE3GEIxdjwPGKVo7ZitlYaPy/4XJ6L0nKzAnRaoYZ5zcXKutZgjEQlORErRBqN1GAZmkrPIWrdnQqor3C7+w/zoVl90s7/ahfEQ==</ds:SignatureValue></ds:Signature></samlp:Response>

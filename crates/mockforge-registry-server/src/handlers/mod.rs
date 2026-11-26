@@ -51,6 +51,7 @@ pub mod resilience;
 pub mod reviews;
 pub mod routing_rules;
 pub mod runtime_logs;
+mod saml_dsig;
 pub mod scenario_promotions;
 pub mod showcase;
 pub mod snapshots;

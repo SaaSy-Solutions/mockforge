@@ -10,15 +10,11 @@ use axum::{
 };
 use base64::{engine::general_purpose, Engine as _};
 use chrono::{DateTime, Utc};
-use ring::signature::{
-    UnparsedPublicKey, VerificationAlgorithm, RSA_PKCS1_2048_8192_SHA256,
-    RSA_PKCS1_2048_8192_SHA512,
-};
 use rustls_pemfile;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256, Sha512};
 use x509_parser::prelude::*;
 
+use super::saml_dsig;
 use crate::{
     error::{ApiError, ApiResult},
     middleware::{resolve_org_context, AuthUser},
@@ -747,12 +743,10 @@ pub async fn saml_acs(
     })?;
 
     // Verify SAML response signature before parsing (security-critical)
-    if config.require_signed_responses {
-        verify_saml_signature(&decoded_response, &config)?;
-    }
+    let verified = enforce_saml_signature_policy(&decoded_response, &config)?;
 
-    // Parse and verify SAML response with full security checks
-    let user_info = parse_saml_response(&decoded_response, &config, &org).await?;
+    // Claims come only from the signature-covered assertion
+    let user_info = saml_user_info_from_assertion(verified, &config)?;
 
     // Validate timestamps (NotBefore/NotOnOrAfter)
     validate_saml_timestamps(&user_info).map_err(|e| {
@@ -994,126 +988,131 @@ fn generate_saml_authn_request(entity_id: &str, acs_url: &str) -> String {
     )
 }
 
-/// Parse SAML response and extract user information using quick-xml
-/// Assumes signature verification has already been performed
-async fn parse_saml_response(
-    response_xml: &[u8],
+/// Map the claims of the single signature-covered assertion into user info.
+/// Claims never come from anywhere else in the document (XSW defense).
+fn saml_user_info_from_assertion(
+    verified: saml_dsig::VerifiedAssertion,
     config: &SSOConfiguration,
-    _org: &Organization,
 ) -> Result<SAMLUserInfo, ApiError> {
-    // Convert to string for parsing
-    let xml_str = std::str::from_utf8(response_xml).map_err(|e| {
-        ApiError::Internal(anyhow::anyhow!("Invalid UTF-8 in SAML response: {}", e))
-    })?;
-
-    // Use quick-xml to parse the SAML response
-    // For now, we'll use the existing regex-based extraction which works well
-    // In the future, this could be enhanced with full quick-xml parsing
-
-    // Extract NameID
-    let name_id = extract_xml_value(xml_str, "NameID")
-        .or_else(|| extract_xml_value(xml_str, "saml:NameID"))
-        .or_else(|| extract_xml_value(xml_str, "saml2:NameID"));
-
-    // Extract email from NameID or attributes
-    let email = name_id
+    let reject = |why: &str| {
+        tracing::error!("SAML assertion rejected for org_id={}: {}", config.org_id, why);
+        ApiError::InvalidRequest(SAML_VERIFY_FAILED_MSG.to_string())
+    };
+    // Fail closed: a signed assertion with a missing/unparsable ID or time is
+    // rejected, never treated as "no expiry" or "no replay check".
+    let parse_required = |s: &Option<String>, what: &str| -> Result<DateTime<Utc>, ApiError> {
+        s.as_deref()
+            .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
+            .map(|dt| dt.with_timezone(&Utc))
+            .ok_or_else(|| reject(what))
+    };
+    let assertion_id = verified
+        .assertion_id
         .clone()
-        .filter(|v| v.contains('@'))
-        .or_else(|| extract_xml_value(xml_str, "AttributeValue").filter(|v| v.contains('@')));
+        .filter(|id| !id.trim().is_empty())
+        .ok_or_else(|| reject("missing assertion ID"))?;
+    let issued_at = parse_required(&verified.issue_instant, "missing or invalid IssueInstant")?;
+    let not_on_or_after =
+        parse_required(&verified.not_on_or_after, "missing or invalid NotOnOrAfter")?;
+    let not_before = match &verified.not_before {
+        None => None,
+        Some(_) => Some(parse_required(&verified.not_before, "invalid NotBefore")?),
+    };
 
-    // Extract SessionIndex
-    let session_index = extract_xml_value(xml_str, "SessionIndex")
-        .or_else(|| extract_xml_value(xml_str, "samlp:SessionIndex"));
+    // First value of the attribute whose Name or FriendlyName matches `key`.
+    let attr_value = |key: &str| -> Option<String> {
+        verified
+            .attributes
+            .iter()
+            .find(|a| a.name.as_deref() == Some(key) || a.friendly_name.as_deref() == Some(key))
+            .and_then(|a| a.values.first().cloned())
+    };
 
-    // Extract assertion ID (for replay attack prevention)
-    let assertion_id = extract_xml_value(xml_str, "Assertion")
-        .and_then(|a| {
-            regex::Regex::new(r#"ID="([^"]+)""#)
-                .ok()?
-                .captures(&a)
-                .and_then(|cap| cap.get(1))
-                .map(|m| m.as_str().to_string())
-        })
-        .or_else(|| {
-            regex::Regex::new(r#"<[^:]*:?Assertion[^>]*ID="([^"]+)""#)
-                .ok()?
-                .captures(xml_str)
-                .and_then(|cap| cap.get(1))
-                .map(|m| m.as_str().to_string())
-        });
+    let name_id = verified.name_id.clone();
+    let email = name_id.clone().filter(|v| v.contains('@')).or_else(|| {
+        verified
+            .attributes
+            .iter()
+            .flat_map(|a| a.values.iter())
+            .find(|v| v.contains('@'))
+            .cloned()
+    });
 
-    // Extract timestamps for validation
-    let not_before = extract_xml_value(xml_str, "NotBefore")
-        .or_else(|| extract_xml_value(xml_str, "saml:NotBefore"))
-        .or_else(|| extract_xml_value(xml_str, "saml2:NotBefore"))
-        .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
-        .map(|dt| dt.with_timezone(&Utc));
-
-    let not_on_or_after = extract_xml_value(xml_str, "NotOnOrAfter")
-        .or_else(|| extract_xml_value(xml_str, "saml:NotOnOrAfter"))
-        .or_else(|| extract_xml_value(xml_str, "saml2:NotOnOrAfter"))
-        .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
-        .map(|dt| dt.with_timezone(&Utc));
-
-    let issued_at = extract_xml_value(xml_str, "IssueInstant")
-        .or_else(|| extract_xml_value(xml_str, "saml:IssueInstant"))
-        .or_else(|| extract_xml_value(xml_str, "saml2:IssueInstant"))
-        .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
-        .map(|dt| dt.with_timezone(&Utc));
-
-    // Extract attributes based on attribute mapping
     let mut attributes = serde_json::json!({});
-
-    // Apply attribute mapping from config
     if let Some(mapping) = config.attribute_mapping.as_object() {
         for (target_key, source_key) in mapping {
-            if let Some(source_key_str) = source_key.as_str() {
-                if let Some(source_value) = extract_xml_value(xml_str, source_key_str) {
-                    attributes[target_key] = serde_json::Value::String(source_value);
-                }
+            if let Some(value) = source_key.as_str().and_then(&attr_value) {
+                attributes[target_key] = serde_json::Value::String(value);
             }
         }
     }
 
-    // Extract common attributes
-    let first_name =
-        extract_xml_value(xml_str, "FirstName").or_else(|| extract_xml_value(xml_str, "givenName"));
-    let last_name =
-        extract_xml_value(xml_str, "LastName").or_else(|| extract_xml_value(xml_str, "surname"));
-
-    // Generate username from email if not provided
-    let username = extract_xml_value(xml_str, "Username")
+    let first_name = attr_value("FirstName").or_else(|| attr_value("givenName"));
+    let last_name = attr_value("LastName").or_else(|| attr_value("surname"));
+    let username = attr_value("Username")
         .or_else(|| email.as_ref().map(|e| e.split('@').next().unwrap_or("user").to_string()));
 
     Ok(SAMLUserInfo {
-        assertion_id,
+        assertion_id: Some(assertion_id),
         name_id,
         email,
         username,
         first_name,
         last_name,
-        session_index,
+        session_index: verified.session_index.clone(),
         attributes,
         not_before,
-        not_on_or_after,
-        issued_at,
+        not_on_or_after: Some(not_on_or_after),
+        issued_at: Some(issued_at),
     })
 }
 
-/// Verify SAML response/assertion signature using ring and x509-parser
-/// Validates X.509 certificate and performs full cryptographic signature verification
-fn verify_saml_signature(xml: &[u8], config: &SSOConfiguration) -> Result<(), ApiError> {
+/// Fixed client-facing message for every signature/structure failure.
+const SAML_VERIFY_FAILED_MSG: &str = "SAML response could not be verified";
+
+/// Enforce the SAML signature policy and return the claims of the one
+/// assertion that a verified signature covers.
+fn enforce_saml_signature_policy(
+    xml: &[u8],
+    config: &SSOConfiguration,
+) -> Result<saml_dsig::VerifiedAssertion, ApiError> {
+    if !config.require_signed_responses && !config.require_signed_assertions {
+        tracing::error!("SAML signature requirements are disabled for org_id={}", config.org_id);
+        return Err(ApiError::InvalidRequest(
+            "SAML signature requirements must be enabled".to_string(),
+        ));
+    }
+
+    let xml_str = std::str::from_utf8(xml).map_err(|e| {
+        ApiError::Internal(anyhow::anyhow!("Invalid UTF-8 in SAML response: {}", e))
+    })?;
+    if !has_signature_element(xml_str) {
+        tracing::error!("SAML response missing signature for org_id={}", config.org_id);
+        return Err(ApiError::InvalidRequest(SAML_VERIFY_FAILED_MSG.to_string()));
+    }
+
+    verify_saml_signature(xml_str, config)
+}
+
+fn has_signature_element(xml: &str) -> bool {
+    static SIGNATURE_ELEMENT: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
+        regex::Regex::new(r"<(?:[A-Za-z_][\w.\-]*:)?Signature[\s>/]").unwrap()
+    });
+    SIGNATURE_ELEMENT.is_match(xml)
+}
+
+fn verify_saml_signature(
+    xml_str: &str,
+    config: &SSOConfiguration,
+) -> Result<saml_dsig::VerifiedAssertion, ApiError> {
     tracing::debug!("Verifying SAML signature for org_id={}", config.org_id);
 
-    // Get X.509 certificate from config
     let cert_pem = config.saml_x509_cert.as_ref().ok_or_else(|| {
         tracing::error!("X.509 certificate not configured for org_id={}", config.org_id);
         ApiError::InvalidRequest("SAML X.509 certificate not configured".to_string())
     })?;
 
-    // Parse certificate (PEM format)
-    let cert_pem_bytes = cert_pem.as_bytes().to_vec();
-    let mut reader = std::io::Cursor::new(&cert_pem_bytes);
+    let mut reader = std::io::Cursor::new(cert_pem.as_bytes());
     let certs: Vec<Vec<u8>> = rustls_pemfile::certs(&mut reader)
         .map(|result| result.map(|cert| cert.to_vec()))
         .collect::<Result<Vec<_>, _>>()
@@ -1121,216 +1120,36 @@ fn verify_saml_signature(xml: &[u8], config: &SSOConfiguration) -> Result<(), Ap
             tracing::error!("Failed to parse PEM certificate: {}", e);
             ApiError::Internal(anyhow::anyhow!("Invalid PEM certificate format"))
         })?;
+    let first_cert = certs
+        .first()
+        .ok_or_else(|| ApiError::InvalidRequest("No certificate found in PEM data".to_string()))?;
 
-    if certs.is_empty() {
-        return Err(ApiError::InvalidRequest("No certificate found in PEM data".to_string()));
-    }
-
-    // Parse the first certificate to verify it's valid
-    let first_cert = certs[0].clone();
-    let (_, cert) = X509Certificate::from_der(&first_cert).map_err(|e| {
+    let (_, cert) = X509Certificate::from_der(first_cert).map_err(|e| {
         tracing::error!("Failed to parse X.509 certificate DER: {:?}", e);
         ApiError::Internal(anyhow::anyhow!("Invalid X.509 certificate format"))
     })?;
-
-    // Verify certificate is valid (not expired, proper format)
     cert.validity().time_to_expiration().ok_or_else(|| {
         tracing::warn!("SAML certificate expired or invalid for org_id={}", config.org_id);
         ApiError::InvalidRequest("SAML certificate has expired or is invalid".to_string())
     })?;
 
-    // Convert XML to string for parsing
-    let xml_str = std::str::from_utf8(xml).map_err(|e| {
-        ApiError::Internal(anyhow::anyhow!("Invalid UTF-8 in SAML response: {}", e))
+    let verified = saml_dsig::verify_and_extract(
+        xml_str,
+        first_cert,
+        saml_dsig::SignaturePolicy {
+            require_signed_response: config.require_signed_responses,
+            require_signed_assertion: config.require_signed_assertions,
+        },
+    )
+    .map_err(|e| {
+        // Detail stays server-side only: the ACS endpoint is unauthenticated and
+        // per-check error text would be an oracle.
+        tracing::error!("SAML signature verification failed for org_id={}: {}", config.org_id, e);
+        ApiError::InvalidRequest(SAML_VERIFY_FAILED_MSG.to_string())
     })?;
 
-    // Check if Signature element exists
-    let has_response_signature = xml_str.contains("<ds:Signature")
-        || xml_str.contains("<Signature")
-        || xml_str.contains("xmlns:ds=\"http://www.w3.org/2000/09/xmldsig#\"");
-
-    if !has_response_signature && config.require_signed_responses {
-        tracing::error!("SAML response missing signature for org_id={}", config.org_id);
-        return Err(ApiError::InvalidRequest(
-            "SAML response is not signed but signature is required".to_string(),
-        ));
-    }
-
-    // Extract public key from certificate for signature verification
-    let public_key = cert.public_key();
-
-    // Verify response signature if present
-    if has_response_signature {
-        verify_xml_signature(xml_str, &first_cert, public_key).map_err(|e| {
-            tracing::error!(
-                "SAML response signature verification failed for org_id={}: {}",
-                config.org_id,
-                e
-            );
-            ApiError::InvalidRequest(format!("SAML response signature verification failed: {}", e))
-        })?;
-    }
-
-    // Verify assertion signatures if required
-    if config.require_signed_assertions {
-        // Check for assertion signatures (typically inside Assertion elements)
-        let has_assertion_signature = xml_str.contains("<Assertion")
-            && (xml_str.contains("<ds:Signature") || xml_str.contains("<Signature"));
-
-        if !has_assertion_signature {
-            tracing::error!("SAML assertion missing signature for org_id={}", config.org_id);
-            return Err(ApiError::InvalidRequest(
-                "SAML assertion is not signed but signature is required".to_string(),
-            ));
-        }
-
-        // Verify assertion signature (same certificate used for assertions)
-        verify_xml_signature(xml_str, &first_cert, public_key).map_err(|e| {
-            tracing::error!(
-                "SAML assertion signature verification failed for org_id={}: {}",
-                config.org_id,
-                e
-            );
-            ApiError::InvalidRequest(format!("SAML assertion signature verification failed: {}", e))
-        })?;
-    }
-
     tracing::info!("SAML signature validation passed for org_id={}", config.org_id);
-    Ok(())
-}
-
-/// Verify XML signature using ring cryptography
-/// Extracts signature value and SignedInfo, then verifies using the certificate's public key
-fn verify_xml_signature(
-    xml: &str,
-    cert_der: &[u8],
-    _public_key: &SubjectPublicKeyInfo<'_>,
-) -> Result<(), String> {
-    // Extract signature value from XML
-    let signature_value = extract_signature_value(xml)
-        .ok_or_else(|| "Signature value not found in XML".to_string())?;
-
-    // Extract SignedInfo element (the canonicalized content that was signed)
-    let signed_info =
-        extract_signed_info(xml).ok_or_else(|| "SignedInfo not found in XML".to_string())?;
-
-    // Decode base64 signature
-    let signature_bytes = general_purpose::STANDARD
-        .decode(&signature_value)
-        .map_err(|e| format!("Failed to decode signature: {}", e))?;
-
-    // Determine signature algorithm from SignedInfo
-    let algorithm_str =
-        extract_signature_algorithm(xml).unwrap_or_else(|| "rsa-sha256".to_string()); // Default to RSA-SHA256
-
-    // Hash the SignedInfo using the appropriate algorithm
-    let signed_info_bytes = signed_info.as_bytes();
-    let hash = match algorithm_str.as_str() {
-        "rsa-sha256" | "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256" => {
-            let mut hasher = Sha256::new();
-            hasher.update(signed_info_bytes);
-            hasher.finalize().to_vec()
-        }
-        "rsa-sha512" | "http://www.w3.org/2001/04/xmldsig-more#rsa-sha512" => {
-            let mut hasher = Sha512::new();
-            hasher.update(signed_info_bytes);
-            hasher.finalize().to_vec()
-        }
-        _ => {
-            // Default to SHA256
-            let mut hasher = Sha256::new();
-            hasher.update(signed_info_bytes);
-            hasher.finalize().to_vec()
-        }
-    };
-
-    // Verify signature using ring
-    // Use the certificate's DER-encoded public key directly
-    // ring's UnparsedPublicKey can work with the raw public key bytes
-    let verification_alg: &dyn VerificationAlgorithm = match algorithm_str.as_str() {
-        "rsa-sha256"
-        | "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"
-        | "http://www.w3.org/2000/09/xmldsig#rsa-sha256" => &RSA_PKCS1_2048_8192_SHA256,
-        "rsa-sha512"
-        | "http://www.w3.org/2001/04/xmldsig-more#rsa-sha512"
-        | "http://www.w3.org/2000/09/xmldsig#rsa-sha512" => &RSA_PKCS1_2048_8192_SHA512,
-        _ => &RSA_PKCS1_2048_8192_SHA256,
-    };
-
-    // For ring's UnparsedPublicKey, we can use the full certificate DER
-    // ring will extract the public key from the certificate automatically
-    // This is simpler and more reliable than manually extracting the public key
-    let public_key_unparsed = UnparsedPublicKey::new(verification_alg, cert_der);
-
-    // Verify the signature
-    // Note: XML signature verification typically requires canonicalization of the SignedInfo
-    // and handling of references. This is a simplified verification that works for
-    // basic SAML scenarios. For full compliance, consider using a dedicated XML signature library.
-    public_key_unparsed
-        .verify(&hash, &signature_bytes)
-        .map_err(|e| format!("Signature verification failed: {:?}", e))?;
-
-    Ok(())
-}
-
-/// Extract signature value from XML Signature element
-fn extract_signature_value(xml: &str) -> Option<String> {
-    // Look for <SignatureValue> or <ds:SignatureValue>
-    let patterns = [
-        r#"<ds:SignatureValue[^>]*>(.*?)</ds:SignatureValue>"#,
-        r#"<SignatureValue[^>]*>(.*?)</SignatureValue>"#,
-    ];
-
-    for pattern in &patterns {
-        if let Ok(re) = regex::Regex::new(pattern) {
-            if let Some(cap) = re.captures(xml) {
-                if let Some(value) = cap.get(1) {
-                    return Some(value.as_str().trim().to_string());
-                }
-            }
-        }
-    }
-    None
-}
-
-/// Extract SignedInfo element from XML Signature
-fn extract_signed_info(xml: &str) -> Option<String> {
-    // Look for <SignedInfo> or <ds:SignedInfo>
-    let patterns = [
-        r#"<ds:SignedInfo[^>]*>(.*?)</ds:SignedInfo>"#,
-        r#"<SignedInfo[^>]*>(.*?)</SignedInfo>"#,
-    ];
-
-    for pattern in &patterns {
-        if let Ok(re) = regex::Regex::new(pattern) {
-            if let Some(cap) = re.captures(xml) {
-                if let Some(value) = cap.get(1) {
-                    return Some(value.as_str().to_string());
-                }
-            }
-        }
-    }
-    None
-}
-
-/// Extract signature algorithm from SignedInfo
-fn extract_signature_algorithm(xml: &str) -> Option<String> {
-    // Look for SignatureMethod Algorithm attribute
-    let patterns = [
-        r#"<ds:SignatureMethod[^>]*Algorithm="([^"]+)""#,
-        r#"<SignatureMethod[^>]*Algorithm="([^"]+)""#,
-    ];
-
-    for pattern in &patterns {
-        if let Ok(re) = regex::Regex::new(pattern) {
-            if let Some(cap) = re.captures(xml) {
-                if let Some(value) = cap.get(1) {
-                    return Some(value.as_str().to_string());
-                }
-            }
-        }
-    }
-    None
+    Ok(verified)
 }
 
 /// Extract value from XML by tag name (fallback parser for simple cases)
@@ -1527,6 +1346,151 @@ fn validate_saml_timestamps(user_info: &SAMLUserInfo) -> Result<(), ApiError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn test_sso_config(
+        require_signed_responses: bool,
+        require_signed_assertions: bool,
+    ) -> SSOConfiguration {
+        let now = Utc::now();
+        SSOConfiguration {
+            id: uuid::Uuid::new_v4(),
+            org_id: uuid::Uuid::new_v4(),
+            provider: "saml".to_string(),
+            enabled: true,
+            saml_entity_id: None,
+            saml_sso_url: None,
+            saml_slo_url: None,
+            saml_x509_cert: None,
+            saml_name_id_format: None,
+            oidc_issuer_url: None,
+            oidc_client_id: None,
+            oidc_client_secret: None,
+            email_domain: None,
+            attribute_mapping: serde_json::json!({}),
+            require_signed_assertions,
+            require_signed_responses,
+            allow_unsolicited_responses: false,
+            created_at: now,
+            updated_at: now,
+        }
+    }
+
+    fn verified_ok() -> saml_dsig::VerifiedAssertion {
+        saml_dsig::VerifiedAssertion {
+            assertion_id: Some("_a1".to_string()),
+            issue_instant: Some("2026-01-01T00:00:00Z".to_string()),
+            name_id: Some("alice@acme.example".to_string()),
+            not_on_or_after: Some("2026-01-01T00:05:00Z".to_string()),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn assertion_mapping_accepts_complete_assertion() {
+        let config = test_sso_config(true, true);
+        let info = saml_user_info_from_assertion(verified_ok(), &config).expect("ok");
+        assert_eq!(info.assertion_id.as_deref(), Some("_a1"));
+        assert!(info.not_on_or_after.is_some() && info.issued_at.is_some());
+        assert!(info.not_before.is_none());
+    }
+
+    #[test]
+    fn assertion_mapping_fails_closed_on_missing_or_bad_id_and_times() {
+        let config = test_sso_config(true, true);
+        type Mutator = fn(&mut saml_dsig::VerifiedAssertion);
+        let cases: Vec<(&str, Mutator)> = vec![
+            ("no id", |v| v.assertion_id = None),
+            ("blank id", |v| v.assertion_id = Some("  ".into())),
+            ("no issue instant", |v| v.issue_instant = None),
+            ("bad issue instant", |v| v.issue_instant = Some("yesterday".into())),
+            ("no NotOnOrAfter", |v| v.not_on_or_after = None),
+            ("timezone-less NotOnOrAfter", |v| {
+                v.not_on_or_after = Some("2026-01-01T00:05:00".into())
+            }),
+            ("bad NotBefore", |v| v.not_before = Some("soon".into())),
+        ];
+        for (label, mutate) in cases {
+            let mut v = verified_ok();
+            mutate(&mut v);
+            match saml_user_info_from_assertion(v, &config) {
+                Err(ApiError::InvalidRequest(m)) => {
+                    assert_eq!(m, SAML_VERIFY_FAILED_MSG, "{label}")
+                }
+                other => panic!("{label}: expected fail-closed rejection, got {other:?}"),
+            }
+        }
+    }
+
+    fn config_with_idp_cert(responses: bool, assertions: bool) -> SSOConfiguration {
+        let mut c = test_sso_config(responses, assertions);
+        c.saml_x509_cert = Some(include_str!("../../tests/fixtures/saml/idp_cert.pem").to_string());
+        c
+    }
+
+    #[test]
+    fn acs_policy_end_to_end_accepts_genuine_and_returns_generic_errors() {
+        let config = config_with_idp_cert(false, true);
+        let genuine = include_bytes!("../../tests/fixtures/saml/response_assertion_signed.xml");
+        let v = enforce_saml_signature_policy(genuine, &config).expect("genuine accepted");
+        assert_eq!(v.name_id.as_deref(), Some("alice@acme.example"));
+
+        // Every rejection reason reaches the client as the same fixed message.
+        let forged = String::from_utf8_lossy(genuine).replace("alice@", "admin@");
+        let xpath =
+            include_str!("../../tests/fixtures/saml/response_assertion_xpath_transform.xml");
+        let attacker = include_str!("../../tests/fixtures/saml/response_attacker_signed.xml");
+        let unsigned = include_str!("../../tests/fixtures/saml/response_unsigned.xml");
+        for body in [forged.as_str(), xpath, attacker, unsigned] {
+            match enforce_saml_signature_policy(body.as_bytes(), &config) {
+                Err(ApiError::InvalidRequest(m)) => assert_eq!(m, SAML_VERIFY_FAILED_MSG),
+                other => panic!("expected generic rejection, got {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn signature_policy_rejects_unsigned_responses_for_each_enabled_policy() {
+        let unsigned = br#"<samlp:Response><saml:Assertion/></samlp:Response>"#;
+        for (responses, assertions) in [(false, true), (true, false), (true, true)] {
+            let config = test_sso_config(responses, assertions);
+            assert!(matches!(
+                enforce_saml_signature_policy(unsigned, &config),
+                Err(ApiError::InvalidRequest(_))
+            ));
+        }
+    }
+
+    #[test]
+    fn signature_policy_rejects_forged_unsigned_name_id() {
+        let forged = br#"<samlp:Response><saml:Assertion><saml:Subject><saml:NameID>admin@victim.example</saml:NameID></saml:Subject></saml:Assertion></samlp:Response>"#;
+        let config = test_sso_config(true, true);
+        assert!(matches!(
+            enforce_saml_signature_policy(forged, &config),
+            Err(ApiError::InvalidRequest(_))
+        ));
+    }
+
+    #[test]
+    fn signature_policy_rejects_when_both_requirements_are_disabled() {
+        let config = test_sso_config(false, false);
+        assert!(matches!(
+            enforce_saml_signature_policy(b"<Response/>", &config),
+            Err(ApiError::InvalidRequest(_))
+        ));
+    }
+
+    #[test]
+    fn signature_element_detection_accepts_any_prefix_but_not_namespace_declarations() {
+        for xml in [
+            "<ds:Signature>",
+            "<Signature>",
+            "<dsig:Signature xmlns:dsig=\"urn:dsig\">",
+        ] {
+            assert!(has_signature_element(xml), "expected Signature in {xml}");
+        }
+        assert!(!has_signature_element("<Assertion><NameID>x</NameID></Assertion>"));
+        assert!(!has_signature_element("xmlns:ds=\"http://www.w3.org/2000/09/xmldsig#\""));
+    }
 
     #[test]
     fn extract_sso_domain_lowercases_and_takes_part_after_at() {
