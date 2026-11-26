@@ -1254,14 +1254,16 @@ enum Commands {
     ///
     /// A range pack is an API, served by the mock, with flaws planted in it.
     /// Each flaw names the request that proves it, so one counts only when
-    /// that request reached the mock. `list` shows the packs MockForge ships
-    /// and `write` puts a pack's API in a file to serve with `serve --spec`.
+    /// that request reached the mock. `list` shows the packs MockForge ships,
+    /// `write` puts a pack's API in a file to serve with `serve --spec`, and
+    /// `judge` reads what `serve --exchange-log` wrote against the pack.
     /// The pack says what to tell the agent, what credential it starts with
     /// and what is in scope.
     ///
     /// Examples:
     ///   mockforge range list
     ///   mockforge range write shop
+    ///   mockforge range judge --pack shop.pack.json --exchanges exchanges.jsonl
     #[command(verbatim_doc_comment)]
     Range(range_commands::RangeArgs),
 

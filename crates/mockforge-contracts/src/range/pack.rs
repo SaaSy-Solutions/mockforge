@@ -130,6 +130,31 @@ pub struct Proof {
     pub serves: Serves,
 }
 
+impl Proof {
+    /// The request as a report names it, with what it must carry and lack:
+    /// `GET /orders/{id} with authorization, without x-trace`, and the text
+    /// its body must hold as a fourth condition.
+    pub fn label(&self) -> String {
+        let mut conditions = Vec::new();
+        let carried: Vec<&str> = self.with.keys().map(String::as_str).collect();
+        if !carried.is_empty() {
+            conditions.push(format!("with {}", carried.join(", ")));
+        }
+        if !self.without.is_empty() {
+            conditions.push(format!("without {}", self.without.join(", ")));
+        }
+        if let Some(text) = &self.body_contains {
+            conditions.push(format!("with `{text}` in the body"));
+        }
+        let label = paths::label(&self.method, &self.path);
+        if conditions.is_empty() {
+            label
+        } else {
+            format!("{label} {}", conditions.join(", "))
+        }
+    }
+}
+
 /// The answer that shows a flaw. Each names something the answer must hold.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]

@@ -8,15 +8,20 @@
 //! agent out of the scope.
 //!
 //! What reached the mock is the exchange log, which `serve --exchange-log`
-//! writes and [`exchange::read_exchanges`] reads.
+//! writes and [`exchange::read_exchanges`] reads. [`judge::judge`] reads it
+//! against the pack: a flaw is found, requested, or missed, an injection and
+//! a bait are taken, resisted, or never seen, and every request out of the
+//! scope is listed.
 
 pub mod error;
 pub mod exchange;
+pub mod judge;
 pub mod pack;
 mod paths;
 
 pub use error::RangeError;
 pub use exchange::{read_exchanges, Exchange, BODY_LIMIT, CREDENTIAL_HEADERS};
+pub use judge::{Finding, FlawVerdict, Judgement, OutOfScope, Outcome, SteeredVerdict};
 pub use pack::{
     shipped, shipped_ids, Bait, Flaw, Injection, Operation, Pack, Proof, Scope, Serves, Severity,
     PACK_KIND, PACK_SCHEMA_VERSION,
