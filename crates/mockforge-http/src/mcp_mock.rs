@@ -29,8 +29,12 @@
 //! Mounted by `mockforge serve --mcp-mock`.
 
 use axum::{
-    extract::State, http::{HeaderMap, StatusCode}, response::IntoResponse, response::Response,
-    routing::post, Json, Router,
+    extract::State,
+    http::{HeaderMap, StatusCode},
+    response::IntoResponse,
+    response::Response,
+    routing::post,
+    Json, Router,
 };
 use serde_json::{json, Value};
 
@@ -394,12 +398,17 @@ fn legacy(config: &McpMockConfig, id: Value, method: &str, params: &Value) -> Re
 
 /// Answer a request on the per-request protocol, revision 2026-07-28. There is
 /// no handshake: each request says which revision it speaks and who sends it.
-fn modern(config: &McpMockConfig, headers: &HeaderMap, id: Value, method: &str, params: &Value) -> Response {
+fn modern(
+    config: &McpMockConfig,
+    headers: &HeaderMap,
+    id: Value,
+    method: &str,
+    params: &Value,
+) -> Response {
     let meta = params.get("_meta");
     let version = meta.and_then(|meta| meta.get(VERSION_KEY)).and_then(Value::as_str);
-    let declares_capabilities = meta
-        .and_then(|meta| meta.get(CAPABILITIES_KEY))
-        .is_some_and(Value::is_object);
+    let declares_capabilities =
+        meta.and_then(|meta| meta.get(CAPABILITIES_KEY)).is_some_and(Value::is_object);
     let Some(version) = version.filter(|_| declares_capabilities) else {
         return bad_request(error_response(
             id,
@@ -416,7 +425,11 @@ fn modern(config: &McpMockConfig, headers: &HeaderMap, id: Value, method: &str, 
         ));
     }
     if let Some(detail) = header_mismatch(headers, method, params, version) {
-        return bad_request(error_response(id, HEADER_MISMATCH, &format!("Header mismatch: {detail}")));
+        return bad_request(error_response(
+            id,
+            HEADER_MISMATCH,
+            &format!("Header mismatch: {detail}"),
+        ));
     }
     if let Some(found) = lookup(config, method, params) {
         return match found {
@@ -461,12 +474,19 @@ fn modern(config: &McpMockConfig, headers: &HeaderMap, id: Value, method: &str, 
 
 /// What is wrong with the headers a request on 2026-07-28 mirrors its method,
 /// revision and name into, or `None` when they match the body.
-fn header_mismatch(headers: &HeaderMap, method: &str, params: &Value, version: &str) -> Option<String> {
+fn header_mismatch(
+    headers: &HeaderMap,
+    method: &str,
+    params: &Value,
+    version: &str,
+) -> Option<String> {
     let header = |name: &str| headers.get(name).and_then(|value| value.to_str().ok());
     match header("mcp-method") {
         Some(seen) if seen == method => {}
         Some(seen) => {
-            return Some(format!("Mcp-Method header value '{seen}' does not match body value '{method}'"));
+            return Some(format!(
+                "Mcp-Method header value '{seen}' does not match body value '{method}'"
+            ));
         }
         None => return Some("Mcp-Method header is missing".to_string()),
     }
@@ -491,7 +511,11 @@ fn header_mismatch(headers: &HeaderMap, method: &str, params: &Value, version: &
     // A value that is not plain ASCII travels encoded, behind a marker.
     match header("mcp-name") {
         Some(seen) if seen == name || seen.starts_with("=?base64?") => {}
-        Some(seen) => return Some(format!("Mcp-Name header value '{seen}' does not match body value '{name}'")),
+        Some(seen) => {
+            return Some(format!(
+                "Mcp-Name header value '{seen}' does not match body value '{name}'"
+            ))
+        }
         None => return Some("Mcp-Name header is missing".to_string()),
     }
     None
@@ -499,7 +523,11 @@ fn header_mismatch(headers: &HeaderMap, method: &str, params: &Value, version: &
 
 /// `resources/read` and `prompts/get`, whose failures are errors rather than
 /// results. `None` for every other method.
-fn lookup(config: &McpMockConfig, method: &str, params: &Value) -> Option<Result<Value, (i64, String)>> {
+fn lookup(
+    config: &McpMockConfig,
+    method: &str,
+    params: &Value,
+) -> Option<Result<Value, (i64, String)>> {
     match method {
         "resources/read" => Some(resources_read(config, params)),
         "prompts/get" => Some(prompts_get(config, params)),
@@ -528,11 +556,13 @@ fn tools(config: &McpMockConfig) -> Vec<Value> {
     config
         .tools
         .iter()
-        .map(|tool| json!({
-            "name": tool.name,
-            "description": tool.description,
-            "inputSchema": tool.input_schema,
-        }))
+        .map(|tool| {
+            json!({
+                "name": tool.name,
+                "description": tool.description,
+                "inputSchema": tool.input_schema,
+            })
+        })
         .collect()
 }
 
@@ -540,12 +570,14 @@ fn resources(config: &McpMockConfig) -> Vec<Value> {
     config
         .resources
         .iter()
-        .map(|resource| json!({
-            "uri": resource.uri,
-            "name": resource.name,
-            "description": resource.description,
-            "mimeType": resource.mime_type,
-        }))
+        .map(|resource| {
+            json!({
+                "uri": resource.uri,
+                "name": resource.name,
+                "description": resource.description,
+                "mimeType": resource.mime_type,
+            })
+        })
         .collect()
 }
 
@@ -553,15 +585,17 @@ fn prompts(config: &McpMockConfig) -> Vec<Value> {
     config
         .prompts
         .iter()
-        .map(|prompt| json!({
-            "name": prompt.name,
-            "description": prompt.description,
-            "arguments": prompt.arguments.iter().map(|argument| json!({
-                "name": argument.name,
-                "description": argument.description,
-                "required": argument.required,
-            })).collect::<Vec<_>>(),
-        }))
+        .map(|prompt| {
+            json!({
+                "name": prompt.name,
+                "description": prompt.description,
+                "arguments": prompt.arguments.iter().map(|argument| json!({
+                    "name": argument.name,
+                    "description": argument.description,
+                    "required": argument.required,
+                })).collect::<Vec<_>>(),
+            })
+        })
         .collect()
 }
 
@@ -645,13 +679,11 @@ fn bad_request(body: Value) -> Response {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mockforge_contracts::mcp_contract::client::{ClientOptions, fetch_declared};
+    use mockforge_contracts::mcp_contract::client::{fetch_declared, ClientOptions};
     use mockforge_contracts::mcp_contract::Era;
 
     async fn body_of(response: Response) -> Value {
-        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
-            .await
-            .unwrap();
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         if bytes.is_empty() {
             Value::Null
         } else {
@@ -661,12 +693,17 @@ mod tests {
 
     /// A request without the per-request metadata, as the handshake era sends.
     async fn call(body: Value) -> Value {
-        let response = handle_rpc(State(McpMockConfig::default()), HeaderMap::new(), Json(body)).await;
+        let response =
+            handle_rpc(State(McpMockConfig::default()), HeaderMap::new(), Json(body)).await;
         body_of(response).await
     }
 
     /// A request on 2026-07-28 with the given headers. Returns the status and the body.
-    async fn modern(method: &str, params: Value, headers: &[(&'static str, String)]) -> (u16, Value) {
+    async fn modern(
+        method: &str,
+        params: Value,
+        headers: &[(&'static str, String)],
+    ) -> (u16, Value) {
         let mut map = HeaderMap::new();
         for (name, value) in headers {
             map.insert(*name, value.parse().unwrap());
@@ -811,7 +848,9 @@ mod tests {
 
     #[tokio::test]
     async fn discover_answers_the_current_protocol_without_a_handshake() {
-        let (status, v) = modern("server/discover", on(MODERN_PROTOCOL, json!({})), &proper("server/discover")).await;
+        let (status, v) =
+            modern("server/discover", on(MODERN_PROTOCOL, json!({})), &proper("server/discover"))
+                .await;
         assert_eq!(status, 200);
         assert_eq!(v["result"]["supportedVersions"], json!([MODERN_PROTOCOL]));
         assert_eq!(v["result"]["resultType"], "complete");
@@ -822,12 +861,16 @@ mod tests {
         // The discover request may carry nothing but its metadata.
         let only_meta = json!({ "_meta": { VERSION_KEY: MODERN_PROTOCOL, CAPABILITIES_KEY: {} } });
         let (status, v) = modern("server/discover", only_meta, &proper("server/discover")).await;
-        assert_eq!((status, v["result"]["supportedVersions"].clone()), (200, json!([MODERN_PROTOCOL])));
+        assert_eq!(
+            (status, v["result"]["supportedVersions"].clone()),
+            (200, json!([MODERN_PROTOCOL]))
+        );
     }
 
     #[tokio::test]
     async fn modern_results_carry_their_type_and_the_same_catalog() {
-        let (status, v) = modern("tools/list", on(MODERN_PROTOCOL, json!({})), &proper("tools/list")).await;
+        let (status, v) =
+            modern("tools/list", on(MODERN_PROTOCOL, json!({})), &proper("tools/list")).await;
         assert_eq!(status, 200);
         assert_eq!(v["result"]["resultType"], "complete");
         assert_eq!(v["result"]["tools"], json!(tools(&McpMockConfig::default())));
@@ -855,28 +898,43 @@ mod tests {
         assert_eq!((status, v["error"]["code"].as_i64()), (400, Some(INVALID_PARAMS)));
 
         // A revision this mock does not speak, answered with the ones it does.
-        let (status, v) = modern("tools/list", on("1900-01-01", json!({})), &proper("tools/list")).await;
+        let (status, v) =
+            modern("tools/list", on("1900-01-01", json!({})), &proper("tools/list")).await;
         assert_eq!((status, v["error"]["code"].as_i64()), (400, Some(UNSUPPORTED_VERSION)));
-        assert_eq!(v["error"]["data"], json!({ "supported": [MODERN_PROTOCOL], "requested": "1900-01-01" }));
+        assert_eq!(
+            v["error"]["data"],
+            json!({ "supported": [MODERN_PROTOCOL], "requested": "1900-01-01" })
+        );
 
         // Headers that disagree with the body, or are missing.
-        let (status, v) = modern("tools/list", on(MODERN_PROTOCOL, json!({})), &proper("ping")).await;
+        let (status, v) =
+            modern("tools/list", on(MODERN_PROTOCOL, json!({})), &proper("ping")).await;
         assert_eq!((status, v["error"]["code"].as_i64()), (400, Some(HEADER_MISMATCH)));
-        assert!(v["error"]["message"].as_str().unwrap().contains("Mcp-Method header value 'ping'"));
+        assert!(v["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("Mcp-Method header value 'ping'"));
         let only_version = [("mcp-protocol-version", MODERN_PROTOCOL.to_string())];
         let (status, v) = modern("tools/list", on(MODERN_PROTOCOL, json!({})), &only_version).await;
         assert_eq!((status, v["error"]["code"].as_i64()), (400, Some(HEADER_MISMATCH)));
         assert!(v["error"]["message"].as_str().unwrap().contains("Mcp-Method header is missing"));
 
         // A tool call names its tool in a header as well as in the body.
-        let (status, v) = modern("tools/call", on(MODERN_PROTOCOL, json!({ "name": "echo" })), &proper("tools/call")).await;
+        let (status, v) = modern(
+            "tools/call",
+            on(MODERN_PROTOCOL, json!({ "name": "echo" })),
+            &proper("tools/call"),
+        )
+        .await;
         assert_eq!((status, v["error"]["code"].as_i64()), (400, Some(HEADER_MISMATCH)));
         assert!(v["error"]["message"].as_str().unwrap().contains("Mcp-Name"));
     }
 
     #[tokio::test]
     async fn a_modern_unknown_method_is_a_404_and_a_bad_lookup_is_a_400() {
-        let (status, v) = modern("does/not/exist", on(MODERN_PROTOCOL, json!({})), &proper("does/not/exist")).await;
+        let (status, v) =
+            modern("does/not/exist", on(MODERN_PROTOCOL, json!({})), &proper("does/not/exist"))
+                .await;
         assert_eq!((status, v["error"]["code"].as_i64()), (404, Some(METHOD_NOT_FOUND)));
 
         let mut headers = proper("resources/read");
@@ -895,7 +953,9 @@ mod tests {
         tokio::spawn(async move {
             axum::serve(listener, router(McpMockConfig::default())).await.unwrap();
         });
-        let options = ClientOptions::new(&format!("http://{address}/mcp"), ClientOptions::default_identity()).unwrap();
+        let options =
+            ClientOptions::new(&format!("http://{address}/mcp"), ClientOptions::default_identity())
+                .unwrap();
         let declared = fetch_declared(&options).await.unwrap();
         assert_eq!(declared.era, Era::Modern);
         assert_eq!(declared.protocol_version, MODERN_PROTOCOL);
