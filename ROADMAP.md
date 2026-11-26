@@ -12,15 +12,15 @@ Tracking document for post-launch growth features. These items follow the comple
 ## Month 3: GitHub Action
 
 - [ ] Create `mockforge/setup` GitHub Action repository
-- [ ] Action downloads MockForge CLI binary, starts mock server with user's spec
-- [ ] Support configuration:
+- [x] ~~Action downloads MockForge CLI binary, starts mock server with user's spec~~ — the action is in this repository, `.github/actions/setup`, and starts the mock from the published image: no Linux binary is published to download yet. [Run a mock in GitHub Actions](book/src/user-guide/github-action.md)
+- [x] ~~Support configuration~~
   ```yaml
-  - uses: mockforge/setup@v1
+  - uses: SaaSy-Solutions/mockforge/.github/actions/setup@main
     with:
       spec: ./openapi.json
       port: 3000
   ```
-- [ ] Publish to GitHub Marketplace
+- [ ] Publish to GitHub Marketplace (needs the repository of its own above)
 - [ ] High stickiness — once in CI pipeline, stays forever
 
 ## Month 4: Multi-Protocol Cloud Mocks
@@ -53,7 +53,7 @@ Tracking document for post-launch growth features. These items follow the comple
 - [ ] `mockforge cloud watch --spec api.json` — file watcher, auto-redeploy on spec change
 - [ ] Homebrew formula: `brew install mockforge` (tap at `mockforge/homebrew-tap`)
 - [ ] Scoop manifest for Windows
-- [ ] Shell completions (bash, zsh, fish) for CLI
+- [x] ~~Shell completions (bash, zsh, fish) for CLI~~ — `mockforge completions <shell>`
 
 ## Phase 4 Remaining Items
 
