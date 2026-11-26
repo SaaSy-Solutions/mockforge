@@ -54,6 +54,7 @@ mod plugin_commands;
 mod progress;
 #[cfg(feature = "http")]
 mod proxy_commands;
+mod range_commands;
 #[cfg(feature = "recorder")]
 #[allow(dead_code)]
 mod recorder_commands;
@@ -1242,6 +1243,21 @@ enum Commands {
     ///   mockforge agent-redteam judge --suite tool-poisoning.json --calls calls.jsonl
     #[command(verbatim_doc_comment)]
     AgentRedteam(agent_redteam_commands::AgentRedteamArgs),
+
+    /// A safe target for an offensive agent: an API with flaws planted in it
+    ///
+    /// A range pack is an API, served by the mock, with flaws planted in it.
+    /// Each flaw names the request that proves it, so one counts only when
+    /// that request reached the mock. `list` shows the packs MockForge ships
+    /// and `write` puts a pack's API in a file to serve with `serve --spec`.
+    /// The pack says what to tell the agent, what credential it starts with
+    /// and what is in scope.
+    ///
+    /// Examples:
+    ///   mockforge range list
+    ///   mockforge range write shop
+    #[command(verbatim_doc_comment)]
+    Range(range_commands::RangeArgs),
 
     /// API governance and safety features
     ///
@@ -2998,6 +3014,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         agent_redteam_commands::handle_agent_redteam_command(args)?;
         return Ok(());
     }
+    // A range writes files and prints a document, and needs no service.
+    if let Commands::Range(args) = cli.command {
+        range_commands::handle_range_command(args)?;
+        return Ok(());
+    }
     if let Commands::Cve { args } = cli.command {
         return tools_commands::cve(args).map_err(Into::into);
     }
@@ -3084,6 +3105,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         }
         Commands::AgentRedteam(_) => {
             unreachable!("agent-redteam handled before service initialization")
+        }
+        Commands::Range(_) => {
+            unreachable!("range handled before service initialization")
         }
         Commands::Serve(args) => {
             // Issue #79 round 15 — `--shadow` is a thin alias for the

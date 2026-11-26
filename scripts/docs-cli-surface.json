@@ -3847,6 +3847,53 @@
      "subcommands": {},
      "variadic": false
     },
+    "range": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--log-level": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {
+      "help": {
+       "aliases": {},
+       "flags": {},
+       "free": true,
+       "subcommands": {}
+      },
+      "list": {
+       "aliases": {},
+       "flags": {
+        "--format": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "write": {
+       "aliases": {},
+       "flags": {
+        "--force": 0,
+        "--help": 0,
+        "--log-level": 1,
+        "--output": 1,
+        "--output-dir": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      }
+     },
+     "variadic": false
+    },
     "reality-profile": {
      "aliases": {},
      "flags": {

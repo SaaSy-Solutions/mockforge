@@ -65,6 +65,7 @@ pub mod fidelity;
 pub mod http_route_match;
 pub mod mcp_contract;
 pub mod protocol;
+pub mod range;
 pub mod response_validation;
 pub mod schema_diff;
 

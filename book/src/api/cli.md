@@ -806,6 +806,40 @@ the `rule` it broke, the `seq` of the call, a one-line `summary` and the
 `evidence`.
 
 
+### `range` - A Safe Target for an Agent
+
+Write a shipped range pack's API (`write`), serve it with `serve --spec`, and
+give the agent the brief, the credential and the scope the pack names. A pack
+is an API with flaws planted in it, each with the request that proves it. See
+[Range: a Safe Target for an Agent](../user-guide/range.md) for what a pack
+holds and what the mock cannot model yet.
+
+```bash
+mockforge range list
+mockforge range write shop
+mockforge range write all --output-dir range
+mockforge serve --spec shop.json --http-port 8080
+```
+
+#### Options
+
+`list`:
+
+- `--format text|json`: `json` prints one document and nothing else on stdout.
+
+`write <PACK>`:
+
+- `PACK`: a shipped pack's id, or `all` for every shipped pack.
+- `--output <FILE>`: where to write the API (default: `<id>.json`). The pack
+  is written beside it, as `<id>.pack.json`.
+- `--output-dir <DIR>`: with `all`, where to write every pack (default:
+  `./range`).
+- `--force`: replace files that are already there.
+
+`list --format json` prints an array with one object per pack: `id`, `title`,
+`brief`, `credentials`, `operations` (how many operations the API has),
+`scope` (the paths that are in scope), `flaws`, `injections` and `bait`.
+
 Capture databases are opened read-only and must already exist. An empty HTTP capture is not drift: the command reports that no traffic was recorded and exits successfully, and with `--record` it stores a `no_traffic` verification. Unknown endpoints, missing responses, undeclared statuses and JSON-schema violations count as drift. Exact status declarations take precedence over status ranges and the default response; local response references are resolved before schema validation.
 
 Capture databases are opened read-only and must already exist. Empty HTTP captures fail rather than report a passing check. Unknown endpoints, missing responses, undeclared statuses and JSON-schema violations count as drift. Exact status declarations take precedence over status ranges and the default response; local response references are resolved before schema validation.
