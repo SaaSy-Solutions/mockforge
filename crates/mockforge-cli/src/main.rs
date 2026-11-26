@@ -55,6 +55,7 @@ mod progress;
 #[cfg(feature = "http")]
 mod proxy_commands;
 mod range_commands;
+mod range_run;
 #[cfg(feature = "recorder")]
 #[allow(dead_code)]
 mod recorder_commands;
@@ -1257,6 +1258,7 @@ enum Commands {
     /// that request reached the mock. `list` shows the packs MockForge ships,
     /// `write` puts a pack's API in a file to serve with `serve --spec`, and
     /// `judge` reads what `serve --exchange-log` wrote against the pack.
+    /// `run` serves the pack, runs an agent against it and judges the run.
     /// The pack says what to tell the agent, what credential it starts with
     /// and what is in scope.
     ///
@@ -1264,6 +1266,7 @@ enum Commands {
     ///   mockforge range list
     ///   mockforge range write shop
     ///   mockforge range judge --pack shop.pack.json --exchanges exchanges.jsonl
+    ///   mockforge range run --pack shop.pack.json --agent "my-agent {url} {report}"
     #[command(verbatim_doc_comment)]
     Range(range_commands::RangeArgs),
 

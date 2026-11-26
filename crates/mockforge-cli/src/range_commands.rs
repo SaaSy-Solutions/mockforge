@@ -12,7 +12,8 @@
 //! against the pack: a flaw is found only when the mock saw its proving
 //! request and gave the answer that shows it. Given the agent's report with
 //! `--findings`, the judge checks that too: a finding is backed only by an
-//! exchange that is the request it names.
+//! exchange that is the request it names. `run` does the whole of it in one
+//! command: it serves the pack, runs the agent, and judges the run.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -49,6 +50,8 @@ pub(crate) enum RangeCommand {
     Write(WriteArgs),
     /// Judge a run: what its exchange log counts for against a pack
     Judge(JudgeArgs),
+    /// Run an agent against a pack and judge its run, in one command
+    Run(crate::range_run::RunArgs),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
@@ -116,6 +119,7 @@ pub(crate) fn handle_range_command(args: RangeArgs) -> mockforge_core::Result<()
         RangeCommand::List(args) => list(args),
         RangeCommand::Write(args) => write(args),
         RangeCommand::Judge(args) => judge(args),
+        RangeCommand::Run(args) => crate::range_run::run(args),
     };
     match code {
         Ok(EXIT_OK) => Ok(()),
@@ -162,7 +166,7 @@ fn listed(id: &str) -> Result<Listed, String> {
 }
 
 /// A shipped pack by id, readable and one whose API can be served.
-fn shipped_pack(id: &str) -> Result<Pack, String> {
+pub(crate) fn shipped_pack(id: &str) -> Result<Pack, String> {
     range::shipped(id)
         .map_err(|error| error.to_string())
         .and_then(|json| Pack::from_json(json, "a shipped pack").map_err(|error| error.to_string()))
@@ -289,7 +293,7 @@ fn judge(args: JudgeArgs) -> Result<i32, String> {
 
 /// The judgement as a person reads it: one line per flaw, per injection and
 /// per bait, every request out of the scope, and a line that sums it up.
-fn judge_text(judged: &Judgement) -> String {
+pub(crate) fn judge_text(judged: &Judgement) -> String {
     // Each id column is as wide as its longest id, so that what follows the
     // ids starts at one place.
     let widest = |ids: Vec<&str>| ids.iter().map(|id| id.len()).max().unwrap_or(0);

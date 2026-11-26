@@ -820,6 +820,7 @@ mockforge range write shop
 mockforge range write all --output-dir range
 mockforge serve --spec shop.json --http-port 8080 --exchange-log exchanges.jsonl
 mockforge range judge --pack shop.pack.json --exchanges exchanges.jsonl
+mockforge range run --pack shop.pack.json --agent "my-agent --target {url} --report {report}"
 ```
 
 #### Options
@@ -845,6 +846,19 @@ mockforge range judge --pack shop.pack.json --exchanges exchanges.jsonl
 - `--output <FILE>`: also write that document to a file.
 - `--findings <FILE>`: the agent's report, a JSON array of findings, each
   with the request it says shows it, to check against the log.
+
+`run`:
+
+- `--pack <FILE>`: the pack to run the agent against.
+- `--agent <COMMAND>`: the agent, run through a shell. `{url}` is the mock's
+  address, `{brief}` the file that holds the brief and `{report}` the file to
+  write its findings to; the same three are in the environment as
+  `MOCKFORGE_RANGE_URL`, `MOCKFORGE_RANGE_BRIEF` and `MOCKFORGE_RANGE_REPORT`.
+  The command runs through a shell, where `range run` was run.
+- `--work-dir <DIR>`: where the run's files go (default:
+  `./range-run/<pack>-<time>`).
+- `--timeout <DURATION>`: how long the agent may take, as `30s`, `15m` or
+  `2h` (default: `15m`).
 
 `list --format json` prints an array with one object per pack: `id`, `title`,
 `brief`, `credentials`, `operations` (how many operations the API has),
@@ -880,6 +894,13 @@ read makes it `2`, naming the finding that is mistyped.
 `judge --format json` holds the digest of the pack and the digest of the
 exchange log as it was read, so that a verdict is tied to both, beside the
 verdicts and the coverage.
+
+`range run` does the whole of it in one command: it serves the pack with the
+exchange log on, runs the agent, and judges the run when the agent is done,
+report and all. The run's files are in one directory: the API the mock
+served, `exchanges.jsonl`, `brief.md`, the agent's `report.json` and
+`judgement.json`. An agent still running when its time is up is stopped, and
+the run is judged with what reached the mock. The exit code is the judge's.
 
 Capture databases are opened read-only and must already exist. An empty HTTP capture is not drift: the command reports that no traffic was recorded and exits successfully, and with `--record` it stores a `no_traffic` verification. Unknown endpoints, missing responses, undeclared statuses and JSON-schema violations count as drift. Exact status declarations take precedence over status ranges and the default response; local response references are resolved before schema validation.
 
