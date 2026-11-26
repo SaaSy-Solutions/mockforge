@@ -78,11 +78,25 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           INPUT_SPEC: ${{ github.event.inputs.spec_path }}
         run: |
-          # A real spec has a top-level `openapi:`/`swagger:` key (YAML) or
-          # `"openapi":`/`"swagger":` key (JSON). Grepping for the bare word
-          # also matched package.json, docs and fixtures, which then failed to
-          # parse as specs on every run.
-          is_spec() { grep -qE '^(openapi|swagger):|^[[:space:]]*"(openapi|swagger)"[[:space:]]*:' "$1"; }
+          # A real spec has a top-level `openapi`/`swagger` key. Grepping for
+          # the bare word also matched package.json, docs and fixtures, and
+          # matching an indented `"openapi":` took the CLI snapshot
+          # (scripts/docs-cli-surface.json, which has an `openapi` subcommand)
+          # for a spec: the job then built the whole CLI and failed. In YAML a
+          # top-level key starts at column 0, so a grep is enough. In JSON the
+          # top-level key is indented in a pretty-printed file, like a nested
+          # one, so the file is parsed.
+          is_spec() {
+            case "$1" in
+              *.yaml|*.yml) grep -qE '^(openapi|swagger):' "$1" ;;
+              *) python3 -c 'import json, sys
+          try:
+              document = json.load(open(sys.argv[1], encoding="utf-8"))
+          except (OSError, ValueError):
+              sys.exit(1)
+          sys.exit(0 if isinstance(document, dict) and {"openapi", "swagger"} & document.keys() else 1)' "$1" 2>/dev/null ;;
+            esac
+          }
           if [ "$EVENT_NAME" = "pull_request" ]; then
             git fetch --no-tags --depth=1 origin "$BASE_SHA"
             CANDIDATES=$(git diff --name-only --diff-filter=AM "$BASE_SHA" HEAD -- '*.yaml' '*.yml' '*.json')
