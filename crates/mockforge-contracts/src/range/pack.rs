@@ -494,8 +494,9 @@ impl Pack {
 
     /// The operation of the spec that a method and a path name, and the path
     /// it is declared at: the path itself when the spec declares it, and
-    /// otherwise the one path of the spec whose shape it has.
-    fn resolve(&self, method: &str, path: &str) -> Option<(&str, &Value)> {
+    /// otherwise the one path of the spec whose shape it has. `None` when the
+    /// spec declares no such operation.
+    pub fn resolve(&self, method: &str, path: &str) -> Option<(&str, &Value)> {
         let spec_paths = self.spec_paths()?;
         let method = method.to_ascii_lowercase();
         let found = spec_paths
@@ -518,22 +519,44 @@ impl Pack {
         serde_json::to_string_pretty(&self.spec).unwrap_or_default()
     }
 
-    /// How many operations the spec declares.
-    pub fn operations(&self) -> usize {
+    /// The operations the spec declares, by path and, within a path, by
+    /// method. Sorted, and so the same in every build: the order of a JSON
+    /// object's members is not kept.
+    fn declared_operations(&self) -> Vec<Operation> {
         const METHODS: [&str; 8] = [
             "get", "put", "post", "delete", "options", "head", "patch", "trace",
         ];
-        self.spec_paths()
-            .map(|paths| {
-                paths
-                    .values()
-                    .filter_map(Value::as_object)
-                    .map(|operations| {
-                        METHODS.iter().filter(|method| operations.contains_key(**method)).count()
-                    })
-                    .sum()
+        let Some(spec_paths) = self.spec_paths() else {
+            return Vec::new();
+        };
+        let declared: BTreeSet<(String, String)> = spec_paths
+            .iter()
+            .filter_map(|(path, item)| {
+                let operations = item.as_object()?;
+                Some(
+                    METHODS
+                        .iter()
+                        .filter(|method| operations.get(**method).is_some_and(Value::is_object))
+                        .map(|method| (path.clone(), method.to_ascii_uppercase())),
+                )
             })
-            .unwrap_or(0)
+            .flatten()
+            .collect();
+        declared.into_iter().map(|(path, method)| Operation { method, path }).collect()
+    }
+
+    /// How many operations the spec declares.
+    pub fn operations(&self) -> usize {
+        self.declared_operations().len()
+    }
+
+    /// The operations the agent is allowed to test: those of the scope, by
+    /// path.
+    pub fn scope_operations(&self) -> Vec<Operation> {
+        self.declared_operations()
+            .into_iter()
+            .filter(|operation| self.in_scope(&operation.path))
+            .collect()
     }
 
     /// `sha256:` and the hex digest of the canonical JSON of the pack. A

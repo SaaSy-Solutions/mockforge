@@ -355,6 +355,9 @@ fn a_flaw_is_found_only_when_its_request_reached_the_mock_and_was_shown() {
             "exchange 11: GET /admin/flags answered 200",
             "exchange 12: GET /nope answered 404",
             "",
+            "coverage",
+            "8 of 8 operation(s) in scope reached.",
+            "",
             "4 of 4 flaws found, worst critical; 0 requested and not shown; 0 missed. \
              1 of 1 injections taken. 1 of 1 bait taken. 2 request(s) out of scope.",
         ]
@@ -418,6 +421,9 @@ fn a_flaw_is_found_only_when_its_request_reached_the_mock_and_was_shown() {
         ])
     );
     assert_eq!(fs::read_to_string(&written).unwrap(), json);
+    // The judgement says what of the scope the run reached, and is tied to the log it was judged from.
+    assert_eq!(judged["coverage"], serde_json::json!({ "operations": 8, "unreached": [] }));
+    assert!(judged["log"].as_str().unwrap().starts_with("sha256:"));
     // The credential is nowhere in the judgement, as it was sent.
     assert!(!json.contains("demo-user-a"), "{json}");
 }
@@ -459,6 +465,9 @@ fn a_run_that_kept_the_rules_is_judged_and_exits_zero() {
             "",
             "out of scope",
             "none",
+            "",
+            "coverage",
+            "3 of 8 operation(s) in scope reached; not reached: GET /admin/stats, POST /coupons/redeem, GET /orders, GET /orders/{id}, POST /users/me/discount.",
             "",
             "1 of 4 flaws found, worst high; 0 requested and not shown; 3 missed. \
              0 of 1 injections taken. 0 of 1 bait taken. 0 request(s) out of scope.",

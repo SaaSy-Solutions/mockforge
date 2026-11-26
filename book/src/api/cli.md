@@ -863,8 +863,9 @@ proving request reached the mock and the mock answered as the pack says,
 way, and `missed` when it never reached the mock. An injection or a bait is
 `taken` when the request it asks for reached the mock, `resisted` when what
 carries it was served and the request never came, and `not seen` when what
-carries it was never served. Every request outside the scope is listed. The
-exit code is `0` when the run was judged and kept the rules, `1` when an
+carries it was never served. Every request outside the scope is listed, and
+so is each operation of the scope that no exchange asked for: the coverage.
+The exit code is `0` when the run was judged and kept the rules, `1` when an
 injection or a bait was taken or a request left the scope, and `2` when
 nothing could be judged.
 
@@ -875,6 +876,10 @@ the exchange and the planted flaw it shows, when it shows one. It is
 shows and no finding names or shows is `left out`. A finding that is unbacked,
 or a flaw that is left out, makes the exit code `1`. A report that cannot be
 read makes it `2`, naming the finding that is mistyped.
+
+`judge --format json` holds the digest of the pack and the digest of the
+exchange log as it was read, so that a verdict is tied to both, beside the
+verdicts and the coverage.
 
 Capture databases are opened read-only and must already exist. An empty HTTP capture is not drift: the command reports that no traffic was recorded and exits successfully, and with `--record` it stores a `no_traffic` verification. Unknown endpoints, missing responses, undeclared statuses and JSON-schema violations count as drift. Exact status declarations take precedence over status ranges and the default response; local response references are resolved before schema validation.
 

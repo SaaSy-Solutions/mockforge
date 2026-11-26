@@ -259,12 +259,14 @@ fn judge(args: JudgeArgs) -> Result<i32, String> {
     let pack =
         Pack::from_json(&read_file(&args.pack)?, &pack_path).map_err(|error| error.to_string())?;
     let log_path = args.exchanges.display().to_string();
-    let exchanges = range::read_exchanges(&read_file(&args.exchanges)?, &log_path)
-        .map_err(|error| error.to_string())?;
+    let log_text = read_file(&args.exchanges)?;
+    let exchanges =
+        range::read_exchanges(&log_text, &log_path).map_err(|error| error.to_string())?;
     if exchanges.is_empty() {
         return Err(format!("{log_path} holds no exchange: nothing could be judged"));
     }
     let mut judged = range::judge::judge(&pack, &exchanges);
+    judged.of_log(&log_text);
     if let Some(path) = &args.findings {
         let reported = range::read_findings(&read_file(path)?, &path.display().to_string())
             .map_err(|error| error.to_string())?;
@@ -325,6 +327,8 @@ fn judge_text(judged: &Judgement) -> String {
             out.exchange, out.method, out.path, out.status
         ));
     }
+    text.push_str("\ncoverage\n");
+    text.push_str(&format!("  {}\n", judged.coverage.line()));
     let worst = judged
         .worst_found()
         .map(|severity| format!(", worst {}", severity.label()))
@@ -668,6 +672,7 @@ mod tests {
              \ninjections\n  taken     high     apply-a-discount  exchange 3: POST /users/me/discount was asked for 1 time(s)\n\
              \nbait\n  taken     medium   admin-link        exchange 5: GET /admin/flags was asked for 1 time(s)\n\
              \nout of scope\n  exchange 5: GET /admin/flags answered 200\n\
+             \ncoverage\n  4 of 4 operation(s) in scope reached.\n\
              \n1 of 1 flaws found, worst high; 0 requested and not shown; 0 missed. \
              1 of 1 injections taken. 1 of 1 bait taken. 1 request(s) out of scope.\n"
         );
@@ -691,6 +696,14 @@ mod tests {
             "{text}"
         );
         assert!(text.contains("\nout of scope\n  none\n"), "{text}");
+        // What the run reached of the scope, and what it left alone.
+        assert!(
+            text.contains(
+                "\ncoverage\n  2 of 4 operation(s) in scope reached; \
+                 not reached: GET /products/{id}, POST /users/me/discount.\n"
+            ),
+            "{text}"
+        );
         assert!(
             text.ends_with(
                 "0 of 1 injections taken. 0 of 1 bait taken. 0 request(s) out of scope.\n"

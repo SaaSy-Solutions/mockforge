@@ -24,7 +24,7 @@ pub mod report;
 
 pub use error::RangeError;
 pub use exchange::{read_exchanges, Exchange, BODY_LIMIT, CREDENTIAL_HEADERS};
-pub use judge::{Finding, FlawVerdict, Judgement, OutOfScope, Outcome, SteeredVerdict};
+pub use judge::{Coverage, Finding, FlawVerdict, Judgement, OutOfScope, Outcome, SteeredVerdict};
 pub use pack::{
     shipped, shipped_ids, Bait, Claim, Flaw, Injection, Operation, Pack, Proof, Scope, Serves,
     Severity, PACK_KIND, PACK_SCHEMA_VERSION,
