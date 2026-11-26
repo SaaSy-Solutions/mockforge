@@ -231,7 +231,7 @@ impl OpenApiRouteRegistry {
                 .ok()
                 .and_then(|s| s.parse::<u16>().ok()),
         };
-        Self {
+        let mut registry = Self {
             spec,
             routes,
             options,
@@ -239,7 +239,9 @@ impl OpenApiRouteRegistry {
             custom_fixture_loader: None,
             overrides: None,
             isolated: false,
-        }
+        };
+        registry.options_reach_routes();
+        registry
     }
 
     /// Construct a registry for offline contract checks and CI gates.
@@ -271,7 +273,7 @@ impl OpenApiRouteRegistry {
         tracing::debug!("Creating OpenAPI route registry with custom options");
         let spec = Arc::new(spec);
         let routes = Self::generate_routes_with_persona(&spec, persona);
-        Self {
+        let mut registry = Self {
             spec,
             routes,
             options,
@@ -279,6 +281,17 @@ impl OpenApiRouteRegistry {
             custom_fixture_loader: None,
             overrides: None,
             isolated: false,
+        };
+        registry.options_reach_routes();
+        registry
+    }
+
+    /// A route generates its own response, so each is told what the options
+    /// say of the random and time tokens of an example.
+    fn options_reach_routes(&mut self) {
+        let on = self.options.response_template_expand;
+        for route in &mut self.routes {
+            route.response_template_expand = on;
         }
     }
 
@@ -448,6 +461,7 @@ impl OpenApiRouteRegistry {
     pub fn build_hosted_router(mut self) -> Router {
         self.isolated = true;
         self.options = ValidationOptions::default();
+        self.options_reach_routes();
         self.custom_fixture_loader = None;
         self.overrides = None;
         let ctx = RouterContext {
@@ -3354,6 +3368,8 @@ pub fn create_registry_from_json(json: Value) -> Result<OpenApiRouteRegistry> {
 mod parameter_lookup_tests;
 #[cfg(test)]
 mod parameter_schema_tests;
+#[cfg(test)]
+mod template_flag_tests;
 
 #[cfg(test)]
 mod tests {

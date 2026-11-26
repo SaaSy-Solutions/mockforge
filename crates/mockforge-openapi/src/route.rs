@@ -63,6 +63,19 @@ pub struct OpenApiRoute {
     pub response_selector: Arc<ResponseSelector>,
     /// Active persona for consistent data generation (optional)
     pub persona: Option<Arc<Persona>>,
+    /// Whether the configuration turns the random and time tokens of an
+    /// example on (`{{uuid}}`, `{{now}}`). The environment variable
+    /// `MOCKFORGE_RESPONSE_TEMPLATE_EXPAND` decides when it is set.
+    pub response_template_expand: bool,
+}
+
+/// Whether the tokens of an example are expanded: the variable's value when
+/// it is set, for (`1`, `true`) or against (anything else); else what the
+/// configuration says.
+fn tokens_on(variable: Option<&str>, configured: bool) -> bool {
+    variable
+        .map(|value| value == "1" || value.eq_ignore_ascii_case("true"))
+        .unwrap_or(configured)
 }
 
 impl OpenApiRoute {
@@ -99,7 +112,18 @@ impl OpenApiRoute {
             response_selection_mode,
             response_selector,
             persona,
+            response_template_expand: false,
         }
+    }
+
+    /// Whether the random and time tokens of an example are expanded in what
+    /// this route answers: the variable decides when it is set, else the
+    /// configuration the route was built with.
+    fn expands_tokens(&self) -> bool {
+        tokens_on(
+            std::env::var("MOCKFORGE_RESPONSE_TEMPLATE_EXPAND").ok().as_deref(),
+            self.response_template_expand,
+        )
     }
 
     /// Parse AI configuration from OpenAPI operation's vendor extensions
@@ -364,9 +388,7 @@ impl OpenApiRoute {
         }
 
         // Standard OpenAPI-based response generation
-        let expand_tokens = std::env::var("MOCKFORGE_RESPONSE_TEMPLATE_EXPAND")
-            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-            .unwrap_or(false);
+        let expand_tokens = self.expands_tokens();
 
         // Use response selection mode for multiple examples
         let mode = Some(self.response_selection_mode);
@@ -543,9 +565,7 @@ impl OpenApiRoute {
             .unwrap_or_else(|| self.find_first_available_status_code());
 
         // Check if token expansion should be enabled
-        let expand_tokens = std::env::var("MOCKFORGE_RESPONSE_TEMPLATE_EXPAND")
-            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-            .unwrap_or(false);
+        let expand_tokens = self.expands_tokens();
 
         // Use response selection mode for multiple examples
         let mode = Some(self.response_selection_mode);
@@ -975,5 +995,22 @@ mod status_code_selection_tests {
             }
         }));
         assert!(r.mock_response_headers_for_status(404).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod tokens_tests {
+    use super::tokens_on;
+
+    #[test]
+    fn the_variable_decides_when_it_is_set_and_else_the_configuration() {
+        assert!(tokens_on(None, true));
+        assert!(!tokens_on(None, false));
+        for value in ["1", "true", "TRUE", "True"] {
+            assert!(tokens_on(Some(value), false), "{value} turns them on");
+        }
+        for value in ["false", "0", "", "yes"] {
+            assert!(!tokens_on(Some(value), true), "{value} turns them off");
+        }
     }
 }

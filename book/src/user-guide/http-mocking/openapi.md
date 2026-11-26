@@ -325,8 +325,9 @@ MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true mockforge serve --spec api-spec.json
 ```
 
 It is off by default. `http.response_template_expand: true` in the
-configuration file turns it on as well, and an answer that depends on the
-request's query, beyond echoing it, is for an
+configuration file turns it on as well (`mockforge wizard` writes it on), and
+the environment variable decides when it is set, for or against. An answer
+that depends on the request's query, beyond echoing it, is for an
 [override rule](custom-responses.md), not for a template.
 
 ## Performance Optimization
