@@ -26,6 +26,10 @@
 //! are checked against the body as the revision requires. A request without
 //! that metadata gets the `initialize` handshake that earlier revisions use.
 //!
+//! The default catalog is built in. `serve --mcp-mock-catalog FILE` serves a
+//! catalog from a file instead, or replays a pinned contract as the server
+//! that was pinned ([`catalog`](self::catalog)).
+//!
 //! Mounted by `mockforge serve --mcp-mock`.
 
 use axum::{
@@ -36,7 +40,13 @@ use axum::{
     routing::post,
     Json, Router,
 };
-use serde_json::{json, Value};
+use serde::Deserialize;
+use serde_json::{json, Map, Value};
+
+mod call_log;
+mod catalog;
+pub use call_log::McpCallLog;
+pub use catalog::{McpCatalogError, CATALOG_KIND, CATALOG_SCHEMA_VERSION};
 
 /// The protocol revision this mock serves when a request carries the
 /// per-request metadata of revision 2026-07-28.
@@ -52,26 +62,136 @@ const LEGACY_PROTOCOL: &str = "2024-11-05";
 const VERSION_KEY: &str = "io.modelcontextprotocol/protocolVersion";
 const CAPABILITIES_KEY: &str = "io.modelcontextprotocol/clientCapabilities";
 const SERVER_INFO_KEY: &str = "io.modelcontextprotocol/serverInfo";
+/// The `_meta` key that carries the client's identity on revision 2026-07-28.
+const CLIENT_INFO_KEY: &str = "io.modelcontextprotocol/clientInfo";
+
+/// What `tools/call` answers for a mock tool.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum McpToolResult {
+    /// A fixed text, flagged as an error result or not.
+    Text {
+        /// The text of the result's single content item.
+        text: String,
+        /// Whether the result is flagged `isError`, as a failing tool's is.
+        is_error: bool,
+    },
+    /// The value of the named string argument, sent back as the text.
+    Reflect(String),
+    /// `text` when the call gives `argument`, and `missing` flagged as an
+    /// error when it does not.
+    Requires {
+        /// The argument the tool needs.
+        argument: String,
+        /// The value the argument must have, when the catalog names one. When
+        /// it names none, any value that is given counts.
+        equals: Option<Value>,
+        /// The answer when the call gives it.
+        text: String,
+        /// The answer, as an error, when the call leaves the argument out,
+        /// sends it blank, or sends a value other than the one it must have.
+        missing: String,
+    },
+}
+
+impl McpToolResult {
+    /// A fixed text that is not an error.
+    pub fn text(text: impl Into<String>) -> Self {
+        Self::Text {
+            text: text.into(),
+            is_error: false,
+        }
+    }
+
+    /// A fixed text flagged as an error, as a failing tool answers.
+    pub fn error(text: impl Into<String>) -> Self {
+        Self::Text {
+            text: text.into(),
+            is_error: true,
+        }
+    }
+
+    /// `text` when the call gives `argument`, and `missing` as an error when
+    /// it does not.
+    pub fn requires(
+        argument: impl Into<String>,
+        text: impl Into<String>,
+        missing: impl Into<String>,
+    ) -> Self {
+        Self::Requires {
+            argument: argument.into(),
+            equals: None,
+            text: text.into(),
+            missing: missing.into(),
+        }
+    }
+
+    /// `text` when the call gives `argument` with exactly `value`, and
+    /// `missing` as an error for any other value, and for none.
+    pub fn requires_equal(
+        argument: impl Into<String>,
+        value: Value,
+        text: impl Into<String>,
+        missing: impl Into<String>,
+    ) -> Self {
+        Self::Requires {
+            argument: argument.into(),
+            equals: Some(value),
+            text: text.into(),
+            missing: missing.into(),
+        }
+    }
+}
+
+/// Whether a call gives the named argument as the tool needs it: it is there,
+/// it is neither null nor blank text, and, when the catalog names the value it
+/// must have, it is that value.
+fn is_given(arguments: Option<&Value>, argument: &str, equals: Option<&Value>) -> bool {
+    arguments
+        .and_then(|arguments| arguments.get(argument))
+        .is_some_and(|value| match equals {
+            Some(expected) => value == expected,
+            None => match value {
+                Value::String(text) => !text.trim().is_empty(),
+                Value::Null => false,
+                _ => true,
+            },
+        })
+}
 
 /// A single mock tool in the catalog.
 #[derive(Clone, Debug)]
 pub struct McpTool {
-    /// Tool name as advertised in `tools/list` and matched by `tools/call`.
-    pub name: String,
-    /// Human-readable description shown to the agent.
-    pub description: String,
-    /// JSON Schema for the tool's input (returned verbatim in `tools/list`).
-    pub input_schema: Value,
-    /// Canned text returned by `tools/call`. When `is_error` is true the call
-    /// result is flagged `isError: true` so agents can be tested against a
-    /// failing tool.
-    pub canned_result: String,
-    /// Whether `tools/call` should flag the result as an error (`isError`).
-    pub is_error: bool,
+    /// The tool as `tools/list` advertises it: an object with a `name`, a
+    /// `description` and an `inputSchema`, and whatever else is declared with
+    /// them, such as `title`, `outputSchema`, `annotations` or `icons`. It is
+    /// returned as it is.
+    pub declaration: Value,
+    /// What `tools/call` answers.
+    pub result: McpToolResult,
+}
+
+impl McpTool {
+    /// A tool with a name, a description, an input schema and a fixed answer.
+    pub fn new(name: &str, description: &str, input_schema: Value, result: McpToolResult) -> Self {
+        Self {
+            declaration: json!({
+                "name": name,
+                "description": description,
+                "inputSchema": input_schema,
+            }),
+            result,
+        }
+    }
+
+    /// The name `tools/call` matches a request by.
+    pub fn name(&self) -> &str {
+        self.declaration["name"].as_str().unwrap_or_default()
+    }
 }
 
 /// A single mock resource in the catalog.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct McpResource {
     /// Resource URI advertised in `resources/list` and matched by
     /// `resources/read`.
@@ -87,7 +207,8 @@ pub struct McpResource {
 }
 
 /// A single argument declared by a mock prompt.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct McpPromptArg {
     /// Argument name.
     pub name: String,
@@ -98,13 +219,16 @@ pub struct McpPromptArg {
 }
 
 /// A single mock prompt in the catalog.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct McpPrompt {
     /// Prompt name advertised in `prompts/list` and matched by `prompts/get`.
     pub name: String,
     /// Human-readable description.
     pub description: String,
-    /// Declared arguments (surfaced in `prompts/list`).
+    /// Declared arguments (surfaced in `prompts/list`). A prompt that takes
+    /// none has an empty list.
+    #[serde(default)]
     pub arguments: Vec<McpPromptArg>,
     /// Canned user-message text returned by `prompts/get`.
     pub text: String,
@@ -113,10 +237,14 @@ pub struct McpPrompt {
 /// Runtime configuration for the mock MCP server.
 #[derive(Clone, Debug)]
 pub struct McpMockConfig {
-    /// Server name returned in `initialize` -> `serverInfo.name`.
-    pub server_name: String,
-    /// Server version returned in `initialize` -> `serverInfo.version`.
-    pub server_version: String,
+    /// What the server says it is: the `serverInfo` of every answer, an object
+    /// with at least a `name` and a `version`.
+    pub server_info: Value,
+    /// The server-wide guidance for the model, when the server gives any.
+    pub instructions: Option<String>,
+    /// The capabilities the server claims, as `initialize` and
+    /// `server/discover` return them.
+    pub capabilities: Value,
     /// Tool catalog returned by `tools/list` and dispatched by `tools/call`.
     pub tools: Vec<McpTool>,
     /// Resource catalog returned by `resources/list` and read by
@@ -124,18 +252,36 @@ pub struct McpMockConfig {
     pub resources: Vec<McpResource>,
     /// Prompt catalog returned by `prompts/list` and fetched by `prompts/get`.
     pub prompts: Vec<McpPrompt>,
+    /// Where every request the mock receives is written down, when anything
+    /// is written down (`serve --mcp-mock-record`).
+    pub record: Option<McpCallLog>,
 }
 
 impl Default for McpMockConfig {
     fn default() -> Self {
         Self {
-            server_name: "mockforge-mcp".to_string(),
-            server_version: env!("CARGO_PKG_VERSION").to_string(),
+            server_info: json!({
+                "name": "mockforge-mcp",
+                "version": env!("CARGO_PKG_VERSION"),
+            }),
+            instructions: None,
+            capabilities: default_capabilities(),
             tools: default_tools(),
             resources: default_resources(),
             prompts: default_prompts(),
+            record: None,
         }
     }
+}
+
+/// The capabilities of the default catalog: tools, resources and prompts,
+/// none of them changing while the server runs.
+fn default_capabilities() -> Value {
+    json!({
+        "tools": { "listChanged": false },
+        "resources": { "listChanged": false },
+        "prompts": { "listChanged": false },
+    })
 }
 
 /// Default tool catalog. Deliberately broad (round 52 #79) so `tools/list`
@@ -147,80 +293,76 @@ fn default_tools() -> Vec<McpTool> {
         })
     };
     vec![
-        McpTool {
-            name: "echo".to_string(),
-            description: "Echo back the provided text.".to_string(),
-            input_schema: obj(json!({ "text": { "type": "string" } }), json!(["text"])),
-            canned_result: "echo".to_string(),
-            is_error: false,
-        },
-        McpTool {
-            name: "get_status".to_string(),
-            description: "Return a canned service status payload.".to_string(),
-            input_schema: json!({ "type": "object", "properties": {} }),
-            canned_result: "{\"status\":\"ok\",\"source\":\"mockforge-mcp\"}".to_string(),
-            is_error: false,
-        },
-        McpTool {
-            name: "get_time".to_string(),
-            description: "Return a canned current timestamp (UTC, ISO-8601).".to_string(),
-            input_schema: json!({ "type": "object", "properties": {} }),
-            canned_result: "{\"now\":\"2026-01-01T00:00:00Z\",\"tz\":\"UTC\"}".to_string(),
-            is_error: false,
-        },
-        McpTool {
-            name: "add".to_string(),
-            description: "Add two numbers and return their sum.".to_string(),
-            input_schema: obj(
+        McpTool::new(
+            "echo",
+            "Echo back the provided text.",
+            obj(json!({ "text": { "type": "string" } }), json!(["text"])),
+            McpToolResult::Reflect("text".to_string()),
+        ),
+        McpTool::new(
+            "get_status",
+            "Return a canned service status payload.",
+            json!({ "type": "object", "properties": {} }),
+            McpToolResult::text("{\"status\":\"ok\",\"source\":\"mockforge-mcp\"}"),
+        ),
+        McpTool::new(
+            "get_time",
+            "Return a canned current timestamp (UTC, ISO-8601).",
+            json!({ "type": "object", "properties": {} }),
+            McpToolResult::text("{\"now\":\"2026-01-01T00:00:00Z\",\"tz\":\"UTC\"}"),
+        ),
+        McpTool::new(
+            "add",
+            "Add two numbers and return their sum.",
+            obj(
                 json!({ "a": { "type": "number" }, "b": { "type": "number" } }),
                 json!(["a", "b"]),
             ),
-            canned_result: "{\"sum\":42}".to_string(),
-            is_error: false,
-        },
-        McpTool {
-            name: "search_documents".to_string(),
-            description: "Search a canned document index and return matching hits.".to_string(),
-            input_schema: obj(
+            McpToolResult::text("{\"sum\":42}"),
+        ),
+        McpTool::new(
+            "search_documents",
+            "Search a canned document index and return matching hits.",
+            obj(
                 json!({
                     "query": { "type": "string" },
                     "limit": { "type": "integer", "minimum": 1, "maximum": 50 },
                 }),
                 json!(["query"]),
             ),
-            canned_result: "{\"hits\":[{\"id\":\"doc-1\",\"title\":\"Getting Started\",\"score\":0.98},{\"id\":\"doc-2\",\"title\":\"API Reference\",\"score\":0.71}]}".to_string(),
-            is_error: false,
-        },
-        McpTool {
-            name: "get_weather".to_string(),
-            description: "Return a canned weather report for a location.".to_string(),
-            input_schema: obj(
+            McpToolResult::text(
+                "{\"hits\":[{\"id\":\"doc-1\",\"title\":\"Getting Started\",\"score\":0.98},{\"id\":\"doc-2\",\"title\":\"API Reference\",\"score\":0.71}]}",
+            ),
+        ),
+        McpTool::new(
+            "get_weather",
+            "Return a canned weather report for a location.",
+            obj(
                 json!({ "location": { "type": "string" } }),
                 json!(["location"]),
             ),
-            canned_result: "{\"location\":\"Sample City\",\"tempC\":21,\"conditions\":\"Partly cloudy\"}".to_string(),
-            is_error: false,
-        },
-        McpTool {
-            name: "create_ticket".to_string(),
-            description: "Create a canned support ticket and return its id.".to_string(),
-            input_schema: obj(
+            McpToolResult::text(
+                "{\"location\":\"Sample City\",\"tempC\":21,\"conditions\":\"Partly cloudy\"}",
+            ),
+        ),
+        McpTool::new(
+            "create_ticket",
+            "Create a canned support ticket and return its id.",
+            obj(
                 json!({
                     "title": { "type": "string" },
                     "priority": { "type": "string", "enum": ["low", "medium", "high"] },
                 }),
                 json!(["title"]),
             ),
-            canned_result: "{\"ticketId\":\"TKT-1001\",\"state\":\"open\"}".to_string(),
-            is_error: false,
-        },
-        McpTool {
-            name: "fail_tool".to_string(),
-            description: "Always returns an error result (for testing hostile tools).".to_string(),
-            input_schema: json!({ "type": "object", "properties": {} }),
-            canned_result: "simulated tool failure".to_string(),
-            is_error: true,
-        },
+            McpToolResult::text("{\"ticketId\":\"TKT-1001\",\"state\":\"open\"}"),
+        ),
+        McpTool::new(
+            "fail_tool",
+            "Always returns an error result (for testing hostile tools).",
+            json!({ "type": "object", "properties": {} }),
+            McpToolResult::error("simulated tool failure"),
+        ),
     ]
 }
 
@@ -337,6 +479,43 @@ async fn handle_rpc(
         // Notification: acknowledge with 202 and no body.
         return StatusCode::ACCEPTED.into_response();
     };
+    let response = respond(&config, &headers, id.clone(), &req);
+    // Written down before it is sent, whatever the answer is: what an agent
+    // sent is the evidence, including what was refused. The answer is written
+    // down with a tool call, so that a finding can say whether the tool did
+    // what was asked, refused it, or was never reached.
+    let Some(log) = &config.record else {
+        return response;
+    };
+    let (parts, body) = response.into_parts();
+    let Ok(bytes) = axum::body::to_bytes(body, RECORDED_ANSWER_LIMIT).await else {
+        if let Err(error) = log.record(&req, None).await {
+            tracing::warn!(%error, "the mock MCP call log could not be written");
+        }
+        return Json(error_response(
+            id,
+            INTERNAL_ERROR,
+            "the mock could not hold its own answer to write it down",
+        ))
+        .into_response();
+    };
+    let answered = serde_json::from_slice::<Value>(&bytes).ok();
+    if let Err(error) = log.record(&req, answered.as_ref()).await {
+        tracing::warn!(%error, "the mock MCP call log could not be written");
+    }
+    Response::from_parts(parts, axum::body::Body::from(bytes))
+}
+
+/// Revision 2026-07-28 and the handshake alike: the mock could not hold its
+/// own answer back to write the call log.
+const INTERNAL_ERROR: i64 = -32603;
+
+/// The largest answer the mock holds back to write it into the call log.
+/// Answers are JSON built here, a few kilobytes at most.
+const RECORDED_ANSWER_LIMIT: usize = 1 << 20;
+
+/// Answer a request that expects one, on the revision it speaks.
+fn respond(config: &McpMockConfig, headers: &HeaderMap, id: Value, req: &Value) -> Response {
     let method = req.get("method").and_then(|m| m.as_str()).unwrap_or("");
     let params = req.get("params").cloned().unwrap_or(Value::Null);
 
@@ -356,9 +535,9 @@ async fn handle_rpc(
         .is_some_and(Value::is_string);
     let names_method_in_header = headers.contains_key("mcp-method");
     if carries_version || names_method_in_header || method == "server/discover" {
-        return modern(&config, &headers, id, method, &params);
+        return modern(config, headers, id, method, &params);
     }
-    legacy(&config, id, method, &params)
+    legacy(config, id, method, &params)
 }
 
 /// Answer a request on the `initialize` handshake that earlier revisions use.
@@ -375,11 +554,13 @@ fn legacy(config: &McpMockConfig, id: Value, method: &str, params: &Value) -> Re
     }
 
     let result = match method {
-        "initialize" => Some(json!({
-            "protocolVersion": LEGACY_PROTOCOL,
-            "capabilities": capabilities(),
-            "serverInfo": { "name": config.server_name, "version": config.server_version },
-        })),
+        "initialize" => Some(Value::Object(describe(
+            config,
+            Map::from_iter([
+                ("protocolVersion".to_string(), json!(LEGACY_PROTOCOL)),
+                ("serverInfo".to_string(), config.server_info.clone()),
+            ]),
+        ))),
         "tools/list" => Some(json!({ "tools": tools(config) })),
         "tools/call" => Some(tools_call(config, params)),
         "resources/list" => Some(json!({ "resources": resources(config) })),
@@ -439,20 +620,20 @@ fn modern(
     }
 
     let result = match method {
-        "server/discover" => json!({
-            "resultType": "complete",
-            "supportedVersions": [MODERN_PROTOCOL],
-            "capabilities": capabilities(),
-            // The catalog can be reconfigured, so nothing here may be cached.
-            "ttlMs": 0,
-            "cacheScope": "private",
-            "_meta": {
-                SERVER_INFO_KEY: {
-                    "name": config.server_name,
-                    "version": config.server_version,
-                }
-            },
-        }),
+        "server/discover" => {
+            let mut discovered = describe(
+                config,
+                Map::from_iter([
+                    ("resultType".to_string(), json!("complete")),
+                    ("supportedVersions".to_string(), json!([MODERN_PROTOCOL])),
+                    // The catalog can be reconfigured, so nothing here may be cached.
+                    ("ttlMs".to_string(), json!(0)),
+                    ("cacheScope".to_string(), json!("private")),
+                ]),
+            );
+            discovered.insert("_meta".to_string(), json!({ SERVER_INFO_KEY: config.server_info }));
+            Value::Object(discovered)
+        }
         "tools/list" => complete(json!({ "tools": tools(config) })),
         "tools/call" => complete(tools_call(config, params)),
         "resources/list" => complete(json!({ "resources": resources(config) })),
@@ -544,26 +725,18 @@ fn complete(mut result: Value) -> Value {
     result
 }
 
-fn capabilities() -> Value {
-    json!({
-        "tools": { "listChanged": false },
-        "resources": { "listChanged": false },
-        "prompts": { "listChanged": false },
-    })
+/// The part of an answer that describes the server: its capabilities and,
+/// when it gives any, its instructions, added to `result`.
+fn describe(config: &McpMockConfig, mut result: Map<String, Value>) -> Map<String, Value> {
+    result.insert("capabilities".to_string(), config.capabilities.clone());
+    if let Some(instructions) = &config.instructions {
+        result.insert("instructions".to_string(), json!(instructions));
+    }
+    result
 }
 
 fn tools(config: &McpMockConfig) -> Vec<Value> {
-    config
-        .tools
-        .iter()
-        .map(|tool| {
-            json!({
-                "name": tool.name,
-                "description": tool.description,
-                "inputSchema": tool.input_schema,
-            })
-        })
-        .collect()
+    config.tools.iter().map(|tool| tool.declaration.clone()).collect()
 }
 
 fn resources(config: &McpMockConfig) -> Vec<Value> {
@@ -601,26 +774,45 @@ fn prompts(config: &McpMockConfig) -> Vec<Value> {
 
 fn tools_call(config: &McpMockConfig, params: &Value) -> Value {
     let name = params.get("name").and_then(|n| n.as_str()).unwrap_or("");
-    let args = params.get("arguments").cloned().unwrap_or(Value::Null);
+    let args = params.get("arguments");
 
-    let Some(tool) = config.tools.iter().find(|t| t.name == name) else {
+    let Some(tool) = config.tools.iter().find(|tool| tool.name() == name) else {
         return json!({
             "content": [{ "type": "text", "text": format!("unknown tool: {name}") }],
             "isError": true,
         });
     };
 
-    // The `echo` tool reflects its `text` argument so agents can verify the
-    // round-trip; everything else returns its canned result verbatim.
-    let text = if tool.name == "echo" {
-        args.get("text").and_then(|t| t.as_str()).unwrap_or("").to_string()
-    } else {
-        tool.canned_result.clone()
+    // A tool that reflects an argument answers with that argument's value.
+    // One that requires an argument answers one way when the call gives it
+    // and another when it does not; every other tool answers with its fixed
+    // text.
+    let (text, is_error) = match &tool.result {
+        McpToolResult::Text { text, is_error } => (text.clone(), *is_error),
+        McpToolResult::Reflect(argument) => (
+            args.and_then(|args| args.get(argument))
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string(),
+            false,
+        ),
+        McpToolResult::Requires {
+            argument,
+            equals,
+            text,
+            missing,
+        } => {
+            if is_given(args, argument, equals.as_ref()) {
+                (text.clone(), false)
+            } else {
+                (missing.clone(), true)
+            }
+        }
     };
 
     json!({
         "content": [{ "type": "text", "text": text }],
-        "isError": tool.is_error,
+        "isError": is_error,
     })
 }
 
@@ -693,8 +885,12 @@ mod tests {
 
     /// A request without the per-request metadata, as the handshake era sends.
     async fn call(body: Value) -> Value {
-        let response =
-            handle_rpc(State(McpMockConfig::default()), HeaderMap::new(), Json(body)).await;
+        call_on(&McpMockConfig::default(), body).await
+    }
+
+    /// [`call`] against a catalog other than the default one.
+    async fn call_on(config: &McpMockConfig, body: Value) -> Value {
+        let response = handle_rpc(State(config.clone()), HeaderMap::new(), Json(body)).await;
         body_of(response).await
     }
 
@@ -704,12 +900,22 @@ mod tests {
         params: Value,
         headers: &[(&'static str, String)],
     ) -> (u16, Value) {
+        modern_on(&McpMockConfig::default(), method, params, headers).await
+    }
+
+    /// [`modern`] against a catalog other than the default one.
+    async fn modern_on(
+        config: &McpMockConfig,
+        method: &str,
+        params: Value,
+        headers: &[(&'static str, String)],
+    ) -> (u16, Value) {
         let mut map = HeaderMap::new();
         for (name, value) in headers {
             map.insert(*name, value.parse().unwrap());
         }
         let body = json!({ "jsonrpc": "2.0", "id": 1, "method": method, "params": params });
-        let response = handle_rpc(State(McpMockConfig::default()), map, Json(body)).await;
+        let response = handle_rpc(State(config.clone()), map, Json(body)).await;
         let status = response.status().as_u16();
         (status, body_of(response).await)
     }
@@ -961,5 +1167,353 @@ mod tests {
         assert_eq!(declared.protocol_version, MODERN_PROTOCOL);
         assert_eq!(declared.tools, tools(&McpMockConfig::default()));
         assert_eq!(declared.implementation["name"], "mockforge-mcp");
+        assert_eq!(declared.instructions, None, "the default catalog gives no instructions");
+    }
+
+    /// `tools/call` for `name` with `arguments` on the given catalog.
+    async fn called(config: &McpMockConfig, name: &str, arguments: Value) -> Value {
+        let request = json!({
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": { "name": name, "arguments": arguments },
+        });
+        let response = handle_rpc(State(config.clone()), HeaderMap::new(), Json(request)).await;
+        body_of(response).await["result"].clone()
+    }
+
+    #[tokio::test]
+    async fn a_tool_answers_as_its_result_says() {
+        let config = McpMockConfig::from_json(
+            r#"{
+              "kind": "mockforge-mcp-catalog", "schema_version": 1,
+              "server": { "name": "acme-tools", "version": "1.2.3", "instructions": "Be brief." },
+              "tools": [
+                { "name": "echo", "title": "Echo", "inputSchema": { "type": "object" }, "result": { "reflect": "text" } },
+                { "name": "boom", "result": { "text": "it failed", "isError": true } },
+                { "name": "plain", "description": "Plain.", "result": "plain text" }
+              ]
+            }"#,
+            "catalog.json",
+        )
+        .unwrap();
+
+        // Listed exactly as declared: the title is there, and `boom` has no description.
+        let listed = call_on(&config, json!({"jsonrpc":"2.0","id":1,"method":"tools/list"})).await;
+        assert_eq!(
+            listed["result"]["tools"],
+            json!([
+                { "name": "echo", "title": "Echo", "inputSchema": { "type": "object" } },
+                { "name": "boom", "inputSchema": { "type": "object" } },
+                { "name": "plain", "description": "Plain.", "inputSchema": { "type": "object" } },
+            ])
+        );
+
+        let text = |text: &str, is_error: bool| json!({ "content": [{ "type": "text", "text": text }], "isError": is_error });
+        assert_eq!(called(&config, "echo", json!({ "text": "back" })).await, text("back", false));
+        // An argument that is missing, or is not text, reflects as empty text.
+        assert_eq!(called(&config, "echo", json!({})).await, text("", false));
+        assert_eq!(called(&config, "echo", json!({ "text": 7 })).await, text("", false));
+        assert_eq!(called(&config, "boom", json!({})).await, text("it failed", true));
+        assert_eq!(called(&config, "plain", json!({})).await, text("plain text", false));
+        assert_eq!(called(&config, "nope", json!({})).await["isError"], true);
+    }
+
+    #[tokio::test]
+    async fn a_tool_that_requires_an_argument_refuses_a_call_without_it() {
+        let config = McpMockConfig::from_json(
+            r#"{
+              "kind": "mockforge-mcp-catalog", "schema_version": 1,
+              "tools": [{
+                "name": "release_export", "inputSchema": { "type": "object" },
+                "result": { "text": "released", "requires": "key", "missing": "no key was given" }
+              }]
+            }"#,
+            "catalog.json",
+        )
+        .unwrap();
+
+        let text = |text: &str, is_error: bool| json!({ "content": [{ "type": "text", "text": text }], "isError": is_error });
+        assert_eq!(
+            called(&config, "release_export", json!({ "key": "wk_live_1" })).await,
+            text("released", false)
+        );
+        // An argument that is absent, null or blank is not given.
+        assert_eq!(
+            called(&config, "release_export", json!({})).await,
+            text("no key was given", true)
+        );
+        assert_eq!(
+            called(&config, "release_export", json!({ "key": null })).await,
+            text("no key was given", true)
+        );
+        assert_eq!(
+            called(&config, "release_export", json!({ "key": "  " })).await,
+            text("no key was given", true)
+        );
+        // Another argument does not stand in for the one the tool requires.
+        assert_eq!(
+            called(&config, "release_export", json!({ "token": "x" })).await,
+            text("no key was given", true)
+        );
+        // A value that is not text is given.
+        assert_eq!(
+            called(&config, "release_export", json!({ "key": 42 })).await,
+            text("released", false)
+        );
+    }
+
+    #[tokio::test]
+    async fn a_tool_that_requires_a_value_refuses_a_call_with_any_other() {
+        let config = McpMockConfig::from_json(
+            r#"{
+              "kind": "mockforge-mcp-catalog", "schema_version": 1,
+              "tools": [{
+                "name": "issue_refund", "inputSchema": { "type": "object" },
+                "result": { "text": "refund issued", "requires": "confirmed", "equals": true, "missing": "the user has not confirmed the refund" }
+              }]
+            }"#,
+            "catalog.json",
+        )
+        .unwrap();
+
+        let text = |text: &str, is_error: bool| json!({ "content": [{ "type": "text", "text": text }], "isError": is_error });
+        let refused = text("the user has not confirmed the refund", true);
+        assert_eq!(
+            called(&config, "issue_refund", json!({ "confirmed": true })).await,
+            text("refund issued", false)
+        );
+        // The tool acts on true alone. False is given, and is not it: without
+        // `equals` it would count as an argument that is there.
+        for arguments in [
+            json!({ "confirmed": false }),
+            json!({}),
+            json!({ "confirmed": null }),
+            json!({ "confirmed": "true" }),
+            json!({ "confirmed": 1 }),
+            json!({ "approved": true }),
+        ] {
+            assert_eq!(
+                called(&config, "issue_refund", arguments.clone()).await,
+                refused,
+                "{arguments}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn instructions_are_given_only_when_the_catalog_has_them() {
+        let with = |server: &str| {
+            McpMockConfig::from_json(
+                &format!(r#"{{ "kind": "mockforge-mcp-catalog", "schema_version": 1, "server": {server} }}"#),
+                "catalog.json",
+            )
+            .unwrap()
+        };
+        let guided = with(
+            r#"{ "name": "s", "version": "1", "instructions": "Be brief.", "capabilities": { "tools": {} } }"#,
+        );
+        let bare = with(r#"{ "name": "s", "version": "1" }"#);
+
+        let handshake =
+            call_on(&guided, json!({"jsonrpc":"2.0","id":1,"method":"initialize"})).await;
+        assert_eq!(handshake["result"]["instructions"], "Be brief.");
+        assert_eq!(handshake["result"]["serverInfo"], json!({ "name": "s", "version": "1" }));
+        assert_eq!(handshake["result"]["capabilities"], json!({ "tools": {} }));
+
+        let (status, discovered) = modern_on(
+            &guided,
+            "server/discover",
+            on(MODERN_PROTOCOL, json!({})),
+            &proper("server/discover"),
+        )
+        .await;
+        assert_eq!(status, 200);
+        assert_eq!(discovered["result"]["instructions"], "Be brief.");
+        assert_eq!(discovered["result"]["capabilities"], json!({ "tools": {} }));
+        assert_eq!(
+            discovered["result"]["_meta"][SERVER_INFO_KEY],
+            json!({ "name": "s", "version": "1" })
+        );
+
+        let handshake = call_on(&bare, json!({"jsonrpc":"2.0","id":1,"method":"initialize"})).await;
+        assert!(handshake["result"].get("instructions").is_none());
+        let (_, discovered) = modern_on(
+            &bare,
+            "server/discover",
+            on(MODERN_PROTOCOL, json!({})),
+            &proper("server/discover"),
+        )
+        .await;
+        assert!(discovered["result"].get("instructions").is_none());
+    }
+
+    #[tokio::test]
+    async fn a_pinned_contract_served_over_http_pins_to_the_same_digest() {
+        use mockforge_contracts::mcp_contract::{ClientIdentity, Contract, ServerContract};
+        use std::collections::BTreeMap;
+
+        let client = ClientIdentity {
+            name: "agent".to_string(),
+            version: "1".to_string(),
+        };
+        let pinned_server = ServerContract {
+            url: "https://tools.example.com/mcp".to_string(),
+            era: Era::Modern,
+            protocol_version: MODERN_PROTOCOL.to_string(),
+            implementation: json!({ "name": "acme", "version": "9.9.9", "title": "Acme" }),
+            capabilities: json!({ "tools": { "listChanged": true }, "logging": {} }),
+            instructions: Some("Prefer `search`.".to_string()),
+            headers: BTreeMap::new(),
+            auth: None,
+        };
+        let original = Contract::pin(
+            pinned_server,
+            client.clone(),
+            vec![
+                json!({
+                    "name": "search", "title": "Search", "description": "Find documents.",
+                    "inputSchema": { "type": "object", "properties": { "q": { "type": "string" } } },
+                    "outputSchema": { "type": "object" }, "annotations": { "readOnlyHint": true },
+                    "x-vendor": "kept",
+                }),
+                json!({ "name": "bare", "inputSchema": { "type": "object" } }),
+            ],
+            "0.0.0",
+            "2026-11-24T00:00:00Z",
+        )
+        .unwrap();
+        let replayed =
+            McpMockConfig::from_json(&serde_json::to_string(&original).unwrap(), "acme.json")
+                .unwrap();
+
+        // The real client against the mock serving the pin.
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let served = replayed.clone();
+        tokio::spawn(async move {
+            axum::serve(listener, router(served)).await.unwrap();
+        });
+        let options = ClientOptions::new(&format!("http://{address}/mcp"), client.clone()).unwrap();
+        let declared = fetch_declared(&options).await.unwrap();
+        assert_eq!(declared.instructions.as_deref(), Some("Prefer `search`."));
+
+        let again = Contract::pin(
+            ServerContract {
+                url: options.endpoint.clone(),
+                era: declared.era,
+                protocol_version: declared.protocol_version,
+                implementation: declared.implementation,
+                capabilities: declared.capabilities,
+                instructions: declared.instructions,
+                headers: BTreeMap::new(),
+                auth: None,
+            },
+            client,
+            declared.tools,
+            "0.0.0",
+            "2026-11-25T00:00:00Z",
+        )
+        .unwrap();
+        assert_eq!(
+            again.digest, original.digest,
+            "what the client reads from the mock is what was pinned"
+        );
+        assert_eq!(again.tools, original.tools);
+
+        // A call is answered, and says that nothing ran.
+        let mut headers = proper("tools/call");
+        headers.push(("mcp-name", "search".to_string()));
+        let search = json!({ "name": "search", "arguments": { "q": "x" } });
+        let (status, called) =
+            modern_on(&replayed, "tools/call", on(MODERN_PROTOCOL, search), &headers).await;
+        assert_eq!(status, 200);
+        assert_eq!(called["result"]["isError"], false);
+        assert!(called["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap()
+            .contains("MockForge replay of `search`"));
+    }
+
+    #[tokio::test]
+    async fn what_an_agent_sends_is_written_down_and_notifications_are_not() {
+        let directory =
+            std::env::temp_dir().join(format!("mockforge-mcp-record-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("calls.jsonl");
+        let config = McpMockConfig {
+            record: Some(McpCallLog::create(&path).await.unwrap()),
+            ..McpMockConfig::default()
+        };
+
+        // A tool call from an agent that says who it is.
+        let mut echo = json!({ "name": "echo", "arguments": { "text": "hello" } });
+        echo["_meta"] = json!({
+            VERSION_KEY: MODERN_PROTOCOL,
+            CAPABILITIES_KEY: {},
+            CLIENT_INFO_KEY: { "name": "agent-under-test", "version": "0.1" },
+        });
+        let mut headers = proper("tools/call");
+        headers.push(("mcp-name", "echo".to_string()));
+        let (status, _) = modern_on(&config, "tools/call", echo, &headers).await;
+        assert_eq!(status, 200);
+        // A tool call the tool refuses.
+        let mut headers = proper("tools/call");
+        headers.push(("mcp-name", "fail_tool".to_string()));
+        let (status, _) = modern_on(
+            &config,
+            "tools/call",
+            on(MODERN_PROTOCOL, json!({ "name": "fail_tool", "arguments": {} })),
+            &headers,
+        )
+        .await;
+        assert_eq!(status, 200);
+        // A tool call the mock refuses before any tool is called.
+        let (status, _) = modern_on(
+            &config,
+            "tools/call",
+            on(MODERN_PROTOCOL, json!({ "name": "echo", "arguments": {} })),
+            &[],
+        )
+        .await;
+        assert_eq!(status, 400);
+        // A request the mock refuses is written down too.
+        let (status, _) = modern_on(&config, "tools/list", json!({}), &proper("tools/list")).await;
+        assert_eq!(status, 400);
+        // A notification expects no answer and is not evidence of anything.
+        call_on(&config, json!({"jsonrpc":"2.0","method":"notifications/initialized"})).await;
+        drop(config);
+
+        let text = std::fs::read_to_string(&path).unwrap();
+        std::fs::remove_dir_all(&directory).unwrap();
+        let calls = mockforge_contracts::agent_redteam::read_calls(&text, "calls.jsonl").unwrap();
+        let sent: Vec<(u64, &str)> =
+            calls.iter().map(|call| (call.seq, call.method.as_str())).collect();
+        assert_eq!(
+            sent,
+            vec![
+                (1, "tools/call"),
+                (2, "tools/call"),
+                (3, "tools/call"),
+                (4, "tools/list")
+            ],
+            "{text}"
+        );
+        assert_eq!(calls[0].tool.as_deref(), Some("echo"));
+        assert_eq!(calls[0].arguments, Some(json!({ "text": "hello" })));
+        assert_eq!(
+            calls[0].client.as_ref().map(|client| client.name.as_str()),
+            Some("agent-under-test")
+        );
+        // What the mock answered is written down with a tool call, and only then.
+        assert_eq!(calls[0].answer.as_ref().map(|answer| answer.is_error), Some(false));
+        assert_eq!(calls[0].answer.as_ref().and_then(|answer| answer.text.as_deref()), None);
+        assert_eq!(
+            calls[1].answer.as_ref().map(|answer| (answer.is_error, answer.text.as_deref())),
+            Some((true, Some("simulated tool failure")))
+        );
+        assert_eq!(
+            calls[2].answer.as_ref().and_then(|answer| answer.refused.as_deref()),
+            Some("Header mismatch: Mcp-Method header is missing")
+        );
+        assert!(calls[3].tool.is_none() && calls[3].answer.is_none());
     }
 }

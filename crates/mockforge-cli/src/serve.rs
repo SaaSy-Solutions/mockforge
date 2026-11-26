@@ -133,6 +133,15 @@ pub(crate) struct ServeArgs {
     /// `--mcp-mock` (#913): mount the mock MCP server (JSON-RPC over HTTP at
     /// `/mcp`).
     pub(crate) mcp_mock: bool,
+    /// `--mcp-mock-catalog`: the mock MCP server's catalog file, a catalog or
+    /// a pinned contract to replay. The built-in catalog when absent.
+    pub(crate) mcp_mock_catalog: Option<PathBuf>,
+    /// `--mcp-mock-record`: where the mock MCP server writes down every
+    /// request it receives. Nowhere when absent.
+    pub(crate) mcp_mock_record: Option<PathBuf>,
+    /// `--exchange-log`: where the mock writes down every request it receives
+    /// and the answer it gives. Nowhere when absent.
+    pub(crate) exchange_log: Option<PathBuf>,
     /// `--conformance-buffer-size` (round 31). Mirrors
     /// `MOCKFORGE_CONFORMANCE_BUFFER_SIZE`. None = honour env or default 256.
     pub(crate) conformance_buffer_size: Option<usize>,
@@ -230,6 +239,9 @@ impl Default for ServeArgs {
             llm_mock_api_key: None,
             llm_mock_cassette: None,
             mcp_mock: false,
+            mcp_mock_catalog: None,
+            mcp_mock_record: None,
+            exchange_log: None,
             conformance_buffer_size: None,
             conformance_buffer_unique: false,
             inject_response_violations: false,
@@ -2255,15 +2267,58 @@ pub async fn handle_serve(
             );
         }
 
+        // The exchange log is opened before anything listens, so a file that
+        // cannot be written stops startup with the reason.
+        let exchange_log = match &serve_args.exchange_log {
+            Some(path) => Some(Arc::new(
+                mockforge_http::exchange_log::ExchangeLog::create(path)
+                    .await
+                    .map_err(|error| format!("--exchange-log {}: {error}", path.display()))?,
+            )),
+            None => None,
+        };
+        if let Some(path) = &serve_args.exchange_log {
+            println!("📝 Exchanges recorded to {}, one JSON line per request", path.display());
+        }
+
         // Mount the mock MCP server (#913) so an agent acting as an MCP client can
         // talk to MockForge over JSON-RPC. Opt-in via --mcp-mock.
         if serve_args.mcp_mock {
-            http_app = http_app.merge(mockforge_http::mcp_mock::router(
-                mockforge_http::mcp_mock::McpMockConfig::default(),
-            ));
+            // A catalog file is read before anything listens, so a file that
+            // cannot be served stops startup with the reason.
+            let mut catalog = match &serve_args.mcp_mock_catalog {
+                Some(path) => mockforge_http::mcp_mock::McpMockConfig::from_file(path)?,
+                None => mockforge_http::mcp_mock::McpMockConfig::default(),
+            };
+            // The log is opened before anything listens, so a file that cannot
+            // be written stops startup with the reason.
+            if let Some(path) = &serve_args.mcp_mock_record {
+                catalog.record =
+                    Some(mockforge_http::mcp_mock::McpCallLog::create(path).await.map_err(
+                        |error| format!("--mcp-mock-record {}: {error}", path.display()),
+                    )?);
+            }
+            http_app = http_app.merge(mockforge_http::mcp_mock::router(catalog.clone()));
             println!(
                 "✅ Mock MCP server available at POST /mcp (JSON-RPC: initialize, tools/list, tools/call, resources/list, prompts/list)"
             );
+            if let Some(path) = &serve_args.mcp_mock_catalog {
+                println!(
+                    "📖 Mock MCP catalog {}: server `{}` {}, {} tool(s), {} resource(s), {} prompt(s)",
+                    path.display(),
+                    catalog.server_info["name"].as_str().unwrap_or("?"),
+                    catalog.server_info["version"].as_str().unwrap_or("?"),
+                    catalog.tools.len(),
+                    catalog.resources.len(),
+                    catalog.prompts.len()
+                );
+            }
+            if let Some(path) = &serve_args.mcp_mock_record {
+                println!(
+                    "📝 Mock MCP calls recorded to {}, one JSON line per request",
+                    path.display()
+                );
+            }
         }
 
         // Mount the recorder API on the public HTTP app so callers can list,
@@ -2555,6 +2610,21 @@ pub async fn handle_serve(
             );
         }
         let http_app = mockforge_http::management_auth::install(http_app, control_plane_policy);
+
+        // The exchange log is the outermost layer, after every other: it
+        // writes down a request whoever answered it, the mock's API, its
+        // management API, or no route at all.
+        let http_app = match exchange_log {
+            Some(log) => {
+                use axum::extract::Request as AxumRequest;
+                use axum::middleware::{from_fn, Next};
+                http_app.layer(from_fn(move |req: AxumRequest, next: Next| {
+                    let log = log.clone();
+                    async move { mockforge_http::exchange_log::record(log, req, next).await }
+                }))
+            }
+            None => http_app,
+        };
 
         #[cfg(feature = "chaos")]
         let chaos_listener_cfg = if chaos_config.enabled

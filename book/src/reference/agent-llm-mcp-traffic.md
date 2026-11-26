@@ -209,6 +209,17 @@ On this revision the mock does what the specification asks of a server:
 - Every result carries `"resultType": "complete"`, and an unknown method is
   HTTP `404` with `-32601`.
 
+What the mock advertises is the built-in catalog, or the file that
+`--mcp-mock-catalog` names: a catalog you write, or a pinned contract from
+`mockforge mcp-contract pin`, replayed as the server that was pinned. Both
+eras are answered from that one catalog. See
+[MCP Contract Pinning](../user-guide/mcp-contract.md).
+
+With `--mcp-mock-record FILE` the mock also writes down every request it
+receives, one JSON line each, in full. `mockforge agent-redteam judge` reads
+that file, and with `--reply` the agent's answer, and checks both against a
+suite's rules: see [Red-Team an Agent](../user-guide/agent-redteam.md).
+
 ### 2c. Handshake: `initialize` (earlier revisions)
 
 A request that carries none of the above gets the handshake that earlier

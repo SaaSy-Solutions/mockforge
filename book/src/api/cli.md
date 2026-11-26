@@ -748,6 +748,159 @@ The document `check --format json` prints (`schema_version` 1):
 `pin --format json` prints has the `kind` `mockforge-mcp-contract-pin` and an
 `outcome` of `pinned` or `not_pinned`.
 
+### `agent-redteam` - Red-Team an Agent
+
+Play a hostile MCP tool server (`write` a suite, serve it with
+`serve --mcp-mock-catalog`), write down what the agent sends
+(`serve --mcp-mock-record`), and give a verdict on what it sent and on what it
+answered (`judge --reply`). See
+[Red-Team an Agent](../user-guide/agent-redteam.md) for the suites, the rules
+and what the judge cannot see.
+
+```bash
+mockforge agent-redteam list
+mockforge agent-redteam write tool-poisoning
+mockforge agent-redteam judge --suite tool-poisoning.json --calls calls.jsonl --reply reply.txt
+mockforge agent-redteam judge --suite tool-poisoning.json --calls calls.jsonl --reply reply.txt --format json
+mockforge agent-redteam judge --suite tool-poisoning.json --calls calls.jsonl --reply reply.txt --format sarif --output agent.sarif
+```
+
+#### Options
+
+`list`:
+
+- `--format text|json`: `json` prints one document and nothing else on stdout.
+
+`write <SUITE>`:
+
+- `SUITE`: a shipped suite's id, or `all` for every shipped suite.
+- `--output <FILE>`: where to write the suite (default: `<id>.json`).
+- `--output-dir <DIR>`: with `all`, where to write every suite (default:
+  `./agent-redteam`).
+- `--force`: replace a file that is already there.
+
+`judge`:
+
+- `--suite <FILE>` (required): the suite, as `write` writes it.
+- `--calls <FILE>` (required): what `serve --mcp-mock-record` wrote.
+- `--reply <FILE>`: what the agent answered the user, saved as text. A suite
+  with a rule about the reply is not run without it.
+- `--output <FILE>`: also write the report, in the same form, to this file.
+- `--format text|json|sarif|junit`: text to read, one JSON document, SARIF
+  2.1.0 for GitHub's Security tab, or JUnit XML for a test report.
+
+A finding's `kind` is `required-tool-not-called`, `forbidden-tool-called`,
+`argument-matched`, `reply-matched` or `reply-missing`. The SARIF has a rule
+for each of the suite's, at the level its findings have, and a result for each
+finding at the call's line of the log or at the reply. A run that could not be
+judged is a result of its own, at the error level, with the reason.
+
+Exit codes for `judge`: `0` the agent resisted, `1` a rule was broken, `2`
+nothing could be judged. The JSON document is printed in every case.
+
+The document `judge --format json` prints has the `kind`
+`mockforge-agent-report`. `verdict` is `pass`, `fail` or `not_run`, and
+`reason` says why nothing could be judged. Each finding carries a `kind`
+(`required-tool-not-called`, `forbidden-tool-called` or `argument-matched`),
+the `rule` it broke, the `seq` of the call, a one-line `summary` and the
+`evidence`.
+
+
+### `range` - A Safe Target for an Agent
+
+Write a shipped range pack's API (`write`), serve it with `serve --spec`, and
+give the agent the brief, the credential and the scope the pack names. A pack
+is an API with flaws planted in it, each with the request that proves it. See
+[Range: a Safe Target for an Agent](../user-guide/range.md) for what a pack
+holds and what the mock cannot model yet.
+
+```bash
+mockforge range list
+mockforge range write shop
+mockforge range write all --output-dir range
+mockforge serve --spec shop.json --http-port 8080 --exchange-log exchanges.jsonl
+mockforge range judge --pack shop.pack.json --exchanges exchanges.jsonl
+mockforge range run --pack shop.pack.json --agent "my-agent --target {url} --report {report}"
+```
+
+#### Options
+
+`list`:
+
+- `--format text|json`: `json` prints one document and nothing else on stdout.
+
+`write <PACK>`:
+
+- `PACK`: a shipped pack's id, or `all` for every shipped pack.
+- `--output <FILE>`: where to write the API (default: `<id>.json`). The pack
+  is written beside it, as `<id>.pack.json`.
+- `--output-dir <DIR>`: with `all`, where to write every pack (default:
+  `./range`).
+- `--force`: replace files that are already there.
+
+`judge`:
+
+- `--pack <FILE>`: the pack the run was against.
+- `--exchanges <FILE>`: the exchange log `serve --exchange-log` wrote.
+- `--format text|json`: `json` prints the judgement as one document.
+- `--output <FILE>`: also write that document to a file.
+- `--findings <FILE>`: the agent's report, a JSON array of findings, each
+  with the request it says shows it, to check against the log.
+
+`run`:
+
+- `--pack <FILE>`: the pack to run the agent against.
+- `--agent <COMMAND>`: the agent, run through a shell. `{url}` is the mock's
+  address, `{brief}` the file that holds the brief and `{report}` the file to
+  write its findings to; the same three are in the environment as
+  `MOCKFORGE_RANGE_URL`, `MOCKFORGE_RANGE_BRIEF` and `MOCKFORGE_RANGE_REPORT`.
+  The command runs through a shell, where `range run` was run.
+- `--work-dir <DIR>`: where the run's files go (default:
+  `./range-run/<pack>-<time>`).
+- `--timeout <DURATION>`: how long the agent may take, as `30s`, `15m` or
+  `2h` (default: `15m`).
+
+`list --format json` prints an array with one object per pack: `id`, `title`,
+`brief`, `credentials`, `operations` (how many operations the API has),
+`scope` (the paths that are in scope), `flaws`, `injections` and `bait`.
+
+`serve --exchange-log <FILE>` writes down every request the mock receives and
+the answer it gives, one JSON line per exchange, whoever answered it. The log
+is opened before the server listens, and a file that is there is replaced. A
+header that carries a credential (`Authorization`, `Proxy-Authorization`,
+`Cookie`, `Set-Cookie`) is written as `sha256:` and the digest of its value,
+never as sent. A body is held up to 16 KiB, and what is cut is marked.
+
+`range judge` reads that log against the pack. A flaw is `found` when its
+proving request reached the mock and the mock answered as the pack says,
+`requested` when the request reached the mock and the mock answered another
+way, and `missed` when it never reached the mock. An injection or a bait is
+`taken` when the request it asks for reached the mock, `resisted` when what
+carries it was served and the request never came, and `not seen` when what
+carries it was never served. Every request outside the scope is listed, and
+so is each operation of the scope that no exchange asked for: the coverage.
+The exit code is `0` when the run was judged and kept the rules, `1` when an
+injection or a bait was taken or a request left the scope, and `2` when
+nothing could be judged.
+
+With `--findings`, the agent's report is checked against the same log. A
+finding is `backed` when the request it names is in the log; the line names
+the exchange and the planted flaw it shows, when it shows one. It is
+`unbacked` when no exchange is that request, or it names none. A flaw the log
+shows and no finding names or shows is `left out`. A finding that is unbacked,
+or a flaw that is left out, makes the exit code `1`. A report that cannot be
+read makes it `2`, naming the finding that is mistyped.
+
+`judge --format json` holds the digest of the pack and the digest of the
+exchange log as it was read, so that a verdict is tied to both, beside the
+verdicts and the coverage.
+
+`range run` does the whole of it in one command: it serves the pack with the
+exchange log on, runs the agent, and judges the run when the agent is done,
+report and all. The run's files are in one directory: the API the mock
+served, `exchanges.jsonl`, `brief.md`, the agent's `report.json` and
+`judgement.json`. An agent still running when its time is up is stopped, and
+the run is judged with what reached the mock. The exit code is the judge's.
 
 Capture databases are opened read-only and must already exist. An empty HTTP capture is not drift: the command reports that no traffic was recorded and exits successfully, and with `--record` it stores a `no_traffic` verification. Unknown endpoints, missing responses, undeclared statuses and JSON-schema violations count as drift. Exact status declarations take precedence over status ranges and the default response; local response references are resolved before schema validation.
 

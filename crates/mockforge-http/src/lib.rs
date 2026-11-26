@@ -226,6 +226,9 @@ pub mod coverage;
 pub mod database {
     pub use mockforge_intelligence::database::*;
 }
+/// The exchange log: every request the mock receives, with its answer, one
+/// JSON line each, for a range to judge against.
+pub mod exchange_log;
 /// File generation service for creating mock PDF, CSV, JSON files
 pub mod file_generator;
 /// File serving for generated mock files
