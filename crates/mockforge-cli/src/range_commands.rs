@@ -137,6 +137,12 @@ fn flaws_text() -> String {
         for name in kind.prove.without {
             proved.push(format!("no `{name}` header"));
         }
+        for (name, value) in kind.prove.query_with {
+            proved.push(format!("a query carrying `{name}` set to `{value}`"));
+        }
+        for name in kind.prove.query_without {
+            proved.push(format!("no `{name}` in the query"));
+        }
         if let Some(held) = kind.prove.body_contains {
             proved.push(format!("a body that holds `{held}`"));
         }
@@ -154,6 +160,12 @@ fn flaws_text() -> String {
         if let Some(held) = kind.shows.has_text {
             shows.push(format!("and the text `{held}`"));
         }
+        for (name, value) in kind.shows.has_header {
+            shows.push(format!("the `{name}` header set to `{value}`"));
+        }
+        for name in kind.shows.lacks_header {
+            shows.push(format!("no `{name}` header"));
+        }
 
         let planted = match kind.plant {
             range::catalogue::Plant::AsRecorded => {
@@ -164,6 +176,29 @@ fn flaws_text() -> String {
                 fields
                     .iter()
                     .map(|(name, _)| format!("`{name}`"))
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            ),
+            range::catalogue::Plant::Answer { when_, fields } => {
+                let when: mockforge_openapi::answers::When = serde_json::from_str(when_)
+                    .unwrap_or_else(|error| {
+                        panic!("the `when` of `{}` is not JSON: {error}", kind.id)
+                    });
+                format!(
+                    "the operation's own answer gains {}, given to a request with {}",
+                    fields
+                        .iter()
+                        .map(|(name, _)| format!("`{name}`"))
+                        .collect::<Vec<String>>()
+                        .join(", "),
+                    when.label()
+                )
+            }
+            range::catalogue::Plant::Headers { headers } => format!(
+                "the answer is given with {}",
+                headers
+                    .iter()
+                    .map(|(name, _)| format!("the `{name}` header"))
                     .collect::<Vec<String>>()
                     .join(", ")
             ),

@@ -7,13 +7,14 @@
 //! changed as the kind says it must be, and the flaw that proves it is added
 //! to the pack.
 //!
-//! The classes are the ones an API served by the mock can show with one
-//! answer for one operation, which is what a pack holds today. An injected
-//! weakness, SQL or cross-site scripting, needs the answer to depend on the
-//! request, and a proof that names the query string needs a claim that can
-//! name it; both wait for those changes. The client-side, configuration and
-//! crypto rules of SemSec are about source code and configuration, and name
-//! nothing a mock can answer.
+//! The classes are the ones an API served by the mock can show. Most are
+//! shown by one answer for one operation; mass assignment is shown by an
+//! answer the operation gives to the requests that send the field alone
+//! (`x-mockforge-answers`), and any origin allowed to read an answer by a
+//! header of it. An injected weakness that names a parameter, SQL in a search
+//! term, waits for a kind that takes the parameter's name. The client-side,
+//! configuration and crypto rules of SemSec are about source code and
+//! configuration, and name nothing a mock can answer.
 //!
 //! SemSec (Robusta Studio, MIT, https://github.com/RobustaStudio/semsec at
 //! 521800cb) was read on 2026-11-26 for the classes and the ids of its rules.
@@ -51,6 +52,11 @@ pub struct Prove {
     pub without: &'static [&'static str],
     /// Text the request body holds.
     pub body_contains: Option<&'static str>,
+    /// Query parameters the request carries, with their values, as they were
+    /// decoded.
+    pub query_with: &'static [(&'static str, &'static str)],
+    /// Query parameters the request must not carry.
+    pub query_without: &'static [&'static str],
 }
 
 /// What the answer of a kind holds.
@@ -62,11 +68,17 @@ pub struct Shows {
     pub has: &'static [(&'static str, &'static str)],
     /// Text the answer holds.
     pub has_text: Option<&'static str>,
+    /// Headers the answer carries, with their values. Read without regard to
+    /// case, as a pack reads them.
+    pub has_header: &'static [(&'static str, &'static str)],
+    /// Headers the answer must not carry.
+    pub lacks_header: &'static [&'static str],
 }
 
-/// What planting a kind changes in the answer of the operation.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
-#[serde(tag = "by", rename_all = "kebab-case")]
+/// What planting a kind changes in the answer of the operation. As one
+/// document, `by` says which, and the rest is its own: a `when` and a `body`
+/// as the JSON they are, and not as the text they are written as.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Plant {
     /// Nothing: the operation answers a request it should have refused.
     AsRecorded,
@@ -75,6 +87,22 @@ pub enum Plant {
         /// The fields, with their values as JSON text.
         fields: &'static [(&'static str, &'static str)],
     },
+    /// The operation's own answer gains these fields, and is given, with
+    /// them, to the requests a `when` names alone: every other request is
+    /// answered as the operation answered before.
+    Answer {
+        /// The requests the answer is given to, as the JSON of a `when` of
+        /// `x-mockforge-answers`.
+        when_: &'static str,
+        /// The fields, with their values as JSON text.
+        fields: &'static [(&'static str, &'static str)],
+    },
+    /// The answer is given with these response headers, declared in the spec
+    /// with the values written.
+    Headers {
+        /// The headers, with their values.
+        headers: &'static [(&'static str, &'static str)],
+    },
     /// The operation answers this failure, and nothing else.
     Failure {
         /// Its status code.
@@ -82,6 +110,40 @@ pub enum Plant {
         /// Its body, as JSON text.
         body: &'static str,
     },
+}
+
+impl Serialize for Plant {
+    fn serialize<S: serde::Serializer>(
+        &self,
+        serializer: S,
+    ) -> std::result::Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        let json =
+            |text: &str| serde_json::from_str::<Value>(text).map_err(serde::ser::Error::custom);
+        let mut plant = serializer.serialize_map(None)?;
+        match self {
+            Plant::AsRecorded => plant.serialize_entry("by", "as-recorded")?,
+            Plant::Fields { fields } => {
+                plant.serialize_entry("by", "fields")?;
+                plant.serialize_entry("fields", fields)?;
+            }
+            Plant::Answer { when_, fields } => {
+                plant.serialize_entry("by", "answer")?;
+                plant.serialize_entry("when", &json(when_)?)?;
+                plant.serialize_entry("fields", fields)?;
+            }
+            Plant::Headers { headers } => {
+                plant.serialize_entry("by", "headers")?;
+                plant.serialize_entry("headers", headers)?;
+            }
+            Plant::Failure { status, body } => {
+                plant.serialize_entry("by", "failure")?;
+                plant.serialize_entry("status", status)?;
+                plant.serialize_entry("body", &json(body)?)?;
+            }
+        }
+        plant.end()
+    }
 }
 
 /// One kind of weakness a pack can plant.
@@ -161,6 +223,53 @@ impl FlawKind {
                     example[name] = value;
                 }
             }
+            Plant::Answer { when_, fields } => {
+                let example = example_of(operation, &own.to_string()).ok_or_else(|| {
+                    bad_recording(
+                        where_from,
+                        &format!(
+                            "`{} {path}` answers no JSON object, so `{}` cannot be planted there",
+                            method.to_ascii_uppercase(),
+                            self.id
+                        ),
+                    )
+                })?;
+                let mut body = example.clone();
+                for (name, value) in fields {
+                    let value: Value = serde_json::from_str(value).unwrap_or_else(|error| {
+                        panic!("the value of `{name}` is not JSON: {error}")
+                    });
+                    body[*name] = value;
+                }
+                let when: Value = serde_json::from_str(when_).unwrap_or_else(|error| {
+                    panic!("the `when` of `{}` is not JSON: {error}", self.id)
+                });
+                // The answer joins the ones the operation already gives.
+                let answers = operation
+                    .as_object_mut()
+                    .expect("an operation is an object")
+                    .entry(mockforge_openapi::answers::EXTENSION)
+                    .or_insert_with(|| json!([]));
+                if !answers.is_array() {
+                    *answers = json!([]);
+                }
+                answers.as_array_mut().expect("the answers are a list").push(json!({
+                    "when": when,
+                    "then": { "status": own, "body": body }
+                }));
+            }
+            Plant::Headers { headers } => {
+                let response = &mut operation["responses"][own.to_string()];
+                if !response["headers"].is_object() {
+                    response["headers"] = json!({});
+                }
+                // Declared as the spec declares a header, with the value the
+                // mock is to answer with.
+                for (name, value) in headers {
+                    response["headers"][*name] =
+                        json!({ "schema": { "type": "string" }, "example": value });
+                }
+            }
             Plant::Failure { status, body } => {
                 let body: Value = serde_json::from_str(body).unwrap_or_else(|error| {
                     panic!("the body of `{}` is not JSON: {error}", self.id)
@@ -190,6 +299,18 @@ impl FlawKind {
         if let Some(text) = self.prove.body_contains {
             prove["body_contains"] = json!(text);
         }
+        if !self.prove.query_with.is_empty() {
+            prove["query_with"] = Value::Object(
+                self.prove
+                    .query_with
+                    .iter()
+                    .map(|(name, value)| (name.to_string(), json!(value)))
+                    .collect(),
+            );
+        }
+        if !self.prove.query_without.is_empty() {
+            prove["query_without"] = json!(self.prove.query_without);
+        }
         let mut serves = json!({});
         if let Some(status) = shows.status {
             serves["status"] = json!(status);
@@ -205,6 +326,18 @@ impl FlawKind {
         }
         if let Some(text) = shows.has_text {
             serves["has_text"] = json!(text);
+        }
+        if !shows.has_header.is_empty() {
+            serves["has_header"] = Value::Object(
+                shows
+                    .has_header
+                    .iter()
+                    .map(|(name, value)| (name.to_ascii_lowercase(), json!(value)))
+                    .collect(),
+            );
+        }
+        if !shows.lacks_header.is_empty() {
+            serves["lacks_header"] = json!(shows.lacks_header);
         }
         prove["serves"] = serves;
         Ok(json!({
@@ -230,11 +363,15 @@ pub const KINDS: &[FlawKind] = &[
             with: &[],
             without: &[],
             body_contains: None,
+            query_with: &[],
+            query_without: &[],
         },
         shows: Shows {
             status: None,
             has: &[("customer_id", "\"u_1024\"")],
             has_text: None,
+            has_header: &[],
+            lacks_header: &[],
         },
         plant: Plant::Fields {
             fields: &[("customer_id", "\"u_1024\"")],
@@ -248,6 +385,36 @@ pub const KINDS: &[FlawKind] = &[
         ],
     },
     FlawKind {
+        id: "any-origin-allowed",
+        title: "Any origin is allowed to read the answer",
+        severity: Severity::High,
+        cwe: "CWE-942",
+        owasp: "A05:2021",
+        prove: Prove {
+            with: &[],
+            without: &[],
+            body_contains: None,
+            query_with: &[],
+            query_without: &[],
+        },
+        shows: Shows {
+            status: None,
+            has: &[],
+            has_text: None,
+            has_header: &[("Access-Control-Allow-Origin", "*")],
+            lacks_header: &[],
+        },
+        plant: Plant::Headers {
+            headers: &[("Access-Control-Allow-Origin", "*")],
+        },
+        from: &[
+            "vibe-cors-wildcard",
+            "vibe-cors-credentials-wildcard",
+            "vibe-serverless-cors-wildcard",
+            "vibe-serverless-yml-cors-star",
+        ],
+    },
+    FlawKind {
         id: "error-tells-too-much",
         title: "A failure answers with a stack trace",
         severity: Severity::Medium,
@@ -257,11 +424,15 @@ pub const KINDS: &[FlawKind] = &[
             with: &[],
             without: &[],
             body_contains: None,
+            query_with: &[],
+            query_without: &[],
         },
         shows: Shows {
             status: Some(500),
             has: &[],
             has_text: Some("Traceback"),
+            has_header: &[],
+            lacks_header: &[],
         },
         plant: Plant::Failure {
             status: 500,
@@ -283,11 +454,15 @@ pub const KINDS: &[FlawKind] = &[
             with: &[],
             without: &[],
             body_contains: None,
+            query_with: &[],
+            query_without: &[],
         },
         shows: Shows {
             status: None,
             has: &[("api_key", "\"sk-demo-4f2a9c81e7b3d6a0\"")],
             has_text: None,
+            has_header: &[],
+            lacks_header: &[],
         },
         plant: Plant::Fields {
             fields: &[("api_key", "\"sk-demo-4f2a9c81e7b3d6a0\"")],
@@ -307,15 +482,23 @@ pub const KINDS: &[FlawKind] = &[
         prove: Prove {
             with: &[],
             without: &[],
-            body_contains: Some("role"),
+            // The body holds the field as JSON writes it.
+            body_contains: Some("\"role\""),
+            query_with: &[],
+            query_without: &[],
         },
         shows: Shows {
             status: None,
             has: &[("role", "\"admin\"")],
             has_text: None,
+            has_header: &[],
+            lacks_header: &[],
         },
-        // The answer says `role` back to the request: what the client sent is what was saved.
-        plant: Plant::Fields {
+        // The answer says `role` back to the request: what the client sent is
+        // what was saved. A request that sends none of it is answered as the
+        // operation answered before.
+        plant: Plant::Answer {
+            when_: r#"{ "body_contains": "\"role\"" }"#,
             fields: &[("role", "\"{{request.body.role}}\"")],
         },
         from: &[
@@ -335,11 +518,15 @@ pub const KINDS: &[FlawKind] = &[
             with: &[],
             without: &["authorization"],
             body_contains: None,
+            query_with: &[],
+            query_without: &[],
         },
         shows: Shows {
             status: None,
             has: &[],
             has_text: None,
+            has_header: &[],
+            lacks_header: &[],
         },
         plant: Plant::AsRecorded,
         from: &[
@@ -362,6 +549,8 @@ pub const KINDS: &[FlawKind] = &[
             with: &[],
             without: &[],
             body_contains: None,
+            query_with: &[],
+            query_without: &[],
         },
         shows: Shows {
             status: None,
@@ -370,6 +559,8 @@ pub const KINDS: &[FlawKind] = &[
                 "\"$2b$12$demo0000000000000000000000000000000000000000000000000000000\"",
             )],
             has_text: None,
+            has_header: &[],
+            lacks_header: &[],
         },
         plant: Plant::Fields {
             fields: &[(
@@ -394,11 +585,15 @@ pub const KINDS: &[FlawKind] = &[
             with: &[("Authorization", UNSIGNED_BEARER)],
             without: &[],
             body_contains: None,
+            query_with: &[],
+            query_without: &[],
         },
         shows: Shows {
             status: None,
             has: &[],
             has_text: None,
+            has_header: &[],
+            lacks_header: &[],
         },
         plant: Plant::AsRecorded,
         from: &[
@@ -417,11 +612,15 @@ pub const KINDS: &[FlawKind] = &[
             with: &[],
             without: &[],
             body_contains: Some(".php"),
+            query_with: &[],
+            query_without: &[],
         },
         shows: Shows {
             status: None,
             has: &[],
             has_text: None,
+            has_header: &[],
+            lacks_header: &[],
         },
         plant: Plant::AsRecorded,
         from: &["py-upload-dangerous-extension", "vibe-upload-no-type-check"],
@@ -508,6 +707,32 @@ mod tests {
     }
 
     #[test]
+    fn the_document_of_a_kind_says_what_planting_holds_as_json() {
+        let document = serde_json::to_value(KINDS).unwrap();
+        let by_id = |id: &str| {
+            document.as_array().unwrap().iter().find(|kind| kind["id"] == id).unwrap()["plant"]
+                .clone()
+        };
+        assert_eq!(
+            by_id("mass-assignment"),
+            json!({
+                "by": "answer",
+                "when": { "body_contains": "\"role\"" },
+                "fields": [["role", "\"{{request.body.role}}\""]]
+            })
+        );
+        assert_eq!(
+            by_id("error-tells-too-much"),
+            json!({ "by": "failure", "status": 500, "body": { "error": "Internal error", "trace": "Traceback (most recent call last):\n  File \"app/views.py\", line 41, in handle\n    record = table.get(id)\n  File \"app/db.py\", line 88, in get\n    raise KeyError(id)\nKeyError: None" } })
+        );
+        assert_eq!(
+            by_id("any-origin-allowed"),
+            json!({ "by": "headers", "headers": [["Access-Control-Allow-Origin", "*"]] })
+        );
+        assert_eq!(by_id("no-credential"), json!({ "by": "as-recorded" }));
+    }
+
+    #[test]
     fn every_kind_can_be_planted_into_a_pack_begun_from_a_recording() {
         for kind in KINDS {
             // Planted into the operation the pack serves, as `range new` does it.
@@ -580,6 +805,38 @@ mod tests {
             .contains("Traceback"));
         assert_eq!(flaw["prove"]["serves"]["status"], 500);
         assert_eq!(flaw["prove"]["serves"]["has_text"], "Traceback");
+
+        // A kind that gives the answer a header: declared in the spec, with
+        // its value, and nothing else of the answer changed.
+        let mut served = operation();
+        let flaw = FlawKind::by_id("any-origin-allowed")
+            .unwrap()
+            .plant("GET", "/orders/{id}", &mut served, "r")
+            .unwrap();
+        assert_eq!(
+            served["responses"]["200"]["headers"],
+            json!({ "Access-Control-Allow-Origin": { "schema": { "type": "string" }, "example": "*" } })
+        );
+        assert_eq!(flaw["prove"]["serves"]["has_header"]["access-control-allow-origin"], "*");
+
+        // A kind that answers one way to the requests that send a field and
+        // another to the rest: the operation's own answer gains the field,
+        // said back to the request, and is one of the answers by request.
+        let mut served = operation();
+        let flaw = FlawKind::by_id("mass-assignment")
+            .unwrap()
+            .plant("PUT", "/orders/{id}", &mut served, "r")
+            .unwrap();
+        assert_eq!(
+            served["x-mockforge-answers"],
+            json!([{ "when": { "body_contains": "\"role\"" },
+                     "then": { "status": 200, "body": { "id": "{{json:request.path.id}}", "total": 74.0, "role": "{{request.body.role}}" } } }])
+        );
+        assert_eq!(
+            served["responses"]["200"]["content"]["application/json"]["example"],
+            json!({ "id": "{{json:request.path.id}}", "total": 74.0 })
+        );
+        assert_eq!(flaw["prove"]["body_contains"], "\"role\"");
 
         let mut served = operation();
         let before = served.clone();

@@ -927,6 +927,13 @@ kind at an operation with `--flaw KIND --at "METHOD PATH"`: the operation's
 answer is changed as the kind says, and the flaw that proves it is added to
 the pack with its class.
 
+A proving request may name the query string: `query_with` names parameters it
+must carry, with their values, and `query_without` names those it must not.
+The answer that shows a flaw may name its headers: `has_header` and
+`lacks_header`. An operation of a pack's spec may give answers by request
+(`x-mockforge-answers`), which is how an injected weakness is planted
+honestly.
+
 `range judge` reads that log against the pack. A flaw is `found` when its
 proving request reached the mock and the mock answered as the pack says,
 `requested` when the request reached the mock and the mock answered another
