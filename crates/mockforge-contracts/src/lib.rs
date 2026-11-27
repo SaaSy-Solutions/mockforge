@@ -45,6 +45,7 @@
 //! - **diff_types**: Core diff analysis types shared across contract modules
 //! - **fidelity**: Mock fidelity comparison against a source specification
 //! - **mcp_contract**: Pinning what an MCP tool server declares, and checking it for change
+//! - **webhook_signatures**: How providers sign the webhooks they send
 //! - **protocol**: Protocol type enumeration
 //!
 //! Incident management types live in `mockforge_foundation::incidents_types`;
@@ -69,5 +70,6 @@ pub mod protocol;
 pub mod range;
 pub mod response_validation;
 pub mod schema_diff;
+pub mod webhook_signatures;
 
 pub use error::{ContractError, Result};

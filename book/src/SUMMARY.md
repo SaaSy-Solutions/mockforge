@@ -177,6 +177,7 @@
 - [Bench Capacity Sizing](reference/bench-capacity-sizing.md)
 - [Mock server comparison benchmark](reference/comparison-benchmark.md)
 - [Agent / LLM / MCP Traffic (Packet-Level)](reference/agent-llm-mcp-traffic.md)
+- [Webhook Signatures](reference/webhook-signatures.md)
 - [Troubleshooting](reference/troubleshooting.md)
 - [Common Issues & Solutions](reference/common-issues.md)
 - [FAQ](reference/faq.md)
