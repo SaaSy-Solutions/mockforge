@@ -164,19 +164,19 @@ class CacheGuardTest(unittest.TestCase):
         # The entry is named, relative to the target: the job log is the only
         # view of a runner's disk.
         self.assertIn(
-            "cache contains a nonregular file: unsupported file symlink: target/release/deps/libexample.so",
+            "cache contains a nonregular file: unsupported file symlink: release/deps/libexample.so",
             errors,
         )
         (directory / "libexample.so").unlink()
         os.mkfifo(directory / "pipe")
         errors = GUARD.inspect(self.root)["errors"]
         self.assertTrue(errors)
-        self.assertIn("cache contains a nonregular file: FIFO: target/release/deps/pipe", errors)
+        self.assertIn("cache contains a nonregular file: FIFO: release/deps/pipe", errors)
         self.assertTrue((directory / "pipe").exists())
         (directory / "pipe").unlink()
         (self.root / "target/release/linked").symlink_to(directory, target_is_directory=True)
         self.assertIn(
-            "cache contains a directory symlink: target/release/linked",
+            "cache contains a directory symlink: release/linked",
             GUARD.inspect(self.root)["errors"],
         )
 
