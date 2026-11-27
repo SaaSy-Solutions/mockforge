@@ -23,6 +23,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use clap::{Args, Subcommand};
+use mockforge_contracts::class;
 use mockforge_contracts::range::{
     self, Bait, Finding, Flaw, Injection, Judgement, Pack, Severity, SteeredVerdict,
 };
@@ -260,7 +261,16 @@ fn list_text(packs: &[Listed]) -> String {
                 pack.flaws
                     .iter()
                     .map(|flaw| {
-                        format!("{} ({}): {}", flaw.id, flaw.severity.label(), flaw.prove.label())
+                        format!(
+                            "{} ({}): {}",
+                            flaw.id,
+                            with_class(
+                                flaw.severity.label(),
+                                flaw.cwe.as_deref(),
+                                flaw.owasp.as_deref()
+                            ),
+                            flaw.prove.label()
+                        )
                     })
                     .collect()
             )
@@ -274,7 +284,11 @@ fn list_text(packs: &[Listed]) -> String {
                         format!(
                             "{} ({}): {} asks for {}",
                             injection.id,
-                            injection.severity.label(),
+                            with_class(
+                                injection.severity.label(),
+                                injection.cwe.as_deref(),
+                                injection.owasp.as_deref()
+                            ),
                             injection.planted.label(),
                             injection.obeyed.label()
                         )
@@ -291,7 +305,11 @@ fn list_text(packs: &[Listed]) -> String {
                         format!(
                             "{} ({}): {} offers {}",
                             bait.id,
-                            bait.severity.label(),
+                            with_class(
+                                bait.severity.label(),
+                                bait.cwe.as_deref(),
+                                bait.owasp.as_deref()
+                            ),
                             bait.offered.label(),
                             bait.taken.label()
                         )
@@ -389,20 +407,47 @@ pub(crate) fn judge_text(judged: &Judgement) -> String {
             .collect(),
     );
     let mut text = format!("pack `{}`, {} exchange(s)\n", judged.pack, judged.exchanges);
+    // The column after how it counts says how much the flaw matters and, when
+    // the pack gives it one, its class. It is as wide as its longest, and no
+    // narrower than a severity.
+    let flaw_matter: Vec<String> = judged
+        .flaws
+        .iter()
+        .map(|verdict| {
+            with_class(verdict.severity.label(), verdict.cwe.as_deref(), verdict.owasp.as_deref())
+        })
+        .collect();
+    let steered_matter: Vec<String> = judged
+        .injections
+        .iter()
+        .chain(&judged.bait)
+        .map(|verdict| {
+            with_class(verdict.severity.label(), verdict.cwe.as_deref(), verdict.owasp.as_deref())
+        })
+        .collect();
+    let as_wide = |said: &[String]| said.iter().map(String::len).max().unwrap_or(0).max(8);
+    let flaw_matter_width = as_wide(&flaw_matter);
+    let steered_matter_width = as_wide(&steered_matter);
     text.push_str("\nflaws\n");
-    for verdict in &judged.flaws {
+    for (verdict, matter) in judged.flaws.iter().zip(&flaw_matter) {
         text.push_str(&format!(
-            "  {:<9} {:<8} {:<flaw_width$}  {}\n",
+            "  {:<9} {:<flaw_matter_width$} {:<flaw_width$}  {}\n",
             verdict.finding.label(),
-            verdict.severity.label(),
+            matter,
             verdict.id,
             explained(verdict.exchange, &verdict.why)
         ));
     }
     text.push_str("\ninjections\n");
-    text.push_str(&steered_text(&judged.injections, steered_width));
+    let (injections, bait) = steered_matter.split_at(judged.injections.len());
+    text.push_str(&steered_text(
+        &judged.injections,
+        injections,
+        steered_width,
+        steered_matter_width,
+    ));
     text.push_str("\nbait\n");
-    text.push_str(&steered_text(&judged.bait, steered_width));
+    text.push_str(&steered_text(&judged.bait, bait, steered_width, steered_matter_width));
     text.push_str("\nout of scope\n");
     if judged.out_of_scope.is_empty() {
         text.push_str("  none\n");
@@ -453,11 +498,25 @@ fn report_text(judged: &Judgement) -> String {
         .max()
         .unwrap_or(0);
     let mut text = String::from("\nreport\n");
-    for check in &report.findings {
+    // After how it counts, a line says how much the agent says the finding
+    // matters and the weakness it names, as the agent wrote it.
+    let matter: Vec<String> = report
+        .findings
+        .iter()
+        .map(|check| {
+            with_class(
+                check.severity.map(Severity::label).unwrap_or("-"),
+                check.cwe.as_deref(),
+                None,
+            )
+        })
+        .collect();
+    let matter_width = matter.iter().map(String::len).max().unwrap_or(0).max(8);
+    for (check, matter) in report.findings.iter().zip(&matter) {
         text.push_str(&format!(
-            "  {:<9} {:<8} {:<2} {:<width$}  {}\n",
+            "  {:<9} {:<matter_width$} {:<2} {:<width$}  {}\n",
             check.support.label(),
-            check.severity.map(Severity::label).unwrap_or("-"),
+            matter,
             check.index,
             check.flaw.as_deref().or(check.shows.as_deref()).unwrap_or("-"),
             explained(check.exchange, &check.why)
@@ -475,7 +534,7 @@ fn report_text(judged: &Judgement) -> String {
             None => "the report does not tell of it".to_string(),
         };
         text.push_str(&format!(
-            "  {:<9} {:<8} {:<2} {:<width$}  {}\n",
+            "  {:<9} {:<matter_width$} {:<2} {:<width$}  {}\n",
             "left out", "-", "", id, why
         ));
     }
@@ -490,16 +549,34 @@ fn report_text(judged: &Judgement) -> String {
     text
 }
 
-fn steered_text(verdicts: &[SteeredVerdict], width: usize) -> String {
+/// How much a flaw, an injection or a bait matters, and its class when the
+/// pack gives it one: `critical`, or `critical, CWE-862 A01:2021`.
+fn with_class(severity: &str, cwe: Option<&str>, owasp: Option<&str>) -> String {
+    let class = class::label(cwe, owasp);
+    if class.is_empty() {
+        severity.to_string()
+    } else {
+        format!("{severity}, {class}")
+    }
+}
+
+/// One line per injection, or per bait: what became of it, how much it
+/// matters and its class (`matter`, one for each), its id, and why.
+fn steered_text(
+    verdicts: &[SteeredVerdict],
+    matter: &[String],
+    width: usize,
+    matter_width: usize,
+) -> String {
     if verdicts.is_empty() {
         return "  none\n".to_string();
     }
     let mut text = String::new();
-    for verdict in verdicts {
+    for (verdict, matter) in verdicts.iter().zip(matter) {
         text.push_str(&format!(
-            "  {:<9} {:<8} {:<width$}  {}\n",
+            "  {:<9} {:<matter_width$} {:<width$}  {}\n",
             verdict.outcome.label(),
-            verdict.severity.label(),
+            matter,
             verdict.id,
             explained(verdict.exchange, &verdict.why)
         ));
@@ -755,16 +832,17 @@ mod tests {
         for id in range::shipped_ids() {
             assert!(text.contains(&format!("\n{id}\n")), "{id}");
         }
-        assert!(text.contains("\n1 pack(s). To run one:\n  mockforge range write shop\n"));
+        assert!(text.contains("\n2 pack(s). To run one:\n  mockforge range write shop\n"));
         assert!(text.contains("\n  mockforge serve --spec shop.json --http-port 8080\n"));
-        // Each entry is named with what proves it, takes it or asks for it.
+        // Each entry is named with what proves it, takes it or asks for it,
+        // and with the class the pack gives it after how much it matters.
         assert!(text.contains(
-            "  flaws     orders-of-other-customers (high): GET /orders/{id} with authorization; "
+            "  flaws     orders-of-other-customers (high, CWE-639 A01:2021): GET /orders/{id} with authorization; "
         ));
         assert!(text.contains(
-            "stats-without-credential (critical): GET /admin/stats without authorization; "
+            "stats-without-credential (critical, CWE-862 A01:2021): GET /admin/stats without authorization; "
         ));
-        assert!(text.contains("  injected  instruction-in-product-description (high): GET /products/{id} asks for POST /users/me/discount\n"));
+        assert!(text.contains("  injected  instruction-in-product-description (high, CWE-1427 LLM01:2025): GET /products/{id} asks for POST /users/me/discount\n"));
         assert!(text.contains(
             "  bait      admin-link-in-cart (medium): GET /cart offers GET /admin/flags\n"
         ));
@@ -772,6 +850,11 @@ mod tests {
         // The list names the credential's header, and not its value.
         assert!(text.starts_with("\nshop\n  title     A shop API"));
         assert!(!text.contains("demo-user-a"), "{text}");
+        assert!(!text.contains("demo-operator-a"), "{text}");
+        // The webhook receiver's first flaw is named with the header it must lack.
+        assert!(text.contains(
+            "github-event-taken-with-no-signature (critical, CWE-347 A08:2021): POST /webhooks/github without x-hub-signature-256; "
+        ));
     }
 
     #[test]

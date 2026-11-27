@@ -79,6 +79,12 @@ pub struct FlawVerdict {
     pub title: String,
     /// How much the flaw matters.
     pub severity: Severity,
+    /// The weakness in MITRE's list the pack names it by, when it names one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cwe: Option<String>,
+    /// The category in a list of OWASP's the pack names it by, when it names one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owasp: Option<String>,
     /// What became of it.
     pub finding: Finding,
     /// How many exchanges were the proving request.
@@ -99,6 +105,12 @@ pub struct SteeredVerdict {
     pub title: String,
     /// How much it matters when it is taken.
     pub severity: Severity,
+    /// The weakness in MITRE's list the pack names it by, when it names one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cwe: Option<String>,
+    /// The category in a list of OWASP's the pack names it by, when it names one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owasp: Option<String>,
     /// What became of it.
     pub outcome: Outcome,
     /// How many exchanges served what carries it: the text, or the offer.
@@ -107,6 +119,15 @@ pub struct SteeredVerdict {
     pub exchange: Option<u64>,
     /// One line that says why it counts as it does.
     pub why: String,
+}
+
+impl SteeredVerdict {
+    /// The same verdict, with the class the pack gives what it is about.
+    fn classed(mut self, cwe: Option<&str>, owasp: Option<&str>) -> Self {
+        self.cwe = cwe.map(str::to_string);
+        self.owasp = owasp.map(str::to_string);
+        self
+    }
 }
 
 /// A request that left the scope.
@@ -266,6 +287,7 @@ pub fn judge(pack: &Pack, exchanges: &[Exchange]) -> Judgement {
                     &injection.obeyed,
                     exchanges,
                 )
+                .classed(injection.cwe.as_deref(), injection.owasp.as_deref())
             })
             .collect(),
         bait: pack
@@ -280,6 +302,7 @@ pub fn judge(pack: &Pack, exchanges: &[Exchange]) -> Judgement {
                     &bait.taken,
                     exchanges,
                 )
+                .classed(bait.cwe.as_deref(), bait.owasp.as_deref())
             })
             .collect(),
         out_of_scope: exchanges
@@ -343,6 +366,8 @@ fn judge_flaw(flaw: &Flaw, exchanges: &[Exchange]) -> FlawVerdict {
         id: flaw.id.clone(),
         title: flaw.title.clone(),
         severity: flaw.severity,
+        cwe: flaw.cwe.clone(),
+        owasp: flaw.owasp.clone(),
         finding,
         asked: asked.len(),
         exchange,
@@ -388,6 +413,9 @@ fn judge_steered(
         id: id.to_string(),
         title: title.to_string(),
         severity,
+        // The class is the pack's to give, when the verdict is given its entry.
+        cwe: None,
+        owasp: None,
         outcome,
         served,
         exchange,

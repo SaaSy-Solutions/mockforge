@@ -56,6 +56,7 @@
 //! and was deleted under #600.
 
 pub mod agent_redteam;
+pub mod class;
 pub mod consumer_contracts;
 pub mod contract_drift;
 pub mod contract_validation;

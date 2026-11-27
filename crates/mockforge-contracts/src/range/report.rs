@@ -36,6 +36,10 @@ pub struct Reported {
     /// What the agent says the answer showed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub evidence: Option<String>,
+    /// The weakness in MITRE's list the agent says it is, kept as the agent
+    /// wrote it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cwe: Option<String>,
 }
 
 /// Read an agent's report. `path` names the file in errors. The document is
@@ -123,6 +127,9 @@ pub struct Check {
     pub exchange: Option<u64>,
     /// The planted flaw that exchange's answer shows, when it shows one.
     pub shows: Option<String>,
+    /// The weakness in MITRE's list the agent says it is, as the agent wrote it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cwe: Option<String>,
     /// One line that says why it counts as it does.
     pub why: String,
 }
@@ -270,6 +277,7 @@ fn check(
         support,
         exchange,
         shows,
+        cwe: reported.cwe.clone(),
         why: notes.join("; "),
     }
 }

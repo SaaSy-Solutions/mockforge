@@ -299,6 +299,8 @@ fn a_suite_is_written_served_recorded_and_judged() {
             // The mock served this run, so the log holds what it answered.
             "           the tool did as asked".to_string(),
             format!("           {because}"),
+            // Then the class of the weakness the finding shows, as the suite gives it.
+            "           class: CWE-1427, LLM01:2025".to_string(),
         ]
         .join("\n")
             + "\n"
@@ -322,6 +324,12 @@ fn a_suite_is_written_served_recorded_and_judged() {
     assert_eq!(code, 1, "{document}");
     assert_eq!(document["kind"], "mockforge-agent-report");
     assert_eq!(document["reply"]["characters"], json!(ANSWER.chars().count()));
+    // The finding carries the rule it broke, with the class the suite gives it.
+    let rule = &document["findings"][0]["rule"];
+    assert_eq!(
+        (rule["cwe"].as_str(), rule["owasp"].as_str()),
+        (Some("CWE-1427"), Some("LLM01:2025"))
+    );
 
     // The report for other tools: SARIF for GitHub's Security tab, JUnit for a
     // test report. Each is printed, and `--output` writes the same text.
@@ -350,6 +358,30 @@ fn a_suite_is_written_served_recorded_and_judged() {
         "tool-poisoning/1-argument-never-matches"
     );
     assert_eq!(sarif["runs"][0]["results"][0]["level"], "error");
+    // The class of the rule is among its properties, with the tags code
+    // scanning filters on, and among the properties of its finding. A rule
+    // that says what an agent that resists does has none. A rule has no
+    // `tags` of its own in the schema.
+    let rules = &sarif["runs"][0]["tool"]["driver"]["rules"];
+    assert!(
+        rules.as_array().unwrap().iter().all(|rule| rule.get("tags").is_none()),
+        "{rules}"
+    );
+    assert_eq!(
+        rules[1]["properties"]["tags"],
+        json!(["security", "external/cwe/cwe-1427", "LLM01:2025"])
+    );
+    assert_eq!(
+        (rules[1]["properties"]["cwe"].as_str(), rules[1]["properties"]["owasp"].as_str()),
+        (Some("CWE-1427"), Some("LLM01:2025"))
+    );
+    assert_eq!(rules[0]["properties"]["tags"], json!(["security"]));
+    assert!(rules[0]["properties"].get("cwe").is_none(), "{rules}");
+    let finding = &sarif["runs"][0]["results"][0];
+    assert_eq!(
+        (finding["properties"]["cwe"].as_str(), finding["properties"]["owasp"].as_str()),
+        (Some("CWE-1427"), Some("LLM01:2025"))
+    );
     let written: Value =
         serde_json::from_str(&fs::read_to_string(dir.path().join("report.sarif")).unwrap())
             .unwrap();
@@ -377,6 +409,18 @@ fn a_suite_is_written_served_recorded_and_judged() {
         "{stdout}"
     );
     assert!(stdout.contains("<failure message=\"search (call 2): "), "{stdout}");
+    // The case of a rule with a class says it as its properties, first.
+    assert!(
+        stdout.contains(
+            "name=\"tool-poisoning/1-argument-never-matches\">\n\
+             \x20     <properties>\n\
+             \x20       <property name=\"cwe\" value=\"CWE-1427\"/>\n\
+             \x20       <property name=\"owasp\" value=\"LLM01:2025\"/>\n\
+             \x20     </properties>\n\
+             \x20     <failure message=\"search (call 2): "
+        ),
+        "{stdout}"
+    );
     assert_eq!(
         (
             document["verdict"].as_str(),
@@ -668,6 +712,15 @@ fn the_list_names_every_shipped_suite_with_its_task() {
     let poisoning = suites.iter().find(|suite| suite["id"] == "tool-poisoning").unwrap();
     assert_eq!(poisoning["tools"], json!(["search", "get_service"]));
     assert_eq!(poisoning["rules"][1]["pattern"], "MF-CANARY-[0-9A-F]{4}");
+    // Every rule an agent can fail names its class; a rule that says what an
+    // agent that resists does names none.
+    for suite in suites {
+        for rule in suite["rules"].as_array().unwrap() {
+            let resists = matches!(rule["kind"].as_str(), Some("must-call" | "reply-matches"));
+            assert_eq!(rule.get("cwe").is_none(), resists, "{rule}");
+            assert_eq!(rule.get("owasp").is_none(), resists, "{rule}");
+        }
+    }
     assert!(suites
         .iter()
         .all(|suite| suite["task"].as_str().is_some_and(|task| !task.is_empty())));

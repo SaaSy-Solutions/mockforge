@@ -10,6 +10,7 @@ use sha2::{Digest, Sha256};
 
 use super::error::{invalid_pack, Result};
 use super::paths;
+use crate::class;
 
 /// The `kind` of a pack document, so a reader can tell what it holds.
 pub const PACK_KIND: &str = "mockforge-range-pack";
@@ -101,6 +102,13 @@ pub struct Flaw {
     pub title: String,
     /// How much it matters.
     pub severity: Severity,
+    /// The weakness in MITRE's list, as its site writes it: `CWE-639`. A
+    /// report carries it to the tools that group by it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cwe: Option<String>,
+    /// The category in a list of OWASP's, as OWASP writes it: `A01:2021`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owasp: Option<String>,
     /// The request that shows it, and the answer that proves it.
     pub prove: Proof,
 }
@@ -226,6 +234,12 @@ pub struct Injection {
     pub title: String,
     /// How much it matters when it is obeyed.
     pub severity: Severity,
+    /// The weakness in MITRE's list, as its site writes it: `CWE-1427`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cwe: Option<String>,
+    /// The category in a list of OWASP's, as OWASP writes it: `LLM01:2025`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owasp: Option<String>,
     /// The operation that serves the text.
     pub planted: Operation,
     /// The request the text asks for.
@@ -243,6 +257,12 @@ pub struct Bait {
     pub title: String,
     /// How much it matters when it is taken.
     pub severity: Severity,
+    /// The weakness in MITRE's list, as its site writes it: `CWE-639`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cwe: Option<String>,
+    /// The category in a list of OWASP's, as OWASP writes it: `A01:2021`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owasp: Option<String>,
     /// The operation that makes the offer.
     pub offered: Operation,
     /// The request that is out of scope.
@@ -368,19 +388,39 @@ impl Pack {
             return Some("the scope is empty, so the agent may test nothing".to_string());
         }
 
-        // Nothing is planted twice.
+        // Nothing is planted twice, and a class is written as its list writes it.
         let mut ids = BTreeSet::new();
         let planted = self
             .flaws
             .iter()
-            .map(|flaw| ("flaw", &flaw.id, flaw.title.as_str()))
-            .chain(
-                self.injections
-                    .iter()
-                    .map(|injection| ("injection", &injection.id, injection.title.as_str())),
-            )
-            .chain(self.bait.iter().map(|bait| ("bait", &bait.id, bait.title.as_str())));
-        for (what, id, title) in planted {
+            .map(|flaw| {
+                (
+                    "flaw",
+                    &flaw.id,
+                    flaw.title.as_str(),
+                    flaw.cwe.as_deref(),
+                    flaw.owasp.as_deref(),
+                )
+            })
+            .chain(self.injections.iter().map(|injection| {
+                (
+                    "injection",
+                    &injection.id,
+                    injection.title.as_str(),
+                    injection.cwe.as_deref(),
+                    injection.owasp.as_deref(),
+                )
+            }))
+            .chain(self.bait.iter().map(|bait| {
+                (
+                    "bait",
+                    &bait.id,
+                    bait.title.as_str(),
+                    bait.cwe.as_deref(),
+                    bait.owasp.as_deref(),
+                )
+            }));
+        for (what, id, title, cwe, owasp) in planted {
             if !is_word(id) {
                 return Some(format!(
                     "the {what}'s `id` is `{id}`; it is lowercase words and digits joined by `-`"
@@ -391,6 +431,9 @@ impl Pack {
             }
             if title.trim().is_empty() {
                 return Some(format!("the {what} `{id}` has an empty `title`"));
+            }
+            if let Some(reason) = class::problem(cwe, owasp) {
+                return Some(format!("the {what} `{id}` has {reason}"));
             }
         }
         if self.flaws.is_empty() {
@@ -605,7 +648,10 @@ fn titled_names(map: BTreeMap<String, String>) -> BTreeMap<String, String> {
 }
 
 /// The packs MockForge ships, by id and as JSON.
-const SHIPPED: [(&str, &str); 1] = [("shop", include_str!("packs/shop.json"))];
+const SHIPPED: [(&str, &str); 2] = [
+    ("shop", include_str!("packs/shop.json")),
+    ("webhooks", include_str!("packs/webhooks.json")),
+];
 
 /// The ids of the packs MockForge ships, in alphabetical order.
 pub fn shipped_ids() -> Vec<&'static str> {
@@ -654,7 +700,7 @@ mod tests {
 
     #[test]
     fn every_shipped_pack_can_be_served_and_judged() {
-        assert_eq!(shipped_ids(), vec!["shop"]);
+        assert_eq!(shipped_ids(), vec!["shop", "webhooks"]);
         for id in shipped_ids() {
             let pack = Pack::from_json(shipped(id).unwrap(), "p").unwrap();
             assert_eq!(pack.problem(), None, "{id}");
@@ -716,6 +762,89 @@ mod tests {
         assert!(pack.in_scope("/orders/5001") && pack.in_scope("/admin/stats"));
         assert!(!pack.in_scope("/nope") && !pack.in_scope("/orders/5001/items"));
         assert_eq!(pack.operations(), 9);
+    }
+
+    #[test]
+    fn the_webhooks_pack_plants_what_a_receiver_gets_wrong() {
+        let pack = Pack::from_json(shipped("webhooks").unwrap(), "p").unwrap();
+        // Each flaw is proved on an operation of the spec, inside the scope.
+        for flaw in &pack.flaws {
+            let (path, _) = pack
+                .resolve(&flaw.prove.claim.method, &flaw.prove.claim.path)
+                .unwrap_or_else(|| panic!("{} is not served", flaw.prove.label()));
+            assert!(pack.in_scope(path), "{}", flaw.prove.label());
+        }
+        // Each provider's operation names the headers it signs with, as its
+        // documentation names them; none is required, so that an unsigned
+        // event reaches the receiver.
+        for (path, headers) in [
+            ("/webhooks/github", vec!["X-Hub-Signature-256"]),
+            ("/webhooks/stripe", vec!["Stripe-Signature"]),
+            ("/webhooks/slack", vec!["X-Slack-Signature", "X-Slack-Request-Timestamp"]),
+            ("/webhooks/shopify", vec!["X-Shopify-Hmac-SHA256"]),
+            ("/webhooks/twilio", vec!["X-Twilio-Signature"]),
+            ("/webhooks/svix", vec!["svix-signature", "svix-id", "svix-timestamp"]),
+        ] {
+            let (resolved, _) = pack.resolve("post", path).unwrap();
+            let operation = &pack.spec["paths"][resolved]["post"];
+            let named: Vec<&str> = operation["parameters"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|parameter| {
+                    assert_eq!(parameter["required"], json!(false), "{path}");
+                    parameter["name"].as_str().unwrap()
+                })
+                .collect();
+            for header in headers {
+                assert!(named.contains(&header), "{path}: {header}");
+            }
+        }
+        // Every provider's endpoint has a flaw proved on it.
+        let providers = [
+            "/webhooks/github",
+            "/webhooks/stripe",
+            "/webhooks/slack",
+            "/webhooks/shopify",
+            "/webhooks/twilio",
+            "/webhooks/svix",
+        ];
+        for path in providers {
+            assert!(pack.flaws.iter().any(|flaw| flaw.prove.claim.path == path), "{path}");
+        }
+        // The deliveries page is where the run's text is. A flaw that is proved
+        // by headers with exact values names headers the page shows, on a
+        // delivery of that provider, so that an agent can send them; and a
+        // delivery carries the note of the injection.
+        let (_, served) = pack.resolve("get", "/webhooks/deliveries").unwrap();
+        let deliveries = served["responses"]["200"]["content"]["application/json"]["example"]
+            .as_array()
+            .unwrap();
+        for flaw in pack.flaws.iter().filter(|flaw| !flaw.prove.claim.with.is_empty()) {
+            let provider = flaw.prove.claim.path.rsplit('/').next().unwrap();
+            for (name, value) in &flaw.prove.claim.with {
+                let shown = deliveries
+                    .iter()
+                    .filter(|delivery| delivery["provider"] == provider)
+                    .filter_map(|delivery| delivery["request_headers"].as_object())
+                    .any(|headers| {
+                        headers.iter().any(|(shown, found)| {
+                            shown.eq_ignore_ascii_case(name) && found == value
+                        })
+                    });
+                assert!(shown, "{}: {name}", flaw.id);
+            }
+        }
+        assert!(deliveries.iter().any(|delivery| {
+            delivery["note"].as_str().is_some_and(|note| {
+                crate::mcp_contract::signals::text_signals(note).iter().any(|signal| {
+                    signal.kind == crate::mcp_contract::SignalKind::InstructionLikeText
+                })
+            })
+        }));
+        // The bait leads out of the scope, from inside it.
+        assert!(pack.in_scope("/webhooks/settings"));
+        assert!(!pack.in_scope("/admin/webhooks/secrets/rotate"));
     }
 
     #[test]
@@ -886,10 +1015,70 @@ mod tests {
     fn no_shipped_pack_is_named_by_an_unknown_id() {
         assert_eq!(
             shipped("nope").unwrap_err().to_string(),
-            "no shipped pack has the id `nope`; the shipped packs are shop"
+            "no shipped pack has the id `nope`; the shipped packs are shop, webhooks"
         );
         for id in shipped_ids() {
             assert!(serde_json::from_str::<Value>(shipped(id).unwrap()).is_ok(), "{id}");
+        }
+    }
+
+    #[test]
+    fn a_class_is_written_as_its_list_writes_it() {
+        let said = |text: &str| Pack::from_json(text, "pack.json").unwrap_err().to_string();
+        assert_eq!(
+            said(&flaw("orders-of-other-customers", |f| f["cwe"] = json!("89"))),
+            "pack.json: the flaw `orders-of-other-customers` has `cwe` set to `89`, which is not written as `CWE-89`"
+        );
+        assert_eq!(
+            said(&flaw("orders-of-other-customers", |f| f["owasp"] = json!("Injection"))),
+            "pack.json: the flaw `orders-of-other-customers` has `owasp` set to `Injection`, \
+             which is not written as `A03:2021`"
+        );
+        let injection = said(&edited("shop", |d| d["injections"][0]["cwe"] = json!("CWE")));
+        assert!(injection
+            .contains("the injection `instruction-in-product-description` has `cwe` set to `CWE`"));
+        let bait = said(&edited("shop", |d| d["bait"][0]["owasp"] = json!("A1")));
+        assert!(bait.contains("the bait `admin-link-in-cart` has `owasp` set to `A1`"));
+
+        // Written as the lists write them, the class is the pack's to give: a
+        // weakness of MITRE's, a category of each of OWASP's lists.
+        for (cwe, owasp) in [
+            ("CWE-639", "A01:2021"),
+            ("CWE-1427", "API10:2023"),
+            ("CWE-200", "LLM02:2025"),
+        ] {
+            let pack = Pack::from_json(
+                &flaw("orders-of-other-customers", |f| {
+                    f["cwe"] = json!(cwe);
+                    f["owasp"] = json!(owasp);
+                }),
+                "p",
+            )
+            .unwrap();
+            assert_eq!(pack.problem(), None, "{cwe} {owasp}");
+            let flaw = &pack.flaws[0];
+            assert_eq!((flaw.cwe.as_deref(), flaw.owasp.as_deref()), (Some(cwe), Some(owasp)));
+        }
+        // A pack that names no class reads back with none.
+        let bare = serde_json::to_value(crate::range::testing::pack()).unwrap();
+        let bare = Pack::from_json(&bare.to_string(), "p").unwrap();
+        assert!(bare.flaws.iter().all(|flaw| flaw.cwe.is_none() && flaw.owasp.is_none()));
+    }
+
+    #[test]
+    fn every_shipped_flaw_names_its_class() {
+        // A shipped pack names the class of each flaw it plants: it is how a
+        // report reaches a tool that groups and filters by it.
+        for id in shipped_ids() {
+            let pack = Pack::from_json(shipped(id).unwrap(), "p").unwrap();
+            for flaw in &pack.flaws {
+                assert!(
+                    flaw.cwe.as_deref().is_some_and(class::is_cwe)
+                        && flaw.owasp.as_deref().is_some_and(class::is_owasp),
+                    "{id}: {}",
+                    flaw.id
+                );
+            }
         }
     }
 }
