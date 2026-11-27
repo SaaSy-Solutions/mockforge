@@ -2314,8 +2314,19 @@ fn the_catalogue_is_listed_as_text_and_as_one_document() {
         "proved by: the `Authorization` header set to `Bearer eyJhbGc…`",
         "upload-of-any-type high CWE-434 A04:2021",
         "from SemSec: py-upload-dangerous-extension, vibe-upload-no-type-check",
-        "9 kind(s). To plant one:",
+        "command-injection critical CWE-78 A03:2021",
+        "proved by: a query carrying `<parameter>` set to `127.0.0.1; id`",
+        "planted by: the operation answers otherwise, to a request with `<parameter>` holding `; `",
+        "open-redirect medium CWE-601 A01:2021",
+        "shows: status 302, the `Location` header set to `https://evil.example/phish`",
+        "sql-injection critical CWE-89 A03:2021",
+        "from SemSec: py-sqli-taint-django, py-sqli-taint-sqlalchemy, js-sqli-taint, java-sqli-taint, php-sqli-taint",
+        "template-injection high CWE-1336 A03:2021",
+        "shows: the operation's own success, holding `greeting` as \"Hello, 49!\"",
+        "16 kind(s). To plant one:",
         "mockforge range new --har traffic.har --id my-api --flaw another-customers-record --at \"GET /v1/orders/{id}\"",
+        "One injected through a query parameter takes its name after a colon:",
+        "mockforge range new --har traffic.har --id my-api --flaw sql-injection:q --at \"GET /search\"",
     ] {
         assert!(lines.iter().any(|said| said == line), "{line}: not in what it printed\n{text}");
     }
@@ -2323,39 +2334,240 @@ fn the_catalogue_is_listed_as_text_and_as_one_document() {
     let (code, kinds) = document(&["range", "flaws", "--format", "json"]);
     assert_eq!(code, 0);
     let kinds = kinds.as_array().unwrap();
-    assert_eq!(kinds.len(), 9);
+    assert_eq!(kinds.len(), 16);
     // By id.
     assert_eq!(kinds[0]["id"], "another-customers-record");
     assert_eq!(kinds[1]["id"], "any-origin-allowed");
-    assert_eq!(kinds[4]["id"], "mass-assignment");
-    assert_eq!(kinds[5]["id"], "no-credential");
-    assert_eq!(kinds[8]["id"], "upload-of-any-type");
+    assert_eq!(kinds[2]["id"], "command-injection");
+    assert_eq!(kinds[3]["id"], "error-tells-too-much");
+    assert_eq!(kinds[5]["id"], "mass-assignment");
+    assert_eq!(kinds[6]["id"], "no-credential");
+    assert_eq!(kinds[11]["id"], "sql-injection");
+    assert_eq!(kinds[15]["id"], "upload-of-any-type");
+    assert_eq!(kinds[1]["through"], "nothing");
+    assert_eq!(kinds[11]["through"], "query-parameter");
+    // A kind injected through a parameter names the placeholder until it is
+    // planted, in the request that proves it and in the answer.
+    assert_eq!(
+        kinds[11]["prove"]["query_with"],
+        serde_json::json!([["<parameter>", "' OR '1'='1' --"]])
+    );
+    assert_eq!(
+        kinds[11]["plant"],
+        serde_json::json!({
+            "by": "otherwise",
+            "when": { "query_contains": { "<parameter>": "' OR " } },
+            "then": {
+                "status": 500,
+                "body": {
+                    "error": "sql_error",
+                    "message": "You have an error in your SQL syntax; check the manual that corresponds to your server version for the right syntax to use near ''OR '1'='1' --' at line 1",
+                    "query": "SELECT id, name, price FROM items WHERE name = '{{request.query.<parameter>}}' AND shop_id = 7 ORDER BY id LIMIT 20"
+                }
+            }
+        })
+    );
     // As `with` and `has` are written: a list of pairs.
     assert_eq!(
         kinds[1]["shows"]["has_header"],
         serde_json::json!([["Access-Control-Allow-Origin", "*"]])
     );
-    assert_eq!(kinds[4]["prove"]["query_with"], serde_json::json!([]));
+    assert_eq!(kinds[5]["prove"]["query_with"], serde_json::json!([]));
     assert_eq!(
-        kinds[4]["plant"],
+        kinds[5]["plant"],
         serde_json::json!({ "by": "answer", "when": { "body_contains": "\"role\"" }, "fields": [["role", "\"{{request.body.role}}\""]] })
     );
-    assert_eq!(kinds[5]["prove"]["without"], serde_json::json!(["authorization"]));
-    assert_eq!(kinds[5]["shows"]["status"], Value::Null);
+    assert_eq!(kinds[6]["prove"]["without"], serde_json::json!(["authorization"]));
+    assert_eq!(kinds[6]["shows"]["status"], Value::Null);
     assert_eq!(
         kinds[0]["plant"],
         serde_json::json!({ "by": "fields", "fields": [["customer_id", "\"u_1024\""]] })
     );
-    assert_eq!(kinds[2]["plant"]["by"], "failure");
-    assert_eq!(kinds[2]["plant"]["status"], 500);
-    assert_eq!(kinds[5]["plant"], serde_json::json!({ "by": "as-recorded" }));
-    assert_eq!(kinds[5]["severity"], "critical");
-    assert_eq!(kinds[5]["cwe"], "CWE-862");
-    assert!(kinds[5]["from"]
+    assert_eq!(kinds[3]["plant"]["by"], "failure");
+    assert_eq!(kinds[3]["plant"]["status"], 500);
+    assert_eq!(kinds[6]["plant"], serde_json::json!({ "by": "as-recorded" }));
+    assert_eq!(kinds[6]["severity"], "critical");
+    assert_eq!(kinds[6]["cwe"], "CWE-862");
+    assert!(kinds[6]["from"]
         .as_array()
         .unwrap()
         .iter()
         .all(|rule| rule.as_str().is_some_and(|rule| !rule.is_empty())));
+}
+
+/// A recording of a search asked with a query parameter, twice.
+const A_SEARCH_RECORDING: &str = r#"{ "log": { "version": "1.2", "entries": [
+  { "request": { "method": "GET", "url": "https://api.example.net/v1/search?q=shoes", "headers": [] },
+    "response": { "status": 200, "content": { "mimeType": "application/json",
+      "text": "{\"results\": [{\"id\": 1, \"name\": \"shoes\"}]}" } } },
+  { "request": { "method": "GET", "url": "https://api.example.net/v1/search?q=boots", "headers": [] },
+    "response": { "status": 200, "content": { "mimeType": "application/json",
+      "text": "{\"results\": [{\"id\": 2, \"name\": \"boots\"}]}" } } }
+] } }"#;
+
+#[test]
+fn a_kind_is_injected_through_a_query_parameter_and_shown_to_that_request_alone() {
+    let workspace = tempfile::tempdir().unwrap();
+    let recording = workspace.path().join("search.har");
+    fs::write(&recording, A_SEARCH_RECORDING).unwrap();
+    let api = workspace.path().join("search.json");
+    let pack = workspace.path().join("search.pack.json");
+    let (code, text, stderr) = run(&[
+        "range",
+        "new",
+        "--har",
+        &shown(&recording),
+        "--id",
+        "search",
+        "--output",
+        &shown(&api),
+        "--flaw",
+        "sql-injection:q",
+        "--at",
+        "GET /v1/search",
+        "--flaw",
+        "another-customers-record",
+        "--at",
+        "GET /v1/search",
+    ]);
+    assert_eq!((code, stderr.as_str()), (0, ""), "{text}");
+    let lines = said(&text);
+    for line in [
+        "1 operation(s) declare the query parameter(s) the recording asked with",
+        "2 flaw(s) planted from the catalogue: sql-injection-get-v1-search-q, another-customers-record-get-v1-search",
+    ] {
+        assert!(
+            lines.contains(&line.to_string()),
+            "{line}: not in what it printed\n{text}"
+        );
+    }
+    // The API declares the parameter, so that an agent can find it, and holds
+    // the answer by request.
+    let api_text = fs::read_to_string(&api).unwrap();
+    assert!(
+        api_text.contains("\"x-mockforge-answers\"") && api_text.contains("\"in\": \"query\""),
+        "{api_text}"
+    );
+
+    // Every other search gets what was recorded, with the other planted flaw
+    // in it; the injection gets the SQL error, saying back what was sent.
+    let log = workspace.path().join("exchanges.jsonl");
+    let server =
+        Mockserve::start(&["--spec", &shown(&api), "--exchange-log", &shown(&log)]).unwrap();
+    let (status, body) = request(server.port, "GET", "/v1/search?q=shoes", &[], "");
+    let answer: Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(answer["results"][0]["name"], "shoes", "{body}");
+    assert_eq!(answer["customer_id"], "u_1024", "{body}");
+    let (status, body) =
+        request(server.port, "GET", "/v1/search?q=%27%20OR%20%271%27%3D%271%27%20--", &[], "");
+    assert_eq!(status, 500, "{body}");
+    assert!(body.contains("SQL syntax") && body.contains("' OR '1'='1' --"), "{body}");
+    drop(server);
+
+    // The judge finds both: the one through the parameter by the request that
+    // carried it, and the other by any request of the operation.
+    let (code, text, stderr) = run(&[
+        "range",
+        "judge",
+        "--pack",
+        &shown(&pack),
+        "--exchanges",
+        &shown(&log),
+    ]);
+    assert_eq!((code, stderr.as_str()), (0, ""), "{text}");
+    let lines = said(&text);
+    for line in [
+        "found critical, CWE-89 A03:2021 sql-injection-get-v1-search-q",
+        "found high, CWE-639 A01:2021 another-customers-record-get-v1-search",
+    ] {
+        assert!(
+            lines.iter().any(|said| said.starts_with(line)),
+            "{line}: not in what it printed\n{text}"
+        );
+    }
+    assert_eq!(lines.iter().filter(|line| line.starts_with("found ")).count(), 2, "{text}");
+
+    // What cannot be planted is named, and nothing is written.
+    let nowhere = workspace.path().join("nowhere.json");
+    for (flaw, reason) in [
+        (
+            "sql-injection",
+            "`sql-injection` is injected through a query parameter: name it after the kind, as `sql-injection:q`",
+        ),
+        (
+            "ssrf:url",
+            "`GET /v1/search` declares no query parameter `url`: it declares `q`",
+        ),
+        (
+            "no-credential:q",
+            "`no-credential` is injected through nothing: `q` names a parameter",
+        ),
+    ] {
+        let (code, _, stderr) = run(&[
+            "range",
+            "new",
+            "--har",
+            &shown(&recording),
+            "--id",
+            "search",
+            "--output",
+            &shown(&nowhere),
+            "--flaw",
+            flaw,
+            "--at",
+            "GET /v1/search",
+        ]);
+        assert_eq!(code, 2, "{flaw}");
+        assert_eq!(stderr.trim(), format!("Error: {}: {reason}", shown(&recording)), "{flaw}");
+    }
+    assert!(!nowhere.exists());
+}
+
+#[test]
+fn a_flaw_planted_from_the_catalogue_is_found_by_what_its_answer_holds() {
+    // The values a flaw's answer must hold are written as JSON, and were
+    // written as text: the judge looked for `"u_1024"` with its quotes.
+    let workspace = tempfile::tempdir().unwrap();
+    let recording = workspace.path().join("traffic.har");
+    fs::write(&recording, A_RECORDING).unwrap();
+    let api = workspace.path().join("orders.json");
+    let pack = workspace.path().join("orders.pack.json");
+    let (code, text, stderr) = run(&[
+        "range",
+        "new",
+        "--har",
+        &shown(&recording),
+        "--id",
+        "orders",
+        "--output",
+        &shown(&api),
+        "--flaw",
+        "key-on-the-client",
+        "--at",
+        "GET /v1/me",
+    ]);
+    assert_eq!((code, stderr.as_str()), (0, ""), "{text}");
+    let log = workspace.path().join("exchanges.jsonl");
+    let server =
+        Mockserve::start(&["--spec", &shown(&api), "--exchange-log", &shown(&log)]).unwrap();
+    request(server.port, "GET", "/v1/me", &[], "");
+    drop(server);
+    let (code, judged) = document(&[
+        "range",
+        "judge",
+        "--format",
+        "json",
+        "--pack",
+        &shown(&pack),
+        "--exchanges",
+        &shown(&log),
+    ]);
+    assert_eq!(code, 0, "{judged}");
+    let flaw = &judged["flaws"][0];
+    assert_eq!(flaw["id"], "key-on-the-client-get-v1-me");
+    assert_eq!(flaw["finding"], "found", "{judged}");
+    assert_eq!(flaw["why"], "GET /v1/me answered 200");
 }
 
 #[test]
@@ -2420,7 +2632,7 @@ fn a_kind_of_flaw_is_planted_from_the_catalogue_at_the_operation_named() {
     assert_eq!((code, stdout.as_str()), (2, ""));
     assert!(
         stderr.starts_with(
-            "Error: no kind of flaw has the id `nope`; `range flaws` lists them: another-customers-record, any-origin-allowed, error-tells-too-much, key-on-the-client, mass-assignment, no-credential, password-in-answer, unsigned-token-accepted, upload-of-any-type"
+            "Error: no kind of flaw has the id `nope`; `range flaws` lists them: another-customers-record, any-origin-allowed, command-injection, error-tells-too-much, key-on-the-client, mass-assignment, no-credential, open-redirect, password-in-answer, path-traversal, reflected-xss, sql-injection, ssrf, template-injection, unsigned-token-accepted, upload-of-any-type"
         ),
         "{stderr}"
     );

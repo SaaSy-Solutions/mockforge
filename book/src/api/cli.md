@@ -828,6 +828,7 @@ mockforge range write all --output-dir range
 mockforge range new --har traffic.har --id orders
 mockforge range flaws
 mockforge range new --har traffic.har --id orders --flaw no-credential --at "POST /v1/orders"
+mockforge range new --har search.har --id search --flaw sql-injection:q --at "GET /v1/search"
 mockforge serve --spec shop.json --http-port 8080 --exchange-log exchanges.jsonl
 mockforge range judge --pack shop.pack.json --exchanges exchanges.jsonl
 mockforge range compare --pack shop.pack.json --run scout=scout.jsonl --run reader=reader.jsonl
@@ -867,8 +868,12 @@ mockforge range run --pack shop.pack.json --agent "my-agent --target {url} --rep
 - `--keep-keys`: keep a key of a known shape as it was recorded. Without it,
   each is replaced by a made-up key of the same shape, and the command says
   how many.
-- `--flaw <KIND>`: a kind of flaw to plant, by its id as `range flaws` lists
-  it. Each is planted at the operation of the `--at` of its place.
+- `--flaw <KIND[:PARAMETER]>`: a kind of flaw to plant, by its id as
+  `range flaws` lists it. Each is planted at the operation of the `--at` of
+  its place. A kind injected through a query parameter takes the parameter's
+  name after a colon, `sql-injection:q`: it is planted as an answer by
+  request, given only to a request that carries the injection, and the
+  operation must declare the parameter.
 - `--at <METHOD PATH>`: where to plant a flaw: a path of the pack. There is
   one for each `--flaw`.
 - `--force`: replace files that are already there.
@@ -935,7 +940,10 @@ request that proves it, the answer that shows it, its CWE and OWASP
 category, and the SemSec rules whose class it is. `range new` plants a
 kind at an operation with `--flaw KIND --at "METHOD PATH"`: the operation's
 answer is changed as the kind says, and the flaw that proves it is added to
-the pack with its class.
+the pack with its class. Seven kinds are injected through a query parameter
+and take its name after a colon, `--flaw sql-injection:q`: the operation
+answers the request that carries the injection, and every other request as it
+did.
 
 A proving request may name the query string: `query_with` names parameters it
 must carry, with their values, and `query_without` names those it must not.
@@ -992,8 +1000,10 @@ properties. The exit code is the judge's in every form.
 `range new` begins a pack from a recording (`--har`) or from a spec
 (`--spec`): the API as it is, with nothing planted. Paths that differ only in
 an id are one operation, `GET /v1/orders/{orderId}`, and its answer echoes the
-id it is asked for. An operation answers as the recording answered it most
-often. A header that carries a credential is named with a value to replace and
+id it is asked for. The query parameters the recording asked with are declared
+on each operation that was asked with them, once and as optional, and the
+command says how many operations do. An operation answers as the recording
+answered it most often. A header that carries a credential is named with a value to replace and
 never copied, and a key of a known shape in an answer is replaced by a made-up
 key of the same shape unless `--keep-keys` is given; the rest of the answer
 bodies is copied as they were recorded. The pack holds

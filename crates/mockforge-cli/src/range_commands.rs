@@ -184,6 +184,13 @@ fn flaws_text() -> String {
                     .collect::<Vec<String>>()
                     .join(", ")
             ),
+            range::catalogue::Plant::Otherwise { when_, then_: _ } => {
+                let when: mockforge_openapi::answers::When = serde_json::from_str(when_)
+                    .unwrap_or_else(|error| {
+                        panic!("the `when` of `{}` is not JSON: {error}", kind.id)
+                    });
+                format!("the operation answers otherwise, to a request with {}", when.label())
+            }
             range::catalogue::Plant::Answer { when_, fields } => {
                 let when: mockforge_openapi::answers::When = serde_json::from_str(when_)
                     .unwrap_or_else(|error| {
@@ -230,8 +237,13 @@ fn flaws_text() -> String {
     // value reads as a shell redirect to the docs check, and as a puzzle to a
     // person.
     let first = blocks.first().copied().unwrap_or("<kind>");
+    // A kind injected through a query parameter is named in the line that
+    // shows how, with a parameter of its own.
+    let injected = range::catalogue::FlawKind::by_id("sql-injection")
+        .map(|kind| kind.id)
+        .unwrap_or("<kind>");
     text.push_str(&format!(
-        "\n{} kind(s). To plant one:\n  mockforge range new --har traffic.har --id my-api --flaw {first} --at \"GET /v1/orders/{{id}}\"\n",
+        "\n{} kind(s). To plant one:\n  mockforge range new --har traffic.har --id my-api --flaw {first} --at \"GET /v1/orders/{{id}}\"\nOne injected through a query parameter takes its name after a colon:\n  mockforge range new --har traffic.har --id my-api --flaw {injected}:q --at \"GET /search\"\n",
         blocks.len()
     ));
     text
@@ -284,9 +296,11 @@ pub(crate) struct NewArgs {
     /// replaced by a made-up key of the same shape
     #[arg(long)]
     pub keep_keys: bool,
-    /// A kind of flaw to plant, by its id as `range flaws` lists it. Each is
-    /// planted at the operation of the `--at` of its place
-    #[arg(long = "flaw", value_name = "KIND")]
+    /// A kind of flaw to plant, by its id as `range flaws` lists it. A kind
+    /// injected through a query parameter takes the parameter's name after a
+    /// colon: `sql-injection:q`. Each is planted at the operation of the
+    /// `--at` of its place
+    #[arg(long = "flaw", value_name = "KIND[:PARAMETER]")]
     pub flaws: Vec<String>,
     /// Where to plant a flaw: `METHOD PATH`, a path of the pack. There is one
     /// for each `--flaw`
@@ -959,7 +973,13 @@ fn new(args: NewArgs) -> Result<i32, String> {
     }
     let mut planted = Vec::new();
     for (flaw, at) in args.flaws.iter().zip(&args.at) {
-        let Some(kind) = range::catalogue::FlawKind::by_id(flaw) else {
+        // `KIND` names a kind; `KIND:PARAMETER` names one too, and the query
+        // parameter it is injected through.
+        let (named, parameter) = flaw
+            .split_once(':')
+            .map_or((flaw.as_str(), None), |(named, parameter)| (named, Some(parameter)));
+        let parameter = parameter.filter(|name| !name.is_empty());
+        let Some(kind) = range::catalogue::FlawKind::by_id(named) else {
             let known: Vec<&str> = range::catalogue::KINDS.iter().map(|kind| kind.id).collect();
             return Err(format!(
                 "no kind of flaw has the id `{flaw}`; `range flaws` lists them: {}",
@@ -973,7 +993,12 @@ fn new(args: NewArgs) -> Result<i32, String> {
         if words.next().is_some() {
             return Err(format!("{takes}; `{at}` holds more than two words"));
         }
-        planted.push(range::catalogue::Planted { kind, method, path });
+        planted.push(range::catalogue::Planted {
+            kind,
+            method,
+            path,
+            parameter,
+        });
     }
     let asked = range::skeleton::Asked {
         id: &args.id,
@@ -1036,6 +1061,12 @@ fn new(args: NewArgs) -> Result<i32, String> {
         println!(
             "{} operation(s) have a parameter in the path, and answer with the value that was asked for",
             skeleton.templated
+        );
+    }
+    if skeleton.queried > 0 {
+        println!(
+            "{} operation(s) declare the query parameter(s) the recording asked with",
+            skeleton.queried
         );
     }
     if !skeleton.credentials.is_empty() {
