@@ -121,8 +121,14 @@ class CacheGuardTest(unittest.TestCase):
         (directory / "lib-example.json").write_text("{}")
         self.assertEqual(GUARD.inspect(self.root)["errors"], [])
 
-    def native_alias(self):
-        directory = self.root / "target/release/build/rdkafka-sys-aaaaaaaaaaaaaaaa/out/src"
+    # How Cargo has named a package's build output below `build`: one
+    # directory up to Cargo 1.99, the package and its digest apart from
+    # Cargo 1.100. The runners' stable became 1.100.0 on 2026-11-26, and the
+    # integration job failed on the second.
+    BUILD_OUTPUTS = ("rdkafka-sys-aaaaaaaaaaaaaaaa", "rdkafka-sys/aaaaaaaaaaaaaaaa")
+
+    def native_alias(self, package="rdkafka-sys-aaaaaaaaaaaaaaaa"):
+        directory = self.root / "target/release/build" / package / "out/src"
         directory.mkdir(parents=True)
         library = directory / "librdkafka.so.1"
         library.write_bytes(b"native library")
@@ -131,27 +137,54 @@ class CacheGuardTest(unittest.TestCase):
         return alias, library
 
     def test_native_versioned_sibling_alias_is_preserved_and_not_double_counted(self):
-        alias, library = self.native_alias()
-        result = GUARD.inspect(self.root)
-        self.assertEqual(result["errors"], [])
-        self.assertEqual(result["target_bytes"], library.stat().st_size)
-        self.assertEqual(os.readlink(alias), library.name)
-        self.assertEqual(library.read_bytes(), b"native library")
+        for package in self.BUILD_OUTPUTS:
+            with self.subTest(package=package):
+                shutil.rmtree(self.root / "target", ignore_errors=True)
+                alias, library = self.native_alias(package)
+                result = GUARD.inspect(self.root)
+                self.assertEqual(result["errors"], [])
+                self.assertEqual(result["target_bytes"], library.stat().st_size)
+                self.assertEqual(os.readlink(alias), library.name)
+                self.assertEqual(library.read_bytes(), b"native library")
 
     def test_native_alias_rejects_external_targets_chains_empty_and_missing_files(self):
-        alias, library = self.native_alias()
-        library.write_bytes(b"")
+        for package in self.BUILD_OUTPUTS:
+            with self.subTest(package=package):
+                shutil.rmtree(self.root / "target", ignore_errors=True)
+                alias, library = self.native_alias(package)
+                library.write_bytes(b"")
+                self.assertTrue(GUARD.inspect(self.root)["errors"])
+                library.unlink()
+                self.assertTrue(GUARD.inspect(self.root)["errors"])
+                foreign = self.root / "foreign-library"
+                foreign.write_bytes(b"foreign")
+                library.symlink_to(foreign)
+                self.assertTrue(GUARD.inspect(self.root)["errors"])
+                alias.unlink()
+                alias.symlink_to(foreign)
+                self.assertTrue(GUARD.inspect(self.root)["errors"])
+                self.assertEqual(foreign.read_bytes(), b"foreign")
+
+    def test_native_alias_is_refused_outside_the_build_output(self):
+        # Beside `out`, in the package's own directory, the same alias is a
+        # link like any other.
+        for package in self.BUILD_OUTPUTS:
+            with self.subTest(package=package):
+                shutil.rmtree(self.root / "target", ignore_errors=True)
+                directory = self.root / "target/release/build" / package / "lib"
+                directory.mkdir(parents=True)
+                (directory / "librdkafka.so.1").write_bytes(b"native library")
+                (directory / "librdkafka.so").symlink_to("librdkafka.so.1")
+                self.assertIn(
+                    "cache contains a nonregular file: unsupported file symlink: "
+                    "release/build/" + package + "/lib/librdkafka.so",
+                    GUARD.inspect(self.root)["errors"],
+                )
+        # A digest that is not Cargo's does not make a build output either.
+        shutil.rmtree(self.root / "target")
+        alias, _ = self.native_alias("rdkafka-sys/not-a-digest-at-all")
         self.assertTrue(GUARD.inspect(self.root)["errors"])
-        library.unlink()
-        self.assertTrue(GUARD.inspect(self.root)["errors"])
-        foreign = self.root / "foreign-library"
-        foreign.write_bytes(b"foreign")
-        library.symlink_to(foreign)
-        self.assertTrue(GUARD.inspect(self.root)["errors"])
-        alias.unlink()
-        alias.symlink_to(foreign)
-        self.assertTrue(GUARD.inspect(self.root)["errors"])
-        self.assertEqual(foreign.read_bytes(), b"foreign")
+        self.assertTrue(alias.is_symlink())
 
     def test_native_style_link_outside_build_outputs_and_fifo_are_rejected(self):
         directory = self.root / "target/release/deps"
@@ -159,11 +192,26 @@ class CacheGuardTest(unittest.TestCase):
         library = directory / "libexample.so.1"
         library.write_bytes(b"artifact")
         (directory / "libexample.so").symlink_to(library.name)
-        self.assertTrue(GUARD.inspect(self.root)["errors"])
+        errors = GUARD.inspect(self.root)["errors"]
+        self.assertTrue(errors)
+        # The entry is named, relative to the target: the job log is the only
+        # view of a runner's disk.
+        self.assertIn(
+            "cache contains a nonregular file: unsupported file symlink: release/deps/libexample.so",
+            errors,
+        )
         (directory / "libexample.so").unlink()
         os.mkfifo(directory / "pipe")
-        self.assertTrue(GUARD.inspect(self.root)["errors"])
+        errors = GUARD.inspect(self.root)["errors"]
+        self.assertTrue(errors)
+        self.assertIn("cache contains a nonregular file: FIFO: release/deps/pipe", errors)
         self.assertTrue((directory / "pipe").exists())
+        (directory / "pipe").unlink()
+        (self.root / "target/release/linked").symlink_to(directory, target_is_directory=True)
+        self.assertIn(
+            "cache contains a directory symlink: release/linked",
+            GUARD.inspect(self.root)["errors"],
+        )
 
     def test_external_runner_target_is_inspected_in_place(self):
         workspace = self.root / "workspace"

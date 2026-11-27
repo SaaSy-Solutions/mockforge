@@ -9,6 +9,35 @@ def raise_io(error: OSError) -> None:
     raise error
 
 
+PACKAGE = r"[\w-]+"
+DIGEST = r"[0-9a-f]{16}"
+
+
+def in_build_output(directory: Path, target: Path) -> bool:
+    """Whether `directory` lies in what a package's build script was given.
+
+    Cargo gives each package's build output a directory of its own below
+    `build`. Until Cargo 1.99 it was named `build/<package>-<digest>`; from
+    Cargo 1.100 it is `build/<package>/<digest>`. What the build script wrote
+    is below `out` in both, and a build script makes directories there.
+    """
+    parts = directory.relative_to(target).parts
+    for i, part in enumerate(parts):
+        if part != "build":
+            continue
+        rest = parts[i + 1 :]
+        if len(rest) >= 2 and re.fullmatch(PACKAGE + "-" + DIGEST, rest[0]) and rest[1] == "out":
+            return True
+        if (
+            len(rest) >= 3
+            and re.fullmatch(PACKAGE, rest[0])
+            and re.fullmatch(DIGEST, rest[1])
+            and rest[2] == "out"
+        ):
+            return True
+    return False
+
+
 def sibling_library_alias(path: Path, target: Path) -> bool:
     """Accept native build-output .so aliases to regular versioned siblings.
 
@@ -17,14 +46,9 @@ def sibling_library_alias(path: Path, target: Path) -> bool:
     Rust deps/fingerprints and arbitrary cache links remain subject to the
     original checks.
     """
-    parts = path.relative_to(target).parts
-    build_output = any(
-        parts[i] == "build"
-        and re.fullmatch(r"[\w-]+-[0-9a-f]{16}", parts[i + 1])
-        and parts[i + 2] == "out"
-        for i in range(len(parts) - 3)
-    )
-    if not build_output or not re.fullmatch(r"lib[\w+.-]+\.so", path.name):
+    if not in_build_output(path.parent, target):
+        return False
+    if not re.fullmatch(r"lib[\w+.-]+\.so", path.name):
         return False
     name = os.readlink(path)
     if not re.fullmatch(re.escape(path.name) + r"\.\d+(?:\.\d+)*", name):
@@ -51,7 +75,7 @@ def regular_files(target: Path, errors: list[str]):
         for name in list(directories):
             if (root / name).is_symlink():
                 directories.remove(name)
-                errors.append("cache contains a directory symlink")
+                errors.append("cache contains a directory symlink: " + (root / name).relative_to(target).as_posix())
         for name in files:
             path = root / name
             info = path.lstat()
@@ -66,6 +90,8 @@ def regular_files(target: Path, errors: list[str]):
                     else "FIFO" if stat.S_ISFIFO(info.st_mode)
                     else "special file"
                 )
-                errors.append("cache contains a nonregular file: " + kind)
+                # The entry is named, relative to the target, as the job log is
+                # the only view of a runner's disk.
+                errors.append("cache contains a nonregular file: " + kind + ": " + path.relative_to(target).as_posix())
                 continue
             yield path, info

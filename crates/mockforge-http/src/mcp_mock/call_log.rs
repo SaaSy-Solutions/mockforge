@@ -44,13 +44,19 @@ impl McpCallLog {
     }
 
     /// Write a request down as the next line, with the mock's answer to it.
+    /// When this returns the line is in the file, so whoever reads the log
+    /// after a call finds that call in it.
     pub async fn record(&self, request: &Value, answered: Option<&Value>) -> std::io::Result<()> {
         let sequence = self.sequence.fetch_add(1, Ordering::Relaxed) + 1;
         let line = serde_json::to_string(&record(sequence, request, answered))
             .map_err(std::io::Error::other)?;
         let mut file = self.file.lock().await;
         file.write_all(line.as_bytes()).await?;
-        file.write_all(b"\n").await
+        file.write_all(b"\n").await?;
+        // A write on tokio's file is handed to a thread and reported done
+        // before that thread has run. The flush waits for it: when this
+        // returns, the line is where whoever reads the log finds it.
+        file.flush().await
     }
 }
 
@@ -287,6 +293,43 @@ mod tests {
         assert_eq!(text.lines().count(), 2, "{text}");
         assert!(!text.contains("left over"));
         assert!(text.ends_with('\n'));
+    }
+
+    #[test]
+    fn a_line_is_in_the_file_when_the_log_has_written_it() {
+        // A write on tokio's file is handed to a thread of the runtime's
+        // blocking pool, and reported done before that thread has run. A
+        // runtime with one such thread is made here, and the thread is held
+        // across the writes: a log that returned without a flush would leave
+        // the newline of its line still to write.
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .max_blocking_threads(1)
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            let (path, directory) = place();
+            let log = McpCallLog::create(&path).await.unwrap();
+            let (holding, held) = std::sync::mpsc::channel();
+            tokio::task::spawn_blocking(move || {
+                holding.send(()).unwrap();
+                // Long enough for the line to wait behind this task.
+                std::thread::sleep(std::time::Duration::from_millis(100));
+                // The thread is held once more, past the newline being handed
+                // to it.
+                tokio::task::spawn_blocking(|| {
+                    std::thread::sleep(std::time::Duration::from_millis(400));
+                });
+            });
+            held.recv_timeout(std::time::Duration::from_secs(10)).unwrap();
+            log.record(&json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list" }), None)
+                .await
+                .unwrap();
+            drop(log);
+            let text = std::fs::read_to_string(&path).unwrap();
+            std::fs::remove_dir_all(&directory).unwrap();
+            assert!(text.ends_with('\n'), "{text}");
+        });
     }
 
     #[tokio::test]
