@@ -31,6 +31,7 @@ pub mod custom_fixture;
 pub mod multi_spec;
 pub mod openapi_routes;
 pub mod request_fingerprint;
+pub mod request_template;
 pub mod response;
 pub mod response_rewriter;
 pub mod response_trace;

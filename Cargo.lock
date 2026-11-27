@@ -9226,6 +9226,7 @@ dependencies = [
  "indexmap 2.14.2",
  "jsonschema",
  "mockforge-foundation",
+ "mockforge-template-expansion",
  "once_cell",
  "openapiv3",
  "rand 0.9.5",

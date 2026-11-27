@@ -231,7 +231,7 @@ impl OpenApiRouteRegistry {
                 .ok()
                 .and_then(|s| s.parse::<u16>().ok()),
         };
-        Self {
+        let mut registry = Self {
             spec,
             routes,
             options,
@@ -239,7 +239,9 @@ impl OpenApiRouteRegistry {
             custom_fixture_loader: None,
             overrides: None,
             isolated: false,
-        }
+        };
+        registry.options_reach_routes();
+        registry
     }
 
     /// Construct a registry for offline contract checks and CI gates.
@@ -271,7 +273,7 @@ impl OpenApiRouteRegistry {
         tracing::debug!("Creating OpenAPI route registry with custom options");
         let spec = Arc::new(spec);
         let routes = Self::generate_routes_with_persona(&spec, persona);
-        Self {
+        let mut registry = Self {
             spec,
             routes,
             options,
@@ -279,6 +281,17 @@ impl OpenApiRouteRegistry {
             custom_fixture_loader: None,
             overrides: None,
             isolated: false,
+        };
+        registry.options_reach_routes();
+        registry
+    }
+
+    /// A route generates its own response, so each is told what the options
+    /// say of the random and time tokens of an example.
+    fn options_reach_routes(&mut self) {
+        let on = self.options.response_template_expand;
+        for route in &mut self.routes {
+            route.response_template_expand = on;
         }
     }
 
@@ -448,6 +461,7 @@ impl OpenApiRouteRegistry {
     pub fn build_hosted_router(mut self) -> Router {
         self.isolated = true;
         self.options = ValidationOptions::default();
+        self.options_reach_routes();
         self.custom_fixture_loader = None;
         self.overrides = None;
         let ctx = RouterContext {
@@ -965,6 +979,21 @@ impl OpenApiRouteRegistry {
                         rewriter.expand_tokens(&mut final_response);
                     }
                 }
+
+                // Tokens that name the request itself, `{{request.path.id}}`
+                // among them, are expanded whatever the flag above says: they
+                // add nothing random, and they are how an answer recorded from
+                // one request is the answer to every request of its operation.
+                let asked = crate::request_template::Asked::of(
+                    &method,
+                    &path_template,
+                    &path_params,
+                    crate::request_template::Query::Text(raw_query.as_deref()),
+                    &headers,
+                    &body,
+                );
+                final_response =
+                    crate::request_template::expand(std::mem::take(&mut final_response), &asked);
 
                 // (h) Apply override rules
                 if let Some(ref overrides) = ctx.overrides {
@@ -1950,7 +1979,7 @@ impl OpenApiRouteRegistry {
                     context.body = body.map(|Json(b)| b);
 
                     // Generate AI response if AI generator is available and route has AI config
-                    let (status, response) = if let (Some(generator), Some(_ai_config)) =
+                    let (status, mut response) = if let (Some(generator), Some(_ai_config)) =
                         (ai_generator, &route.ai_config)
                     {
                         route
@@ -1960,6 +1989,24 @@ impl OpenApiRouteRegistry {
                         // No AI support, use static response
                         route.mock_response_with_status()
                     };
+
+                    // Tokens that name the request itself, `{{request.path.id}}`
+                    // among them, are expanded whatever any flag says, as every
+                    // router of a spec expands them.
+                    let query_pairs: Vec<(String, String)> = query_params
+                        .iter()
+                        .map(|(name, value)| (name.clone(), value.clone()))
+                        .collect();
+                    let asked = crate::request_template::Asked::of(
+                        &route.method,
+                        &route.path,
+                        &path_params,
+                        crate::request_template::Query::Pairs(&query_pairs),
+                        &headers,
+                        &body_bytes,
+                    );
+                    response =
+                        crate::request_template::expand(std::mem::take(&mut response), &asked);
 
                     (
                         axum::http::StatusCode::from_u16(status)
@@ -2464,6 +2511,23 @@ impl OpenApiRouteRegistry {
                         &body_bytes,
                         &mut response,
                     );
+                    // Tokens that name the request itself, `{{request.path.id}}`
+                    // among them, are expanded whatever any flag says, as every
+                    // router of a spec expands them.
+                    let query_pairs: Vec<(String, String)> = mockai_query
+                        .iter()
+                        .map(|(name, value)| (name.clone(), value.clone()))
+                        .collect();
+                    let asked = crate::request_template::Asked::of(
+                        &route.method,
+                        &route.path,
+                        &path_params,
+                        crate::request_template::Query::Pairs(&query_pairs),
+                        &headers,
+                        &body_bytes,
+                    );
+                    response =
+                        crate::request_template::expand(std::mem::take(&mut response), &asked);
                     let status_code = axum::http::StatusCode::from_u16(status)
                         .unwrap_or(axum::http::StatusCode::OK);
                     let mut resp = (status_code, Json(response)).into_response();
@@ -3304,6 +3368,8 @@ pub fn create_registry_from_json(json: Value) -> Result<OpenApiRouteRegistry> {
 mod parameter_lookup_tests;
 #[cfg(test)]
 mod parameter_schema_tests;
+#[cfg(test)]
+mod template_flag_tests;
 
 #[cfg(test)]
 mod tests {

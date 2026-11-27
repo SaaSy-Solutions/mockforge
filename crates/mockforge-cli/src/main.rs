@@ -1278,15 +1278,19 @@ enum Commands {
     /// A range pack is an API, served by the mock, with flaws planted in it.
     /// Each flaw names the request that proves it, so one counts only when
     /// that request reached the mock. `list` shows the packs MockForge ships,
-    /// `write` puts a pack's API in a file to serve with `serve --spec`, and
+    /// `write` puts a pack's API in a file to serve with `serve --spec`,
+    /// `new` begins a pack from a recording or from a spec, and
     /// `judge` reads what `serve --exchange-log` wrote against the pack.
     /// `run` serves the pack, runs an agent against it and judges the run.
+    /// Both give the judgement as text, as one JSON document, as SARIF 2.1.0
+    /// or as JUnit XML.
     /// The pack says what to tell the agent, what credential it starts with
     /// and what is in scope.
     ///
     /// Examples:
     ///   mockforge range list
     ///   mockforge range write shop
+    ///   mockforge range new --har traffic.har --id orders
     ///   mockforge range judge --pack shop.pack.json --exchanges exchanges.jsonl
     ///   mockforge range run --pack shop.pack.json --agent "my-agent {url} {report}"
     #[command(verbatim_doc_comment)]

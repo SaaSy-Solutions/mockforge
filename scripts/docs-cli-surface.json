@@ -3895,10 +3895,30 @@
        "subcommands": {},
        "variadic": false
       },
+      "new": {
+       "aliases": {},
+       "flags": {
+        "--brief": 1,
+        "--force": 0,
+        "--har": 1,
+        "--help": 0,
+        "--id": 1,
+        "--log-level": 1,
+        "--output": 1,
+        "--spec": 1,
+        "--title": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
       "run": {
        "aliases": {},
        "flags": {
         "--agent": 1,
+        "--format": 1,
         "--help": 0,
         "--log-level": 1,
         "--pack": 1,

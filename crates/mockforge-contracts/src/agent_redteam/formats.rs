@@ -291,8 +291,9 @@ pub fn junit(report: &Report, suite: &Suite) -> String {
 }
 
 /// Text as XML holds it: with its markup escaped, and without the control
-/// characters XML 1.0 does not allow.
-fn escape(text: &str) -> String {
+/// characters XML 1.0 does not allow. The range's JUnit XML is written with
+/// it too.
+pub(crate) fn escape(text: &str) -> String {
     let mut escaped = String::with_capacity(text.len());
     for character in text.chars() {
         match character {
