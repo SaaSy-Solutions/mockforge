@@ -28,6 +28,70 @@
      "subcommands": {},
      "variadic": false
     },
+    "agent-redteam": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--log-level": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {
+      "help": {
+       "aliases": {},
+       "flags": {},
+       "free": true,
+       "subcommands": {}
+      },
+      "judge": {
+       "aliases": {},
+       "flags": {
+        "--calls": 1,
+        "--format": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "--output": 1,
+        "--reply": 1,
+        "--suite": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 2,
+       "subcommands": {},
+       "variadic": false
+      },
+      "list": {
+       "aliases": {},
+       "flags": {
+        "--format": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "write": {
+       "aliases": {},
+       "flags": {
+        "--force": 0,
+        "--help": 0,
+        "--log-level": 1,
+        "--output": 1,
+        "--output-dir": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      }
+     },
+     "variadic": false
+    },
     "ai": {
      "aliases": {},
      "flags": {
@@ -3785,6 +3849,86 @@
      "subcommands": {},
      "variadic": false
     },
+    "range": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--log-level": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {
+      "help": {
+       "aliases": {},
+       "flags": {},
+       "free": true,
+       "subcommands": {}
+      },
+      "judge": {
+       "aliases": {},
+       "flags": {
+        "--exchanges": 1,
+        "--findings": 1,
+        "--format": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "--output": 1,
+        "--pack": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 2,
+       "subcommands": {},
+       "variadic": false
+      },
+      "list": {
+       "aliases": {},
+       "flags": {
+        "--format": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "run": {
+       "aliases": {},
+       "flags": {
+        "--agent": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "--pack": 1,
+        "--timeout": 1,
+        "--work-dir": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "write": {
+       "aliases": {},
+       "flags": {
+        "--force": 0,
+        "--help": 0,
+        "--log-level": 1,
+        "--output": 1,
+        "--output-dir": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      }
+     },
+     "variadic": false
+    },
     "reality-profile": {
      "aliases": {},
      "flags": {
@@ -4315,6 +4459,7 @@
       "--conformance-buffer-size": 1,
       "--conformance-buffer-unique": 0,
       "--dry-run": 0,
+      "--exchange-log": 1,
       "--graphql": 1,
       "--graphql-port": 1,
       "--graphql-upstream": 1,
@@ -4333,6 +4478,8 @@
       "--llm-mock-upstream": 1,
       "--log-level": 1,
       "--mcp-mock": 0,
+      "--mcp-mock-catalog": 1,
+      "--mcp-mock-record": 1,
       "--merge-conflicts": 1,
       "--metrics": 0,
       "--metrics-port": 1,

@@ -303,11 +303,12 @@ output:
     )
     .unwrap();
 
-    // Change to the temp directory
-    std::env::set_current_dir(&temp_dir).unwrap();
-
     let mut cmd = Command::cargo_bin("mockforge").unwrap();
-    cmd.arg("generate").arg("--dry-run");
+    // In the temp directory, for this one command. The working directory
+    // belongs to the whole process, and every test of it runs there: moved
+    // into a directory that is then deleted, it failed each later test that
+    // ran `serve --dry-run`, which reads its configuration from it.
+    cmd.current_dir(&temp_dir).arg("generate").arg("--dry-run");
 
     cmd.assert()
         .success()

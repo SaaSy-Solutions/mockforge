@@ -159,9 +159,72 @@ MCP clients; the servers they talk to expose things like filesystem access, a
 database, or a web search. Transport is **JSON-RPC 2.0**, over stdio (local
 subprocess) or streamable HTTP (`POST /mcp`).
 
-### 2b. Handshake: `initialize`
+### 2b. Two protocol eras
 
-The client's first call negotiates protocol version and advertises its identity:
+MockForge's MCP mock answers both eras of the protocol, as public servers did
+in 2026. Which era answers is decided per request.
+
+Revision 2026-07-28 and later have no handshake. Every request carries the
+protocol revision and the client's identity in `params._meta`, names its own
+method in an `Mcp-Method` header and its revision in `MCP-Protocol-Version`,
+and discovery is one call:
+
+```
+POST /mcp HTTP/1.1
+content-type: application/json
+mcp-method: server/discover
+mcp-protocol-version: 2026-07-28
+
+{"jsonrpc":"2.0","id":1,"method":"server/discover",
+ "params":{"_meta":{
+   "io.modelcontextprotocol/protocolVersion":"2026-07-28",
+   "io.modelcontextprotocol/clientInfo":{"name":"my-agent","version":"1.0"},
+   "io.modelcontextprotocol/clientCapabilities":{}}}}
+```
+
+Response:
+
+```
+{"jsonrpc":"2.0","id":1,"result":{
+  "resultType":"complete",
+  "supportedVersions":["2026-07-28"],
+  "capabilities":{"tools":{"listChanged":false},
+                  "resources":{"listChanged":false},
+                  "prompts":{"listChanged":false}},
+  "ttlMs":0,"cacheScope":"private",
+  "_meta":{"io.modelcontextprotocol/serverInfo":{
+             "name":"mockforge-mcp","version":"..."}}}}
+```
+
+On this revision the mock does what the specification asks of a server:
+
+- It checks `Mcp-Method` and `MCP-Protocol-Version` against the body, and
+  `Mcp-Name` for `tools/call`, `resources/read` and `prompts/get`. A mismatch
+  or a missing header is HTTP `400` with `HeaderMismatch` (`-32020`).
+- A revision it does not speak is HTTP `400` with `UnsupportedProtocolVersion`
+  (`-32022`) and the revisions it does.
+- A request that sends the modern headers without the required `_meta` fields
+  is HTTP `400` with `-32602`, rather than being answered as a handshake-era
+  request.
+- Every result carries `"resultType": "complete"`, and an unknown method is
+  HTTP `404` with `-32601`.
+
+What the mock advertises is the built-in catalog, or the file that
+`--mcp-mock-catalog` names: a catalog you write, or a pinned contract from
+`mockforge mcp-contract pin`, replayed as the server that was pinned. Both
+eras are answered from that one catalog. See
+[MCP Contract Pinning](../user-guide/mcp-contract.md).
+
+With `--mcp-mock-record FILE` the mock also writes down every request it
+receives, one JSON line each, in full. `mockforge agent-redteam judge` reads
+that file, and with `--reply` the agent's answer, and checks both against a
+suite's rules: see [Red-Team an Agent](../user-guide/agent-redteam.md).
+
+### 2c. Handshake: `initialize` (earlier revisions)
+
+A request that carries none of the above gets the handshake that earlier
+revisions use. The client's first call negotiates protocol version and
+advertises its identity:
 
 ```
 POST /mcp HTTP/1.1
@@ -188,7 +251,7 @@ After `initialize` the client sends a `notifications/initialized`
 server must not reply with a result — MockForge answers `202 Accepted` with an
 empty body).
 
-### 2c. Discovery and invocation
+### 2d. Discovery and invocation
 
 - `tools/list` → `{ "tools": [ { "name", "description", "inputSchema" } ] }`
 - `tools/call` with `{ "name", "arguments" }`:
@@ -213,6 +276,10 @@ Response:
 A failed tool call still returns HTTP 200 with `"isError": true` inside
 `result.content`; a malformed/unknown method returns a JSON-RPC `error` object
 (`{"code": -32601, "message": "method not found"}`).
+
+The same catalog is listed on both eras. To hold a tool server to what it
+declares, see [MCP Contract Pinning](../user-guide/mcp-contract.md); the mock
+is a convenient server to rehearse `pin` and `check` against.
 
 ---
 
