@@ -3903,6 +3903,7 @@
         "--har": 1,
         "--help": 0,
         "--id": 1,
+        "--keep-keys": 0,
         "--log-level": 1,
         "--output": 1,
         "--spec": 1,

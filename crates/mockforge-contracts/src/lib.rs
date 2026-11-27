@@ -65,6 +65,7 @@ pub mod diff_types;
 pub mod error;
 pub mod fidelity;
 pub mod http_route_match;
+pub mod keys;
 pub mod mcp_contract;
 pub mod protocol;
 pub mod range;

@@ -1755,3 +1755,139 @@ fn a_class_is_written_as_its_list_writes_it_or_the_pack_is_refused() {
         )
     );
 }
+
+/// A recording whose one answer holds two keys of a known shape.
+const A_RECORDING_WITH_KEYS: &str = r#"{
+  "log": {
+    "version": "1.2",
+    "creator": { "name": "test", "version": "1" },
+    "entries": [
+      { "request": { "method": "GET", "url": "https://api.example.net/v1/me", "headers": [] },
+        "response": { "status": 200, "content": { "mimeType": "application/json",
+          "text": "{\"id\":77,\"api_key\":\"sk_live_4f2a9c81e7b3d6a04f2a9c81\",\"aws\":\"AKIAIOSFODNN7EXAMPLE\"}" } } }
+    ]
+  }
+}"#;
+
+#[test]
+fn a_key_of_a_known_shape_in_a_recording_is_made_up_unless_it_is_to_be_kept() {
+    let workspace = tempfile::tempdir().unwrap();
+    let recording = workspace.path().join("traffic.har");
+    fs::write(&recording, A_RECORDING_WITH_KEYS).unwrap();
+    let api = workspace.path().join("me.json");
+    let (code, text, stderr) = run(&[
+        "range",
+        "new",
+        "--har",
+        &shown(&recording),
+        "--id",
+        "me",
+        "--output",
+        &shown(&api),
+    ]);
+    assert_eq!((code, stderr.as_str()), (0, ""), "{text}");
+    // The command says how many it replaced, and of which providers.
+    let line = said(&text)
+        .into_iter()
+        .find(|line| line.starts_with("2 key(s) of a known shape"))
+        .unwrap_or_else(|| panic!("no line says how many keys were made up:\n{text}"));
+    assert_eq!(
+        line,
+        "2 key(s) of a known shape in the answers were replaced by made-up ones of the same shape (AWS, Stripe): the API keeps the weakness and not the key"
+    );
+    // What was written holds a key of the same shape where each was, and neither key.
+    let api_text = fs::read_to_string(&api).unwrap();
+    assert!(
+        !api_text.contains("sk_live_4f2a9c81e7b3d6a04f2a9c81")
+            && !api_text.contains("AKIAIOSFODNN7EXAMPLE"),
+        "{api_text}"
+    );
+    assert!(api_text.contains("sk_live_") && api_text.contains("\"AKIA"), "{api_text}");
+
+    // The same recording, with the keys kept, and the line that says so.
+    let kept = workspace.path().join("kept.json");
+    let (code, text, stderr) = run(&[
+        "range",
+        "new",
+        "--har",
+        &shown(&recording),
+        "--id",
+        "me",
+        "--output",
+        &shown(&kept),
+        "--keep-keys",
+    ]);
+    assert_eq!((code, stderr.as_str()), (0, ""), "{text}");
+    let said = said(&text);
+    assert!(
+        said.contains(
+            &"keys of a known shape are kept as they were recorded (--keep-keys): read through the answers for them".to_string()
+        ),
+        "{text}"
+    );
+    let kept_text = fs::read_to_string(&kept).unwrap();
+    assert!(
+        kept_text.contains("sk_live_4f2a9c81e7b3d6a04f2a9c81")
+            && kept_text.contains("AKIAIOSFODNN7EXAMPLE"),
+        "{kept_text}"
+    );
+}
+
+#[test]
+fn the_exchange_log_writes_a_key_of_a_known_shape_as_its_digest_wherever_it_is() {
+    let workspace = tempfile::tempdir().unwrap();
+    let recording = workspace.path().join("traffic.har");
+    fs::write(&recording, A_RECORDING_WITH_KEYS).unwrap();
+    let api = workspace.path().join("me.json");
+    let (code, stdout, stderr) = run(&[
+        "range",
+        "new",
+        "--har",
+        &shown(&recording),
+        "--id",
+        "me",
+        "--output",
+        &shown(&api),
+        "--keep-keys",
+    ]);
+    assert_eq!((code, stderr.as_str()), (0, ""), "{stdout}");
+    let log = workspace.path().join("exchanges.jsonl");
+    let server =
+        Mockserve::start(&["--spec", &shown(&api), "--exchange-log", &shown(&log)]).unwrap();
+    // A key in a header whose name says nothing about it, beside a value of
+    // no known shape; and the answer holds the two keys.
+    let (status, body) = request(
+        server.port,
+        "GET",
+        "/v1/me",
+        &[
+            ("X-Api-Key", "AKIAIOSFODNN7EXAMPLE"),
+            ("X-Trace", "sk_live_x"),
+        ],
+        "",
+    );
+    assert_eq!(status, 200, "{body}");
+    drop(server);
+
+    let log_text = fs::read_to_string(&log).unwrap();
+    assert!(
+        !log_text.contains("AKIAIOSFODNN7EXAMPLE")
+            && !log_text.contains("sk_live_4f2a9c81e7b3d6a04f2a9c81"),
+        "{log_text}"
+    );
+    let exchange: Value = serde_json::from_str(log_text.lines().next().unwrap()).unwrap();
+    assert_eq!(
+        exchange["request_headers"]["x-api-key"],
+        serde_json::json!(digest("AKIAIOSFODNN7EXAMPLE"))
+    );
+    assert_eq!(exchange["request_headers"]["x-trace"], "sk_live_x");
+    let answer: Value = serde_json::from_str(exchange["response_body"].as_str().unwrap()).unwrap();
+    assert_eq!(
+        answer,
+        serde_json::json!({
+            "id": 77,
+            "api_key": digest("sk_live_4f2a9c81e7b3d6a04f2a9c81"),
+            "aws": digest("AKIAIOSFODNN7EXAMPLE"),
+        })
+    );
+}

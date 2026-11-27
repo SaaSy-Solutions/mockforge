@@ -25,6 +25,7 @@ use serde_json::{json, Value};
 use super::error::bad_recording;
 use super::pack::{Pack, PACK_KIND, PACK_SCHEMA_VERSION};
 use super::RangeError;
+use crate::keys::Replaced;
 
 /// The id of the flaw a pack holds until one is planted.
 pub const PLACEHOLDER: &str = "nothing-planted-yet";
@@ -54,6 +55,9 @@ pub struct Skeleton {
     pub templated: usize,
     /// The headers whose values are to be replaced, as HTTP writes their names.
     pub credentials: Vec<String>,
+    /// The keys of a known shape in the recorded answers that were replaced
+    /// by made-up ones, so that the pack keeps the weakness and not the key.
+    pub keys: Replaced,
 }
 
 /// What the person asking for a pack names.
@@ -64,6 +68,8 @@ pub struct Asked<'a> {
     pub title: Option<&'a str>,
     /// What to tell the agent.
     pub brief: &'a str,
+    /// Whether to keep a key of a known shape as it was recorded.
+    pub keep_keys: bool,
 }
 
 /// Begin a pack from an HTTP Archive. `path` names the file in errors.
@@ -134,7 +140,17 @@ pub fn from_har(text: &str, path: &str, asked: &Asked<'_>) -> Result<Skeleton, R
         }
     }
 
-    finish(paths, credentials, asked, &title, path, exchanges, left_out, templated)
+    finish(
+        paths,
+        credentials,
+        asked,
+        &title,
+        path,
+        exchanges,
+        left_out,
+        templated,
+        asked.keep_keys,
+    )
 }
 
 /// Begin a pack from an OpenAPI document.
@@ -152,7 +168,7 @@ pub fn from_spec(spec: Value, path: &str, asked: &Asked<'_>) -> Result<Skeleton,
         .or_else(|| spec.pointer("/info/title").and_then(Value::as_str).map(str::to_string))
         .unwrap_or_else(|| asked.id.to_string());
     let templated = paths.keys().filter(|path| path.contains('{')).count();
-    finish(paths, BTreeMap::new(), asked, &title, path, 0, 0, templated)
+    finish(paths, BTreeMap::new(), asked, &title, path, 0, 0, templated, asked.keep_keys)
 }
 
 /// What is asked of every pack, whatever it was begun from.
@@ -181,7 +197,21 @@ fn finish(
     exchanges: usize,
     left_out: usize,
     templated: usize,
+    keep_keys: bool,
 ) -> Result<Skeleton, RangeError> {
+    // A key of a known shape in a recorded answer is made up, as a credential
+    // is: the API keeps the weakness, a profile that shows a key, and loses
+    // the key. The same key gives the same made-up one, so that a pack written
+    // twice from one recording is the same pack.
+    let mut held = Value::Object(paths);
+    let keys = if keep_keys {
+        Replaced::default()
+    } else {
+        crate::keys::made_up_in(&mut held)
+    };
+    let Value::Object(paths) = held else {
+        return Err(bad_recording(path, "the operations are not an object"));
+    };
     // The flaw is proved at the first operation, in the order of the spec,
     // that declares an answer.
     let planted = paths
@@ -225,6 +255,7 @@ fn finish(
         exchanges,
         left_out,
         templated,
+        keys,
     })
 }
 
@@ -708,6 +739,7 @@ mod tests {
             id,
             title: None,
             brief: DEFAULT_BRIEF,
+            keep_keys: false,
         }
     }
 
@@ -1010,6 +1042,7 @@ mod tests {
                 id: "My Api",
                 title: None,
                 brief: DEFAULT_BRIEF,
+                keep_keys: false,
             },
         );
         assert!(wrong
@@ -1023,6 +1056,7 @@ mod tests {
                 id: "api",
                 title: None,
                 brief: " ",
+                keep_keys: false,
             },
         );
         assert!(empty_brief.unwrap_err().to_string().contains("the brief is empty"));
@@ -1066,5 +1100,41 @@ mod tests {
         let no_path =
             from_spec(json!({ "openapi": "3.0.3", "paths": {} }), "ledger.json", &asked("ledger"));
         assert!(no_path.unwrap_err().to_string().contains("the spec declares no path"));
+    }
+
+    #[test]
+    fn a_key_of_a_known_shape_in_a_recording_is_made_up_and_counted() {
+        let key = "sk_live_4f2a9c81e7b3d6a04f2a9c81";
+        let recording = archive(&[exchange(
+            "https://api.example.net/v1/me",
+            "GET",
+            200,
+            "application/json",
+            &format!(r#"{{"id": 77, "api_key": "{key}", "note": "see {key}"}}"#),
+            "",
+        )]);
+        let skeleton = from_har(&recording, "traffic.har", &asked("me")).unwrap();
+        assert_eq!(skeleton.keys.count, 1);
+        assert_eq!(skeleton.keys.providers, ["Stripe"]);
+        let answer = &skeleton.pack.spec["paths"]["/v1/me"]["get"]["responses"]["200"]["content"]
+            ["application/json"]["example"];
+        let made = answer["api_key"].as_str().unwrap();
+        assert_eq!(crate::keys::format_of(made).unwrap().provider, "Stripe");
+        assert_ne!(made, key);
+        // What was not a whole key is as it was recorded.
+        assert_eq!(answer["note"], format!("see {key}"));
+
+        // The same recording gives the same made-up key, and --keep-keys keeps the key.
+        let again = from_har(&recording, "traffic.har", &asked("me")).unwrap();
+        assert_eq!(again.pack, skeleton.pack);
+        let mut keeping = asked("me");
+        keeping.keep_keys = true;
+        let kept = from_har(&recording, "traffic.har", &keeping).unwrap();
+        assert_eq!(kept.keys, Replaced::default());
+        assert_eq!(
+            kept.pack.spec["paths"]["/v1/me"]["get"]["responses"]["200"]["content"]
+                ["application/json"]["example"]["api_key"],
+            key
+        );
     }
 }

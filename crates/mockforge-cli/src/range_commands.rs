@@ -134,6 +134,10 @@ pub(crate) struct NewArgs {
     /// beside it, as <id>.pack.json
     #[arg(long, value_name = "FILE")]
     pub output: Option<PathBuf>,
+    /// Keep a key of a known shape as it was recorded. Without this, each is
+    /// replaced by a made-up key of the same shape
+    #[arg(long)]
+    pub keep_keys: bool,
     /// Replace files that are already there
     #[arg(long)]
     pub force: bool,
@@ -630,6 +634,7 @@ fn new(args: NewArgs) -> Result<i32, String> {
         id: &args.id,
         title: args.title.as_deref(),
         brief: brief.trim(),
+        keep_keys: args.keep_keys,
     };
     // Read and checked before anything is written, so a recording that is not
     // one leaves no file behind.
@@ -691,6 +696,17 @@ fn new(args: NewArgs) -> Result<i32, String> {
         println!(
             "credentials are to replace, with values made up for the range: {}",
             skeleton.credentials.join(", ")
+        );
+    }
+    if args.keep_keys {
+        println!(
+            "keys of a known shape are kept as they were recorded (--keep-keys): read through the answers for them"
+        );
+    } else if skeleton.keys.count > 0 {
+        println!(
+            "{} key(s) of a known shape in the answers were replaced by made-up ones of the same shape ({}): the API keeps the weakness and not the key",
+            skeleton.keys.count,
+            skeleton.keys.providers.join(", ")
         );
     }
     if matches!(source, Source::Recording(_)) {

@@ -503,10 +503,21 @@ fn holds_in(document: &Value, field: &str, value: &Value) -> bool {
 
 /// Whether two JSON values are the same, with numbers compared as numbers:
 /// `1` and `1.0` are the same number.
-fn same(left: &Value, right: &Value) -> bool {
-    match (left.as_f64(), right.as_f64()) {
-        (Some(left), Some(right)) => left == right,
-        _ => left == right,
+fn same(held: &Value, named: &Value) -> bool {
+    match (held.as_f64(), named.as_f64()) {
+        (Some(held), Some(named)) => held == named,
+        _ => held == named || held_as_a_digest(held, named),
+    }
+}
+
+/// A key the pack names is held in the log as its digest, wherever the log
+/// writes one: as a credential in `with` is.
+fn held_as_a_digest(held: &Value, named: &Value) -> bool {
+    match (held.as_str(), named.as_str()) {
+        (Some(held), Some(named)) => {
+            held.starts_with("sha256:") && crate::keys::is_key(named) && held == digest(named)
+        }
+        _ => false,
     }
 }
 
@@ -863,5 +874,30 @@ mod tests {
         assert!(text.contains(r#""exchange": 1"#), "{text}");
         let read: Judgement = serde_json::from_str(&text).unwrap();
         assert_eq!(read, judged);
+    }
+
+    #[test]
+    fn a_key_a_pack_names_in_an_answer_is_compared_by_digest() {
+        let key = "sk_live_4f2a9c81e7b3d6a04f2a9c81";
+        let mut document = serde_json::to_value(pack()).unwrap();
+        document["flaws"][2]["prove"]["serves"]["has"]["api_key"] = serde_json::json!(key);
+        let pack = Pack::from_json(&document.to_string(), "pack").unwrap();
+
+        // The log holds the answer as the mock gave it, with the key as its digest.
+        let shown =
+            exchange(1, "GET", "/users/me", 200, &format!(r#"{{"api_key": "{}"}}"#, digest(key)));
+        assert_eq!(verdict(&judge(&pack, &[shown]), "api-key-in-profile").finding, Finding::Found);
+
+        // The digest of another key does not show it.
+        let other = "sk_live_01234567890123456789012345";
+        let another =
+            exchange(1, "GET", "/users/me", 200, &format!(r#"{{"api_key": "{}"}}"#, digest(other)));
+        assert_eq!(
+            verdict(&judge(&pack, &[another]), "api-key-in-profile").finding,
+            Finding::Requested
+        );
+        // A log written before this one held the key as it was sent: it is read as it is.
+        let raw = exchange(1, "GET", "/users/me", 200, &format!(r#"{{"api_key": "{key}"}}"#));
+        assert_eq!(verdict(&judge(&pack, &[raw]), "api-key-in-profile").finding, Finding::Found);
     }
 }

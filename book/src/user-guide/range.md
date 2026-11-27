@@ -129,6 +129,13 @@ shows it.
   `Proxy-Authorization`, `Cookie` and `Set-Cookie` are written as `sha256:`
   and the digest of the value. A judge compares a credential the pack names
   by digesting it the same way.
+- **A key is never written as sent, whatever it is called.** A value that is
+  a key of a known shape, an AWS access key id (`AKIA…`), a GitHub token
+  (`ghp_…`), a Stripe key (`sk_live_…`) or one of some ninety other shapes,
+  is written as its digest in any header, and as a whole JSON string of a
+  body. A judge compares a key the pack names by digesting it the same way.
+  A key that is only part of a longer string is left there, and so is text
+  that is not JSON.
 - **A body is held up to 16 KiB.** What is cut is marked
   `request_body_truncated` or `response_body_truncated`.
 - **The log is opened before the server listens.** A file that cannot be
@@ -586,10 +593,15 @@ plant flaws:  orders.pack.json
 - **An operation answers as the recording answered it most often**, with the
   first answer of that kind. What the mock cannot give, an image or a script,
   is left out and counted; so are exchanges with any other host.
-- **A credential is never copied.** Each header of the recording that carries
-  one is named with a value to replace: put a made-up one in the pack before
-  you run anything. Answer bodies are copied as they were recorded, which is
-  what the last line before the blank one is about.
+- **A credential is never copied, and neither is a key.** Each header of the
+  recording that carries one is named with a value to replace: put a made-up
+  one in the pack before you run anything. A key of a known shape in an
+  answer, an AWS access key id or a Stripe key, is replaced by a made-up key
+  of the same shape, and the command says how many: the API keeps the
+  weakness, a profile that shows a key, and loses the key. `--keep-keys`
+  keeps them as they were recorded. The rest of the answer bodies is copied
+  as they were recorded, which is what the last line before the blank one is
+  about.
 - **One flaw is a placeholder**, `nothing-planted-yet`, at the lowest severity.
   A pack that plants nothing is refused, since it would test nothing, and this
   one lets you serve and judge the API before any is planted. Replace it with

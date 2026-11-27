@@ -111,6 +111,16 @@ else
     # Don't fail on this, just warn
 fi
 echo ""
+# 5b. Keys of a known shape anywhere in the tree, and not only in the Rust sources:
+# the table the exchange log and `range new` use, in a test.
+echo "5b. Keys of a known shape in the whole tree..."
+if cargo test -p mockforge-contracts --test keys_in_tree; then
+    echo -e "${GREEN}No key of a known shape beyond the made-up examples the test names${NC}"
+else
+    echo -e "${RED}A value of a known key's shape is in the tree: look at it by hand${NC}"
+    FAILED=1
+fi
+echo ""
 
 # 6. Check for known vulnerable dependency patterns
 echo "6️⃣  Checking for known vulnerable dependency patterns..."
