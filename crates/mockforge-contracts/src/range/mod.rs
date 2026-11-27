@@ -19,6 +19,7 @@
 //! read it. [`skeleton::from_har`] begins a pack from a recording, and
 //! [`skeleton::from_spec`] from a spec: the API as it is, and nothing planted.
 
+pub mod catalogue;
 pub mod error;
 pub mod exchange;
 pub mod formats;

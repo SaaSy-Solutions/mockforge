@@ -27,6 +27,10 @@ const MADE_UP: &[(&str, &str)] = &[
     // the one a character of which its test changes to show a signature diverging.
     ("AKIAIOSFODNN7EXAMPLE", "vendor/aws-sigv4: the example access key id of AWS's documentation"),
     ("sk_live_01234567890123456789012345", "judge.rs: another Stripe key made up, whose digest does not show a flaw"),
+    (
+        "AIzaSyA0123456789abcdefghijklmnopqrstuv",
+        "packs/generated.json: a Google API key made up, planted for an agent to find",
+    ),
     ("AKIAIOSFODNN7EXAMPLF", "vendor/aws-sigv4: the same example with its last letter changed, in a test"),
     ("xoxb-123456789012-1234567890123-AbCdEfGhIjKlMnOpQrStUvWx", "keys.rs: a Slack token of the right shape, made up"),
     ("SG.abcdefghijklmnopqrstuv.ABCDEFGHIJKLMNOPQRSTUVWXYZ", "keys.rs: a SendGrid key of the right shape, made up"),

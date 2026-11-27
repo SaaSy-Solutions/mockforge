@@ -814,9 +814,9 @@ of the rule and of its findings, with the tags code scanning filters on.
 
 Write a shipped range pack's API (`write`), serve it with `serve --spec`, and
 give the agent the brief, the credential and the scope the pack names. A pack
-is an API with flaws planted in it, each with the request that proves it. Two
-packs ship: `shop`, a shop API, and `webhooks`, a receiver of the webhook
-events of six providers. See
+is an API with flaws planted in it, each with the request that proves it. Three
+packs ship: `shop`, a shop API; `webhooks`, a receiver of the webhook events of
+six providers; and `generated`, the app a generator writes. See
 [Range: a Safe Target for an Agent](../user-guide/range.md) for what a pack
 holds and what the mock cannot model yet.
 
@@ -826,6 +826,8 @@ mockforge range write shop
 mockforge range write webhooks
 mockforge range write all --output-dir range
 mockforge range new --har traffic.har --id orders
+mockforge range flaws
+mockforge range new --har traffic.har --id orders --flaw no-credential --at "POST /v1/orders"
 mockforge serve --spec shop.json --http-port 8080 --exchange-log exchanges.jsonl
 mockforge range judge --pack shop.pack.json --exchanges exchanges.jsonl
 mockforge range run --pack shop.pack.json --agent "my-agent --target {url} --report {report}"
@@ -836,6 +838,10 @@ mockforge range run --pack shop.pack.json --agent "my-agent --target {url} --rep
 `list`:
 
 - `--format text|json`: `json` prints one document and nothing else on stdout.
+
+`flaws`:
+
+- `--format text|json`: `json` prints the catalogue as one document.
 
 `write <PACK>`:
 
@@ -860,6 +866,10 @@ mockforge range run --pack shop.pack.json --agent "my-agent --target {url} --rep
 - `--keep-keys`: keep a key of a known shape as it was recorded. Without it,
   each is replaced by a made-up key of the same shape, and the command says
   how many.
+- `--flaw <KIND>`: a kind of flaw to plant, by its id as `range flaws` lists
+  it. Each is planted at the operation of the `--at` of its place.
+- `--at <METHOD PATH>`: where to plant a flaw: a path of the pack. There is
+  one for each `--flaw`.
 - `--force`: replace files that are already there.
 
 `judge`:
@@ -909,6 +919,13 @@ never as sent. So is a value that is a key of a known shape, wherever it is
 the whole value of a header or a whole JSON string of a body: `AKIA…`,
 `ghp_…`, `sk_live_…` and some ninety other shapes. A body is held up to
 16 KiB, and what is cut is marked.
+
+`range flaws` lists the kinds of flaw a pack can plant today, each with the
+request that proves it, the answer that shows it, its CWE and OWASP
+category, and the SemSec rules whose class it is. `range new` plants a
+kind at an operation with `--flaw KIND --at "METHOD PATH"`: the operation's
+answer is changed as the kind says, and the flaw that proves it is added to
+the pack with its class.
 
 `range judge` reads that log against the pack. A flaw is `found` when its
 proving request reached the mock and the mock answered as the pack says,

@@ -648,12 +648,13 @@ fn titled_names(map: BTreeMap<String, String>) -> BTreeMap<String, String> {
 }
 
 /// The packs MockForge ships, by id and as JSON.
-const SHIPPED: [(&str, &str); 2] = [
+const SHIPPED: [(&str, &str); 3] = [
     ("shop", include_str!("packs/shop.json")),
     ("webhooks", include_str!("packs/webhooks.json")),
+    ("generated", include_str!("packs/generated.json")),
 ];
 
-/// The ids of the packs MockForge ships, in alphabetical order.
+/// The ids of the packs MockForge ships, in the order a reader should meet them.
 pub fn shipped_ids() -> Vec<&'static str> {
     SHIPPED.iter().map(|(id, _)| *id).collect()
 }
@@ -700,7 +701,7 @@ mod tests {
 
     #[test]
     fn every_shipped_pack_can_be_served_and_judged() {
-        assert_eq!(shipped_ids(), vec!["shop", "webhooks"]);
+        assert_eq!(shipped_ids(), vec!["shop", "webhooks", "generated"]);
         for id in shipped_ids() {
             let pack = Pack::from_json(shipped(id).unwrap(), "p").unwrap();
             assert_eq!(pack.problem(), None, "{id}");
@@ -1015,7 +1016,7 @@ mod tests {
     fn no_shipped_pack_is_named_by_an_unknown_id() {
         assert_eq!(
             shipped("nope").unwrap_err().to_string(),
-            "no shipped pack has the id `nope`; the shipped packs are shop, webhooks"
+            "no shipped pack has the id `nope`; the shipped packs are shop, webhooks, generated"
         );
         for id in shipped_ids() {
             assert!(serde_json::from_str::<Value>(shipped(id).unwrap()).is_ok(), "{id}");
