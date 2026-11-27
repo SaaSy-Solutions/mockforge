@@ -26,6 +26,12 @@ fn shown(path: &Path) -> String {
     path.display().to_string()
 }
 
+/// A path as SARIF and JUnit name a file: a URI, with forward slashes on
+/// every system.
+fn named(path: &Path) -> String {
+    shown(path).replace('\\', "/")
+}
+
 fn document(args: &[&str]) -> (i32, Value) {
     let (code, stdout, stderr) = run(args);
     let document = serde_json::from_str(&stdout).unwrap_or_else(|error| {
@@ -308,6 +314,9 @@ fn a_log_that_cannot_be_opened_stops_the_server_before_it_listens() {
         }
         Err(said) => said,
     };
+    // Why it stopped is shown as it was written: not as Rust shows a string
+    // in debug, in quotes and with a path's backslashes doubled.
+    assert!(said.starts_with("Error: --exchange-log "), "{said}");
     assert!(said.contains(&format!("--exchange-log {}: ", nowhere.display())), "{said}");
     assert!(!said.contains("HTTP server listening"), "{said}");
 }
@@ -553,7 +562,9 @@ fn nothing_can_be_judged_without_a_pack_to_read_or_an_exchange_to_judge() {
     ]);
     assert_eq!((code, stdout.as_str()), (2, ""));
     assert!(stderr.contains(&format!("Error: {}: ", nowhere.display())), "{stderr}");
-    assert!(stderr.contains("No such file"), "{stderr}");
+    // What a system calls a file that is not there is its to say; the
+    // error's number is the same on each.
+    assert!(stderr.contains("os error 2"), "{stderr}");
 }
 
 /// A report as an agent harness writes one: what each finding says shows it.
@@ -904,6 +915,57 @@ fn an_agent_out_of_time_is_stopped_and_judged_with_what_reached() {
 }
 
 #[test]
+fn an_agent_out_of_time_is_stopped_with_what_it_started() {
+    let (workspace, _api) = shop();
+    // An agent that starts a process of its own, which holds a port, and
+    // then waits. The run has to stop the whole tree: left alone, the port
+    // would be held by a process nobody is waiting for. The process holds
+    // no pipe of the run's, so nothing waits for it to end: whether it is
+    // still there is asked of its port alone.
+    let script = workspace.path().join("agent-with-a-child.py");
+    fs::write(
+        &script,
+        r#"import subprocess, sys, time
+url, report = sys.argv[1], sys.argv[2]
+child = """
+import socket, sys, time
+listener = socket.socket()
+listener.bind(("127.0.0.1", 0))
+listener.listen(1)
+open(sys.argv[1], "w").write(str(listener.getsockname()[1]))
+time.sleep(60)
+"""
+subprocess.Popen(
+    [sys.executable, "-c", child, report + ".port"],
+    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+)
+for _ in range(100):
+    try:
+        open(report + ".port")
+        break
+    except OSError:
+        time.sleep(0.1)
+time.sleep(30)
+"#,
+    )
+    .unwrap();
+    // The agent runs in the run's directory, so the script is named by its path.
+    let command = format!("python3 {} {{url}} {{report}}", script.display());
+    let (code, stdout, stderr, work) =
+        a_range_run(workspace.path(), &command, &["--timeout", "3s"]);
+    assert_eq!((code, stderr.as_str()), (0, ""), "{stdout}");
+    assert!(
+        stdout.contains("the agent was still running after 3s; it was stopped"),
+        "{stdout}"
+    );
+    let port: u16 = fs::read_to_string(work.join("report.json.port")).unwrap().parse().unwrap();
+    assert!(
+        TcpStream::connect(("127.0.0.1", port)).is_err(),
+        "a process the agent started still holds port {port}"
+    );
+}
+
+#[test]
 fn a_run_needs_a_pack_it_can_read_and_a_time_it_understands() {
     let (workspace, _api) = shop();
     let (code, stdout, stderr, _work) =
@@ -1004,7 +1066,11 @@ fn a_judgement_is_given_as_sarif_and_as_junit_for_other_tools() {
         rule("bait/admin-link-in-cart")["properties"],
         serde_json::json!({ "severity": "medium", "tags": ["security"] })
     );
-    assert_eq!(orders["locations"][0]["physicalLocation"]["artifactLocation"]["uri"], log);
+    // A file is named as SARIF names one, with forward slashes.
+    assert_eq!(
+        orders["locations"][0]["physicalLocation"]["artifactLocation"]["uri"],
+        named(&workspace.path().join("exchanges.jsonl"))
+    );
     assert_eq!(line_of(the(results, "injection/instruction-in-product-description")), 9);
     assert_eq!(line_of(the(results, "bait/admin-link-in-cart")), 11);
     let out: Vec<&Value> =
@@ -1079,10 +1145,11 @@ fn what_the_agent_reports_is_in_both_formats_as_the_log_sees_it() {
     let workspace = a_run(&every_planted_thing());
     let findings = workspace.path().join("findings.json");
     fs::write(&findings, A_REPORT).unwrap();
-    let (pack, log, findings) = (
+    let (pack, log, findings, report) = (
         shown(&workspace.path().join("shop.pack.json")),
         shown(&workspace.path().join("exchanges.jsonl")),
         shown(&findings),
+        named(&findings),
     );
 
     let (code, sarif) = document(&[
@@ -1112,10 +1179,7 @@ fn what_the_agent_reports_is_in_both_formats_as_the_log_sees_it() {
     let unbacked = the(results, "unbacked-finding");
     assert_eq!(unbacked["properties"]["index"], 2);
     // It is placed at the report, not at the log.
-    assert_eq!(
-        unbacked["locations"][0]["physicalLocation"]["artifactLocation"]["uri"],
-        findings
-    );
+    assert_eq!(unbacked["locations"][0]["physicalLocation"]["artifactLocation"]["uri"], report);
     let left_out: Vec<Value> = results
         .iter()
         .filter(|result| result["ruleId"] == "unreported-flaw")

@@ -22,7 +22,9 @@ const EXIT_OK: i32 = 0;
 const EXIT_RULE_BROKEN: i32 = 1;
 /// How long the mock is given to listen.
 const START_TIMEOUT: Duration = Duration::from_secs(120);
-/// How long the mock is given to stop before it is killed.
+/// How long the mock is given to stop before it is killed. A Windows
+/// process cannot be asked to stop, so there is nothing to wait for there.
+#[cfg(unix)]
 const STOP_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// `range run`.
@@ -263,26 +265,26 @@ impl Mock {
         Ok(Self { child, port })
     }
 
-    /// Stop the mock. It is asked to end, and given a moment to; then it is killed.
+    /// Stop the mock. Where a process can be asked to end, it is asked and
+    /// given a moment to. One that is still there, and any process on
+    /// Windows, where there is no asking, is killed.
     fn stop(mut self) {
         #[cfg(unix)]
         {
             let _ = Command::new("kill").args(["-TERM", &self.child.id().to_string()]).status();
-        }
-        let until = Instant::now() + STOP_TIMEOUT;
-        loop {
-            match self.child.try_wait() {
-                Ok(Some(_)) => break,
-                Ok(None) if Instant::now() < until => {
-                    std::thread::sleep(Duration::from_millis(100));
-                }
-                _ => {
-                    let _ = self.child.kill();
-                    let _ = self.child.wait();
-                    break;
+            let until = Instant::now() + STOP_TIMEOUT;
+            loop {
+                match self.child.try_wait() {
+                    Ok(Some(_)) => break,
+                    Ok(None) if Instant::now() < until => {
+                        std::thread::sleep(Duration::from_millis(100));
+                    }
+                    _ => break,
                 }
             }
         }
+        let _ = self.child.kill();
+        let _ = self.child.wait();
     }
 }
 
@@ -336,13 +338,22 @@ fn run_agent(command: &str, place: &Place, timeout: Duration) -> Result<Agent, S
     }
 }
 
-/// End the agent's command and, on a system that has process groups, every
-/// process it started.
+/// End the agent's command and every process it started: its process group
+/// where there are process groups, and its tree on Windows.
 fn stop_tree(child: &mut Child) {
     #[cfg(unix)]
     {
         let group = format!("-{}", child.id());
         let _ = Command::new("kill").args(["-KILL", "--", &group]).status();
+    }
+    #[cfg(windows)]
+    {
+        // What `taskkill` says is not this command's to print.
+        let _ = Command::new("taskkill")
+            .args(["/PID", &child.id().to_string(), "/T", "/F"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
     }
     let _ = child.kill();
     let _ = child.wait();

@@ -3225,7 +3225,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 std::process::exit(1);
             }
 
-            serve::handle_serve(serve::ServeArgs {
+            if let Err(error) = serve::handle_serve(serve::ServeArgs {
                 config_path: args.config,
                 profile: args.profile,
                 http_port: args.ports.http_port,
@@ -3319,7 +3319,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 conformance_buffer_unique: args.conformance_buffer_unique,
                 inject_response_violations: args.inject_response_violations,
             })
-            .await?;
+            .await
+            {
+                // Why it stopped is shown as it was written. Returned from
+                // `main`, an error is shown as Rust shows a string in debug:
+                // in quotes, and with every backslash of a path doubled.
+                eprintln!("Error: {error}");
+                std::process::exit(1);
+            }
         }
         #[cfg(feature = "http")]
         Commands::Proxy(args) => {
