@@ -76,6 +76,7 @@
 - **[Reality]** Lab scanner templates send a request body as a string. The pinned runner rejected the list form, so no pack with a request body could run.
 - **[DevX]** The CLI tools bundle uses forward-slash keys on every platform, so a bundle generated on Windows matches the one CI checks.
 - **[DevX]** The SARIF files the conformance and the OWASP API checks write name the schema OASIS publishes for 2.1.0. The address they named returned 404, so a tool that went to the address for the schema found none.
+- **[DevX]** The command's debug binary starts on Windows. It overflowed the one megabyte Windows gives a program's main thread, even for `--version`; the binary now reserves eight, as Linux gives. The end-to-end tests that start the real `mockforge serve` run on Windows too: they keep the system root Winsock needs to open a socket, and name their temporary directory as Windows reads it.
 
 ## [0.3.249] - 2026-11-23
 

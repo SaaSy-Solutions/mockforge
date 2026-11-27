@@ -2,6 +2,7 @@
 //! serve it with the exchange log open, send it requests as an agent would,
 //! and read what the mock wrote down.
 #![allow(deprecated)]
+mod support;
 use assert_cmd::prelude::*;
 use mockforge_contracts::range::exchange::{digest, read_exchanges};
 use serde_json::Value;
@@ -49,9 +50,7 @@ impl Mockserve {
         let workspace = tempfile::tempdir().unwrap();
         fs::write(workspace.path().join(".env"), "").unwrap();
         let mut command = Command::cargo_bin("mockforge").unwrap();
-        command
-            .env_clear()
-            .env("TMPDIR", workspace.path())
+        support::isolated(&mut command, workspace.path())
             .current_dir(workspace.path())
             .args([
                 "serve",

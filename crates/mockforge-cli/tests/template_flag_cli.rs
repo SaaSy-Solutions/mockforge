@@ -6,6 +6,7 @@
 //! Each test starts the server in a directory of its own, with the flag in its
 //! `mockforge.yaml` and the variable set to what the test names, or not set.
 
+mod support;
 use assert_cmd::prelude::*;
 use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
@@ -41,9 +42,7 @@ impl Server {
         fs::write(directory.path().join("mockforge.yaml"), configuration).unwrap();
         let spec = directory.path().join("spec.json").display().to_string();
         let mut command = Command::cargo_bin("mockforge").unwrap();
-        command
-            .env_clear()
-            .env("TMPDIR", directory.path())
+        support::isolated(&mut command, directory.path())
             .current_dir(directory.path())
             .args([
                 "serve",

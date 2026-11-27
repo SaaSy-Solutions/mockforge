@@ -2,6 +2,7 @@
 #![cfg(unix)]
 #![allow(deprecated)]
 
+mod support;
 use assert_cmd::cargo::CommandCargoExt;
 use std::{
     io::{BufRead, BufReader},
@@ -25,9 +26,7 @@ async fn assert_serve_stops_for(signal: &str, admin_login: bool, grace: Duration
     // drive for its own temporary files after clearing the environment.
     std::fs::write(directory.path().join(".env"), "").expect("empty fixture environment");
     let mut command = Command::cargo_bin("mockforge").expect("compiled CLI binary");
-    command
-        .env_clear()
-        .env("TMPDIR", directory.path())
+    support::isolated(&mut command, directory.path())
         .current_dir(directory.path())
         .args([
             "serve",
