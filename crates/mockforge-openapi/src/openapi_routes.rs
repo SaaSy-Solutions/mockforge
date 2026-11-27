@@ -17,6 +17,7 @@ pub mod registry;
 pub mod validation;
 mod validation_policy;
 
+use crate::answers::RequestOwned;
 use crate::response::AiGenerator;
 use crate::response_rewriter::{OverrideHook, OverrideRequest, ResponseRewriter};
 use crate::{OpenApiOperation, OpenApiRoute, OpenApiSpec};
@@ -652,6 +653,36 @@ impl OpenApiRouteRegistry {
                 if let Some(ref injector) = ctx.latency_injector {
                     if let Err(e) = injector.inject_latency(&operation_tags).await {
                         tracing::warn!("Failed to inject latency: {}", e);
+                    }
+                }
+
+                // (c2) An answer the spec gives a request like this, before
+                // any scenario or status the headers ask for: it is how the
+                // API answers that request.
+                if !route_clone.answers.is_empty() {
+                    let request =
+                        RequestOwned::of(raw_query.as_deref().unwrap_or(""), &headers, &body);
+                    if let Some(answer) = route_clone.answer_for(&request) {
+                        let mut answered = route_clone.answer_body(
+                            answer,
+                            &path_params,
+                            crate::request_template::Query::Text(raw_query.as_deref()),
+                            &headers,
+                            &body,
+                        );
+                        if let Some(ref overrides) = ctx.overrides {
+                            let asked = OverrideRequest {
+                                method: &method,
+                                path_template: &path_template,
+                                operation_id: operation.operation_id.as_deref().unwrap_or_default(),
+                                tags: &operation_tags,
+                                headers: &headers,
+                                query: raw_query.as_deref(),
+                                body: &body,
+                            };
+                            overrides.apply(&asked, &mut answered);
+                        }
+                        return route_clone.answer_response(answer, answered);
                     }
                 }
 
@@ -1910,6 +1941,26 @@ impl OpenApiRouteRegistry {
                 let validator = validator_clone.clone();
 
                 async move {
+                    // An answer the spec gives a request like this comes first.
+                    if !route.answers.is_empty() {
+                        let pairs: Vec<(String, String)> = query_params
+                            .iter()
+                            .map(|(name, value)| (name.clone(), value.clone()))
+                            .collect();
+                        let request =
+                            RequestOwned::with_query(pairs.clone(), &headers, &body_bytes);
+                        if let Some(answer) = route.answer_for(&request) {
+                            let answered = route.answer_body(
+                                answer,
+                                &path_params,
+                                crate::request_template::Query::Pairs(&pairs),
+                                &headers,
+                                &body_bytes,
+                            );
+                            return route.answer_response(answer, answered);
+                        }
+                    }
+
                     // Issue #925 — this handler used to take
                     // `body: Option<Json<Value>>`, which axum resolves to
                     // `None` for any request whose Content-Type isn't
@@ -1955,7 +2006,7 @@ impl OpenApiRouteRegistry {
                     ) {
                         let status = axum::http::StatusCode::from_u16(status_code)
                             .unwrap_or(axum::http::StatusCode::BAD_REQUEST);
-                        return (status, Json(payload));
+                        return (status, Json(payload)).into_response();
                     }
 
                     tracing::debug!(
@@ -2013,6 +2064,7 @@ impl OpenApiRouteRegistry {
                             .unwrap_or(axum::http::StatusCode::OK),
                         Json(response),
                     )
+                        .into_response()
                 }
             };
 
@@ -2095,6 +2147,37 @@ impl OpenApiRouteRegistry {
                 let validator = validator_clone.clone();
 
                 async move {
+                    // An answer the spec gives a request like this comes
+                    // first: it is how the API answers, whatever the request
+                    // validates like and whatever MockAI would make of it.
+                    if !route.answers.is_empty() {
+                        let pairs: Vec<(String, String)> = query
+                            .0
+                            .iter()
+                            .map(|(name, value)| (name.clone(), value.clone()))
+                            .collect();
+                        let request =
+                            RequestOwned::with_query(pairs.clone(), &headers, &body_bytes);
+                        if let Some(answer) = route.answer_for(&request) {
+                            let mut answered = route.answer_body(
+                                answer,
+                                &path_params,
+                                crate::request_template::Query::Pairs(&pairs),
+                                &headers,
+                                &body_bytes,
+                            );
+                            apply_route_overrides(
+                                overrides.as_deref(),
+                                &route,
+                                &headers,
+                                &query.0,
+                                &body_bytes,
+                                &mut answered,
+                            );
+                            return route.answer_response(answer, answered);
+                        }
+                    }
+
                     let mut path_map = Map::new();
                     for (k, v) in &path_params {
                         path_map.insert(k.clone(), Value::String(v.clone()));

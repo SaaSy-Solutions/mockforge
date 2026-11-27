@@ -3,6 +3,7 @@
 //! This module provides functionality for generating Axum routes
 //! from OpenAPI path definitions.
 
+use crate::answers::{Answer, RequestOwned};
 use crate::response_selection::{ResponseSelectionMode, ResponseSelector};
 use crate::spec::OpenApiSpec;
 use mockforge_foundation::ai_response::AiResponseConfig;
@@ -67,6 +68,9 @@ pub struct OpenApiRoute {
     /// example on (`{{uuid}}`, `{{now}}`). The environment variable
     /// `MOCKFORGE_RESPONSE_TEMPLATE_EXPAND` decides when it is set.
     pub response_template_expand: bool,
+    /// The answers the operation gives to requests it names, from its
+    /// `x-mockforge-answers` extension ([`crate::answers`]). None for most.
+    pub answers: Vec<Answer>,
 }
 
 /// Whether the tokens of an example are expanded: the variable's value when
@@ -100,6 +104,22 @@ impl OpenApiRoute {
         // Parse response selection mode from x-mockforge-response-selection extension
         let response_selection_mode = Self::parse_response_selection_mode(&operation);
         let response_selector = Arc::new(ResponseSelector::new(response_selection_mode));
+        // The answers by request of the x-mockforge-answers extension. One
+        // that HTTP cannot give, or whose `when` names nothing, is left out.
+        let who = operation.operation_id.as_deref().unwrap_or("unknown");
+        let mut answers = Answer::of(&operation).unwrap_or_else(|reason| {
+            tracing::warn!(
+                "Failed to parse x-mockforge-answers extension for operation {who}: {reason}"
+            );
+            Vec::new()
+        });
+        answers.retain(|answer| match answer.problem() {
+            None => true,
+            Some(reason) => {
+                tracing::warn!("An answer by request of operation {who} is left out: it {reason}");
+                false
+            }
+        });
 
         Self {
             method,
@@ -113,6 +133,7 @@ impl OpenApiRoute {
             response_selector,
             persona,
             response_template_expand: false,
+            answers,
         }
     }
 
@@ -124,6 +145,45 @@ impl OpenApiRoute {
             std::env::var("MOCKFORGE_RESPONSE_TEMPLATE_EXPAND").ok().as_deref(),
             self.response_template_expand,
         )
+    }
+
+    /// The answer the spec gives a request by `x-mockforge-answers`: the
+    /// first of the operation's answers whose `when` it meets. `None` when
+    /// the operation has none, or the request meets none of them.
+    pub fn answer_for<'a>(&'a self, request: &RequestOwned<'a>) -> Option<&'a Answer> {
+        Answer::first(&self.answers, &request.asked())
+    }
+
+    /// The body of an answer with the tokens that name the request expanded,
+    /// as an example's are: `{{request.body.role}}` is what the request sent.
+    pub fn answer_body(
+        &self,
+        answer: &Answer,
+        path_params: &std::collections::HashMap<String, String>,
+        query: crate::request_template::Query<'_>,
+        headers: &axum::http::HeaderMap,
+        body: &[u8],
+    ) -> serde_json::Value {
+        let asked = crate::request_template::Asked::of(
+            &self.method,
+            &self.path,
+            path_params,
+            query,
+            headers,
+            body,
+        );
+        crate::request_template::expand(answer.then.body(), &asked)
+    }
+
+    /// An answer as a response: its status and the body it is given with,
+    /// the headers the spec declares for its status, and its own headers
+    /// over them.
+    pub fn answer_response(
+        &self,
+        answer: &Answer,
+        body: serde_json::Value,
+    ) -> axum::http::Response<axum::body::Body> {
+        answer.with_spec_headers(self.mock_response_headers_for_status(answer.then.status), body)
     }
 
     /// Parse AI configuration from OpenAPI operation's vendor extensions
@@ -675,8 +735,10 @@ impl OpenApiRoute {
     /// validator's `validate_response_headers` even knows the shape, but
     /// the synthesiser was never wired up. Returns a list of
     /// `(header_name, value)` pairs for the given status code, suitable
-    /// for injecting straight into the axum response. The value is
-    /// schema-aware where the lift is cheap:
+    /// for injecting straight into the axum response. The value is what the
+    /// spec gives when it gives one ([`declared_header_value`]): the header's
+    /// `example`, its schema's `example` or `default`, or the first of a
+    /// string's `enum`. Otherwise it is schema-aware where the lift is cheap:
     /// - `Set-Cookie`: a cookie-shaped placeholder (`<sanitized-name>=mockforge-session; Path=/`)
     /// - `string`, `format: uuid`: a stable nil UUID so downstream parsing succeeds
     /// - `string`, `format: date-time`: an RFC-3339 zero timestamp
@@ -710,6 +772,10 @@ impl OpenApiRoute {
                 out.push((name.clone(), "mockforge-mock-value".to_string()));
                 continue;
             };
+            if let Some(declared) = declared_header_value(header) {
+                out.push((name.clone(), declared));
+                continue;
+            }
 
             let value = match &header.format {
                 ParameterSchemaOrContent::Schema(ReferenceOr::Item(schema)) => {
@@ -737,6 +803,38 @@ impl OpenApiRoute {
             out.push((name.clone(), value));
         }
         out
+    }
+}
+
+/// The value a spec gives a response header, when it gives one: the
+/// header's `example`, its schema's `example`, its schema's `default`, or the
+/// first of a string's `enum`. A value that is not a string is written as
+/// JSON. `None` when the spec declares the header without saying what it
+/// holds, and the caller makes a value up.
+fn declared_header_value(header: &openapiv3::Header) -> Option<String> {
+    let text = |value: &serde_json::Value| match value {
+        serde_json::Value::String(text) => text.clone(),
+        other => other.to_string(),
+    };
+    if let Some(example) = &header.example {
+        return Some(text(example));
+    }
+    let openapiv3::ParameterSchemaOrContent::Schema(ReferenceOr::Item(schema)) = &header.format
+    else {
+        return None;
+    };
+    if let Some(example) = &schema.schema_data.example {
+        return Some(text(example));
+    }
+    if let Some(default) = &schema.schema_data.default {
+        return Some(text(default));
+    }
+    match &schema.schema_kind {
+        openapiv3::SchemaKind::Type(openapiv3::Type::String(string)) => string
+            .enumeration
+            .first()
+            .and_then(|first| first.as_ref().map(|value| value.to_string())),
+        _ => None,
     }
 }
 
@@ -882,13 +980,19 @@ impl RouteGenerator {
 #[cfg(test)]
 mod status_code_selection_tests {
     use super::OpenApiRoute;
+    use crate::answers::RequestOwned;
     use crate::spec::OpenApiSpec;
+    use axum::http::HeaderMap;
     use serde_json::json;
     use std::sync::Arc;
 
     fn route_from_responses(responses: serde_json::Value) -> OpenApiRoute {
+        route_from(json!({ "responses": responses }))
+    }
+
+    fn route_from(operation: serde_json::Value) -> OpenApiRoute {
         let operation: openapiv3::Operation =
-            serde_json::from_value(json!({ "responses": responses })).expect("valid operation");
+            serde_json::from_value(operation).expect("valid operation");
         let spec = OpenApiSpec::from_json(json!({
             "openapi": "3.0.0",
             "info": {"title": "t", "version": "1.0.0"},
@@ -983,6 +1087,70 @@ mod status_code_selection_tests {
             .find(|(name, _)| name.eq_ignore_ascii_case("X-Request-Id"))
             .expect("X-Request-Id header should be synthesised");
         assert_eq!(value, "00000000-0000-0000-0000-000000000000");
+    }
+
+    #[test]
+    fn a_header_is_answered_with_the_value_the_spec_gives_it() {
+        // The header's `example` first, then its schema's `example`, its
+        // `default`, and the first of a string's `enum`. A string is sent as
+        // it is written and anything else as JSON. A header the spec gives no
+        // value is made up as before.
+        let r = route_from_responses(json!({
+            "200": {
+                "description": "ok",
+                "headers": {
+                    "Access-Control-Allow-Origin": {"schema": {"type": "string"}, "example": "*"},
+                    "X-Rate-Limit-Remaining": {"schema": {"type": "string", "example": "42"}},
+                    "X-Rate-Limit-Limit": {"schema": {"type": "integer", "default": 100}},
+                    "X-Format": {"schema": {"type": "string", "enum": ["csv", "json"]}},
+                    "X-Format-Deprecated": {"schema": {"type": "string", "format": "uuid"}, "example": "mine"},
+                    "X-Made-Up": {"schema": {"type": "string", "format": "uuid"}}
+                }
+            }
+        }));
+        let mut headers: Vec<(String, String)> = r
+            .mock_response_headers_for_status(200)
+            .into_iter()
+            .map(|(name, value)| (name.to_ascii_lowercase(), value))
+            .collect();
+        headers.sort();
+        assert_eq!(
+            headers,
+            [
+                ("access-control-allow-origin", "*".to_string()),
+                ("x-format", "csv".to_string()),
+                ("x-format-deprecated", "mine".to_string()),
+                ("x-made-up", "00000000-0000-0000-0000-000000000000".to_string()),
+                ("x-rate-limit-limit", "100".to_string()),
+                ("x-rate-limit-remaining", "42".to_string()),
+            ]
+            .into_iter()
+            .map(|(name, value)| (name.to_string(), value))
+            .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn an_answer_that_names_no_request_or_cannot_be_given_is_left_out() {
+        // The first names nothing, so it would be given to every request; the
+        // second carries a header HTTP has no name for.
+        let r = route_from(json!({
+            "responses": { "200": { "description": "ok" } },
+            "x-mockforge-answers": [
+                { "when": {}, "then": { "status": 418 } },
+                { "when": { "query": { "a": "1" } }, "then": { "status": 201, "headers": { "bad name": "x" } } },
+                { "when": { "query": { "debug": "1" } }, "then": { "status": 500 } }
+            ]
+        }));
+        assert_eq!(r.answers.len(), 1);
+        // The request it names is given it, and no other is.
+        let asked = RequestOwned::of("debug=1", &HeaderMap::new(), b"");
+        assert_eq!(r.answer_for(&asked).map(|answer| answer.then.status), Some(500));
+        let other = RequestOwned::of("debug=0", &HeaderMap::new(), b"");
+        assert!(r.answer_for(&other).is_none());
+        assert!(route_from_responses(json!({ "200": { "description": "ok" } }))
+            .answers
+            .is_empty());
     }
 
     #[test]
