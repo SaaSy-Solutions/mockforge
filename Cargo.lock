@@ -8624,6 +8624,7 @@ name = "mockforge-contracts"
 version = "0.3.249"
 dependencies = [
  "async-trait",
+ "base64 0.22.1",
  "bytes",
  "chrono",
  "hex",
@@ -8638,6 +8639,7 @@ dependencies = [
  "serde",
  "serde_jcs",
  "serde_json",
+ "sha1 0.10.7",
  "sha2 0.10.9",
  "tempfile",
  "thiserror 2.0.18",
