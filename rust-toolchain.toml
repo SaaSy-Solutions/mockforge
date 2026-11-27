@@ -7,6 +7,8 @@
 #   - .github/actions/rust-toolchain/action.yml (default input)
 #   - .github/workflows/ci.yml (RUSTUP_TOOLCHAIN, matrix.rust, `== '1.96.0'` guards)
 #   - .github/workflows/registry-e2e.yml (RUSTUP_TOOLCHAIN, `rustup default`)
+#   - every workflow that sets RUSTUP_TOOLCHAIN overrides this file with it:
+#     scripts/tests/test_msrv_toolchain.py keeps each to this channel
 # The minimum supported Rust version is 1.96.0, declared in Cargo.toml and
 # enforced by the dedicated CI job. Bump the build pin and MSRV deliberately;
 # keep package metadata, CI assertions, and compatibility docs in sync.

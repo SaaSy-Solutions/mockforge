@@ -17,6 +17,14 @@ def msrv_job():
     return workflow.split("\n  msrv:\n", 1)[1].split("\n  typos:\n", 1)[0]
 
 
+def run_script(step):
+    """The script of a `run: |` step, cut at the next step and without its indentation."""
+    body = step.partition("run: |\n")[2]
+    lines = re.split(r"\n\s*- name:", body, maxsplit=1)[0].splitlines()
+    indent = len(lines[0]) - len(lines[0].lstrip())
+    return "\n".join(line[indent:] for line in lines)
+
+
 class MsrvToolchainTest(unittest.TestCase):
     def test_job_overrides_global_toolchain_and_installs_same_version(self):
         workflow = WORKFLOW.read_text()
@@ -29,9 +37,9 @@ class MsrvToolchainTest(unittest.TestCase):
 
     def verify_versions(self, rustc_version, cargo_version):
         step = msrv_job().split("- name: Verify active MSRV toolchain\n", 1)[1]
-        step = step.split("\n    - name:", 1)[0]
-        script = step.split("      run: |\n", 1)[1]
-        script = "\n".join(line.removeprefix("        ") for line in script.splitlines())
+        return self.run_with_versions(run_script(step), rustc_version, cargo_version)
+
+    def run_with_versions(self, script, rustc_version, cargo_version):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             for tool, version in (("rustc", rustc_version), ("cargo", cargo_version)):
@@ -63,6 +71,33 @@ class MsrvToolchainTest(unittest.TestCase):
     def test_older_compiler_fails(self):
         result = self.verify_versions("1.91.1", "1.91.1")
         self.assertNotEqual(result.returncode, 0)
+
+    def test_integration_job_names_the_pin_and_stops_on_another_toolchain(self):
+        # Until 2026-11-27 this job set `RUSTUP_TOOLCHAIN: stable`, which
+        # overrides the pin. It built with 1.99.0, then with 1.100.0, and
+        # failed every run on the layout of the newer Cargo.
+        workflow = (ROOT / ".github/workflows/integration-tests.yml").read_text()
+        self.assertIn('RUSTUP_TOOLCHAIN: "1.96.0"', workflow.split("\njobs:\n", 1)[0])
+        step = workflow.split("- name: Verify the active Rust is the pinned one\n", 1)[1]
+        script = run_script(step)
+        result = self.run_with_versions(script, "1.96.0", "1.96.0")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        result = self.run_with_versions(script, "1.100.0", "1.100.0")
+        self.assertNotEqual(result.returncode, 0)
+
+    def test_every_workflow_names_the_pinned_toolchain(self):
+        # A workflow that sets the variable to anything but the pin builds
+        # with whatever the runner installed last, and says so nowhere.
+        seen = 0
+        for workflow in sorted((ROOT / ".github/workflows").glob("*.yml")):
+            values = re.findall(
+                r"^\s*RUSTUP_TOOLCHAIN:\s*(.+?)\s*$", workflow.read_text(), flags=re.MULTILINE
+            )
+            for value in values:
+                with self.subTest(workflow=workflow.name, value=value):
+                    self.assertEqual(value.strip("\"'"), "1.96.0")
+                seen += 1
+        self.assertGreater(seen, 0)
 
     def test_every_workspace_member_inherits_declared_minimum(self):
         workspace = tomllib.loads((ROOT / "Cargo.toml").read_text())["workspace"]

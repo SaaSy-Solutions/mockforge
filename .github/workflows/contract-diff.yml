@@ -49,7 +49,10 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   CARGO_BUILD_JOBS: "4"
-  RUSTUP_TOOLCHAIN: stable
+  # The pin of rust-toolchain.toml, named here because this variable
+  # overrides it: set to `stable`, the job built with whatever the runner
+  # had installed last. scripts/tests/test_msrv_toolchain.py keeps it here.
+  RUSTUP_TOOLCHAIN: "1.96.0"
 
 jobs:
   contract-diff:
