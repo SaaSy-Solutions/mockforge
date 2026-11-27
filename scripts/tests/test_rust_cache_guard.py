@@ -159,11 +159,26 @@ class CacheGuardTest(unittest.TestCase):
         library = directory / "libexample.so.1"
         library.write_bytes(b"artifact")
         (directory / "libexample.so").symlink_to(library.name)
-        self.assertTrue(GUARD.inspect(self.root)["errors"])
+        errors = GUARD.inspect(self.root)["errors"]
+        self.assertTrue(errors)
+        # The entry is named, relative to the target: the job log is the only
+        # view of a runner's disk.
+        self.assertIn(
+            "cache contains a nonregular file: unsupported file symlink: target/release/deps/libexample.so",
+            errors,
+        )
         (directory / "libexample.so").unlink()
         os.mkfifo(directory / "pipe")
-        self.assertTrue(GUARD.inspect(self.root)["errors"])
+        errors = GUARD.inspect(self.root)["errors"]
+        self.assertTrue(errors)
+        self.assertIn("cache contains a nonregular file: FIFO: target/release/deps/pipe", errors)
         self.assertTrue((directory / "pipe").exists())
+        (directory / "pipe").unlink()
+        (self.root / "target/release/linked").symlink_to(directory, target_is_directory=True)
+        self.assertIn(
+            "cache contains a directory symlink: target/release/linked",
+            GUARD.inspect(self.root)["errors"],
+        )
 
     def test_external_runner_target_is_inspected_in_place(self):
         workspace = self.root / "workspace"

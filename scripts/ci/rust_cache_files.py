@@ -51,7 +51,7 @@ def regular_files(target: Path, errors: list[str]):
         for name in list(directories):
             if (root / name).is_symlink():
                 directories.remove(name)
-                errors.append("cache contains a directory symlink")
+                errors.append("cache contains a directory symlink: " + (root / name).relative_to(target).as_posix())
         for name in files:
             path = root / name
             info = path.lstat()
@@ -66,6 +66,8 @@ def regular_files(target: Path, errors: list[str]):
                     else "FIFO" if stat.S_ISFIFO(info.st_mode)
                     else "special file"
                 )
-                errors.append("cache contains a nonregular file: " + kind)
+                # The entry is named, relative to the target, as the job log is
+                # the only view of a runner's disk.
+                errors.append("cache contains a nonregular file: " + kind + ": " + path.relative_to(target).as_posix())
                 continue
             yield path, info
