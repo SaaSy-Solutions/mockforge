@@ -397,6 +397,7 @@ and a request meets it when it holds all of what is named:
 | `query_contains` | The value of each parameter holds that text. |
 | `headers` | The request carries each header, with that value. Names are read in any case. |
 | `body_contains` | The body holds that text. |
+| `body` | Each field of the JSON body has a value that holds that text. A field is looked for at the top of the body and anywhere inside an object or an array; a value that is not a string is read as JSON writes it. |
 
 A `then` is the answer: `status` (`200` when left out), `body` as JSON (`{}`
 when left out) and `headers`. The body may name the request as an example
@@ -408,6 +409,26 @@ may, so that the answer says a field back:
           then:
             body: { id: 77, name: Ada, role: "{{request.body.role}}" }
 ```
+
+A weakness that comes in the body rather than in the query is planted the same
+way, with `body` naming the field; the answer may say it back with
+`{{request.body.<field>}}`. A login that takes a NoSQL operator where a
+password was expected:
+
+```yaml
+      x-mockforge-answers:
+        - when:
+            body: { password: "$gt" }
+          then:
+            status: 200
+            body: { authenticated: true, user: { id: u_1024 } }
+```
+
+`{"password": "hunter2"}` is answered as the operation's example says, and
+`{"password": {"$gt": ""}}` with a session. [Range: a Safe Target for an
+Agent](../range.md#a-kind-injected-through-a-field-of-the-json-body) plants
+such an answer with `range new`, and judges it only for the request whose
+field carried the injection.
 
 - **An answer is given before anything else is done with the request.** It is
   how the API answers that request, whatever the request validates like and

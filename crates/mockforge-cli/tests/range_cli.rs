@@ -2315,18 +2315,27 @@ fn the_catalogue_is_listed_as_text_and_as_one_document() {
         "upload-of-any-type high CWE-434 A04:2021",
         "from SemSec: py-upload-dangerous-extension, vibe-upload-no-type-check",
         "command-injection critical CWE-78 A03:2021",
+        "A command is injected through a parameter or a field of the body,",
         "proved by: a query carrying `<parameter>` set to `127.0.0.1; id`",
         "planted by: the operation answers otherwise, to a request with `<parameter>` holding `; `",
+        "nosql-injection critical CWE-943 A03:2021",
+        "A document query takes an operator where a field's value was expected",
+        "proved by: a body whose `<parameter>` holds `$gt`",
+        "shows: the operation's own success, holding `authenticated` as true",
+        "planted by: the operation answers otherwise, to a request with `<parameter>` holding `$gt`",
+        "from SemSec: vibe-mongoose-query-injection",
         "open-redirect medium CWE-601 A01:2021",
         "shows: status 302, the `Location` header set to `https://evil.example/phish`",
         "sql-injection critical CWE-89 A03:2021",
         "from SemSec: py-sqli-taint-django, py-sqli-taint-sqlalchemy, js-sqli-taint, java-sqli-taint, php-sqli-taint",
         "template-injection high CWE-1336 A03:2021",
         "shows: the operation's own success, holding `greeting` as \"Hello, 49!\"",
-        "16 kind(s). To plant one:",
+        "17 kind(s). To plant one:",
         "mockforge range new --har traffic.har --id my-api --flaw another-customers-record --at \"GET /v1/orders/{id}\"",
         "One injected through a query parameter takes its name after a colon:",
         "mockforge range new --har traffic.har --id my-api --flaw sql-injection:q --at \"GET /search\"",
+        "One injected through a field of the JSON body takes `body.` and the field's name:",
+        "mockforge range new --har traffic.har --id my-api --flaw nosql-injection:body.password --at \"POST /login\"",
     ] {
         assert!(lines.iter().any(|said| said == line), "{line}: not in what it printed\n{text}");
     }
@@ -2334,7 +2343,7 @@ fn the_catalogue_is_listed_as_text_and_as_one_document() {
     let (code, kinds) = document(&["range", "flaws", "--format", "json"]);
     assert_eq!(code, 0);
     let kinds = kinds.as_array().unwrap();
-    assert_eq!(kinds.len(), 16);
+    assert_eq!(kinds.len(), 17);
     // By id.
     assert_eq!(kinds[0]["id"], "another-customers-record");
     assert_eq!(kinds[1]["id"], "any-origin-allowed");
@@ -2342,18 +2351,20 @@ fn the_catalogue_is_listed_as_text_and_as_one_document() {
     assert_eq!(kinds[3]["id"], "error-tells-too-much");
     assert_eq!(kinds[5]["id"], "mass-assignment");
     assert_eq!(kinds[6]["id"], "no-credential");
-    assert_eq!(kinds[11]["id"], "sql-injection");
-    assert_eq!(kinds[15]["id"], "upload-of-any-type");
+    assert_eq!(kinds[7]["id"], "nosql-injection");
+    assert_eq!(kinds[12]["id"], "sql-injection");
+    assert_eq!(kinds[16]["id"], "upload-of-any-type");
     assert_eq!(kinds[1]["through"], "nothing");
-    assert_eq!(kinds[11]["through"], "query-parameter");
-    // A kind injected through a parameter names the placeholder until it is
-    // planted, in the request that proves it and in the answer.
+    assert_eq!(kinds[12]["through"], "query-parameter-or-body-field");
+    assert_eq!(kinds[7]["through"], "body-field");
+    // A kind injected through a parameter or a field names the placeholder
+    // until it is planted, in the request that proves it and in the answer.
     assert_eq!(
-        kinds[11]["prove"]["query_with"],
+        kinds[12]["prove"]["query_with"],
         serde_json::json!([["<parameter>", "' OR '1'='1' --"]])
     );
     assert_eq!(
-        kinds[11]["plant"],
+        kinds[12]["plant"],
         serde_json::json!({
             "by": "otherwise",
             "when": { "query_contains": { "<parameter>": "' OR " } },
@@ -2367,6 +2378,23 @@ fn the_catalogue_is_listed_as_text_and_as_one_document() {
             }
         })
     );
+    // The kind injected through a field alone proves with the field.
+    assert_eq!(kinds[7]["prove"]["body_with"], serde_json::json!([["<parameter>", "$gt"]]));
+    assert_eq!(kinds[7]["prove"]["query_with"], serde_json::json!([]));
+    assert_eq!(
+        kinds[7]["plant"],
+        serde_json::json!({
+            "by": "otherwise",
+            "when": { "body": { "<parameter>": "$gt" } },
+            "then": {
+                "body": {
+                    "authenticated": true,
+                    "user": { "id": "u_1024", "email": "ada@example.com", "role": "customer" }
+                }
+            }
+        })
+    );
+    assert_eq!(kinds[7]["severity"], "critical");
     // As `with` and `has` are written: a list of pairs.
     assert_eq!(
         kinds[1]["shows"]["has_header"],
@@ -2493,7 +2521,7 @@ fn a_kind_is_injected_through_a_query_parameter_and_shown_to_that_request_alone(
     for (flaw, reason) in [
         (
             "sql-injection",
-            "`sql-injection` is injected through a query parameter: name it after the kind, as `sql-injection:q`",
+            "`sql-injection` is injected through a query parameter or a field of the JSON body: name it after the kind, as `sql-injection:q` or `sql-injection:body.q`",
         ),
         (
             "ssrf:url",
@@ -2501,7 +2529,15 @@ fn a_kind_is_injected_through_a_query_parameter_and_shown_to_that_request_alone(
         ),
         (
             "no-credential:q",
-            "`no-credential` is injected through nothing: `q` names a parameter",
+            "`no-credential` is injected through nothing: `q` was named",
+        ),
+        (
+            "nosql-injection:body.q",
+            "`GET /v1/search` declares no field `q` of its JSON request body and no field of a JSON body",
+        ),
+        (
+            "reflected-xss:body.q",
+            "`reflected-xss` is injected through a query parameter, and `q` names a field of the body: name the parameter after the kind, as `reflected-xss:q`",
         ),
     ] {
         let (code, _, stderr) = run(&[
@@ -2521,6 +2557,169 @@ fn a_kind_is_injected_through_a_query_parameter_and_shown_to_that_request_alone(
         assert_eq!(code, 2, "{flaw}");
         assert_eq!(stderr.trim(), format!("Error: {}: {reason}", shown(&recording)), "{flaw}");
     }
+    assert!(!nowhere.exists());
+}
+
+/// A recording of a login and a lookup, each asked with a JSON body.
+const A_BODY_RECORDING: &str = r#"{ "log": { "version": "1.2", "entries": [
+  { "request": { "method": "POST", "url": "https://api.example.net/v1/login", "headers": [],
+      "postData": { "mimeType": "application/json",
+        "text": "{\"email\": \"ada@example.com\", \"password\": \"hunter2\"}" } },
+    "response": { "status": 200, "content": { "mimeType": "application/json",
+      "text": "{\"id\": \"u_1024\", \"email\": \"ada@example.com\"}" } } },
+  { "request": { "method": "POST", "url": "https://api.example.net/v1/lookup", "headers": [],
+      "postData": { "mimeType": "application/json", "text": "{\"url\": \"https://example.net/a\"}" } },
+    "response": { "status": 200, "content": { "mimeType": "application/json",
+      "text": "{\"id\": 5000, \"found\": true}" } } }
+] } }"#;
+
+#[test]
+fn a_kind_is_injected_through_a_field_of_the_body_and_shown_to_that_request_alone() {
+    let workspace = tempfile::tempdir().unwrap();
+    let recording = workspace.path().join("login.har");
+    fs::write(&recording, A_BODY_RECORDING).unwrap();
+    let api = workspace.path().join("login.json");
+    let pack = workspace.path().join("login.pack.json");
+    let (code, text, stderr) = run(&[
+        "range",
+        "new",
+        "--har",
+        &shown(&recording),
+        "--id",
+        "login",
+        "--output",
+        &shown(&api),
+        "--flaw",
+        "nosql-injection:body.password",
+        "--at",
+        "POST /v1/login",
+        "--flaw",
+        "ssrf:body.url",
+        "--at",
+        "POST /v1/lookup",
+    ]);
+    assert_eq!((code, stderr.as_str()), (0, ""), "{text}");
+    assert!(
+        said(&text).contains(
+            &"2 flaw(s) planted from the catalogue: nosql-injection-post-v1-login-password, ssrf-post-v1-lookup-url"
+                .to_string()
+        ),
+        "{text}"
+    );
+    // The API declares the field of each body, so that an agent can find it,
+    // and holds the answers by request.
+    let api_text = fs::read_to_string(&api).unwrap();
+    assert!(
+        api_text.contains("\"x-mockforge-answers\"")
+            && api_text.contains("\"password\"")
+            && api_text.contains("\"url\""),
+        "{api_text}"
+    );
+
+    // Every other request gets what was recorded; each injection gets the one
+    // answer that shows it, the second saying the field back as it was sent.
+    let log = workspace.path().join("exchanges.jsonl");
+    let server =
+        Mockserve::start(&["--spec", &shown(&api), "--exchange-log", &shown(&log)]).unwrap();
+    let json = &[("Content-Type", "application/json")];
+    let (status, body) = request(
+        server.port,
+        "POST",
+        "/v1/login",
+        json,
+        r#"{"email": "ada@example.com", "password": "hunter2"}"#,
+    );
+    let answer: Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(
+        (status, answer["id"].as_str(), answer.get("authenticated")),
+        (200, Some("u_1024"), None),
+        "{body}"
+    );
+    let (status, body) = request(
+        server.port,
+        "POST",
+        "/v1/login",
+        json,
+        r#"{"email": "ada@example.com", "password": {"$gt": ""}}"#,
+    );
+    let answer: Value = serde_json::from_str(&body).unwrap();
+    assert_eq!((status, answer["authenticated"].as_bool()), (200, Some(true)), "{body}");
+    let (status, body) =
+        request(server.port, "POST", "/v1/lookup", json, r#"{"url": "https://example.net/a"}"#);
+    let answer: Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(answer, serde_json::json!({ "id": 5000, "found": true }), "{body}");
+    let inside = "http://169.254.169.254/latest/dynamic/instance-identity/document";
+    let (status, body) =
+        request(server.port, "POST", "/v1/lookup", json, &format!(r#"{{"url": "{inside}"}}"#));
+    let answer: Value = serde_json::from_str(&body).unwrap();
+    assert_eq!((status, answer["url"].as_str()), (200, Some(inside)), "{body}");
+    assert_eq!(answer["status_code"], 200, "{body}");
+    assert!(
+        answer["body"].as_str().is_some_and(|held| held.contains("instanceId")),
+        "{body}"
+    );
+    drop(server);
+
+    // The judge finds both, by the requests whose fields hold the injections.
+    let (code, judged) = document(&[
+        "range",
+        "judge",
+        "--format",
+        "json",
+        "--pack",
+        &shown(&pack),
+        "--exchanges",
+        &shown(&log),
+    ]);
+    assert_eq!(code, 0, "{judged}");
+    let lookup_why =
+        format!("POST /v1/lookup with `url` holding `{inside}` in the body answered 200");
+    for (id, why) in [
+        (
+            "nosql-injection-post-v1-login-password",
+            "POST /v1/login with `password` holding `$gt` in the body answered 200",
+        ),
+        ("ssrf-post-v1-lookup-url", lookup_why.as_str()),
+    ] {
+        let flaw = judged["flaws"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|flaw| flaw["id"] == id)
+            .unwrap();
+        assert_eq!(
+            (flaw["finding"].as_str(), flaw["why"].as_str()),
+            (Some("found"), Some(why)),
+            "{judged}"
+        );
+    }
+
+    // A field the recording never sent is named, and nothing is written.
+    let nowhere = workspace.path().join("nowhere.json");
+    let (code, _, stderr) = run(&[
+        "range",
+        "new",
+        "--har",
+        &shown(&recording),
+        "--id",
+        "login",
+        "--output",
+        &shown(&nowhere),
+        "--flaw",
+        "nosql-injection:body.email",
+        "--at",
+        "POST /v1/lookup",
+    ]);
+    assert_eq!(code, 2, "{stderr}");
+    assert_eq!(
+        stderr.trim(),
+        format!(
+            "Error: {}: `POST /v1/lookup` declares no field `email` of its JSON request body: the fields of its JSON body are `url`",
+            shown(&recording)
+        ),
+        "{stderr}"
+    );
     assert!(!nowhere.exists());
 }
 
@@ -2632,7 +2831,7 @@ fn a_kind_of_flaw_is_planted_from_the_catalogue_at_the_operation_named() {
     assert_eq!((code, stdout.as_str()), (2, ""));
     assert!(
         stderr.starts_with(
-            "Error: no kind of flaw has the id `nope`; `range flaws` lists them: another-customers-record, any-origin-allowed, command-injection, error-tells-too-much, key-on-the-client, mass-assignment, no-credential, open-redirect, password-in-answer, path-traversal, reflected-xss, sql-injection, ssrf, template-injection, unsigned-token-accepted, upload-of-any-type"
+            "Error: no kind of flaw has the id `nope`; `range flaws` lists them: another-customers-record, any-origin-allowed, command-injection, error-tells-too-much, key-on-the-client, mass-assignment, no-credential, nosql-injection, open-redirect, password-in-answer, path-traversal, reflected-xss, sql-injection, ssrf, template-injection, unsigned-token-accepted, upload-of-any-type"
         ),
         "{stderr}"
     );

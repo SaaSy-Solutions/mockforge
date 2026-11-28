@@ -438,8 +438,9 @@ impl From<&Exchange> for OutOfScope {
 
 /// Whether an exchange is the request a claim names: the method, the path,
 /// the headers it must carry and must not carry, the query it must hold and
-/// must not, and the text its body must hold. A credential is compared by its
-/// digest, as the log holds it, and the query as it was decoded.
+/// must not, the text its body must hold, and the fields of its JSON body
+/// that must hold a text. A credential is compared by its digest, as the log
+/// holds it, and the query as it was decoded.
 pub fn asks(exchange: &Exchange, claim: &Claim) -> bool {
     exchange.method == claim.method
         && paths::matches(&claim.path, &exchange.path)
@@ -453,6 +454,19 @@ pub fn asks(exchange: &Exchange, claim: &Claim) -> bool {
             .body_contains
             .as_deref()
             .is_none_or(|text| exchange.request_body.contains(text))
+        && asks_body(&exchange.request_body, claim)
+}
+
+/// Whether the fields of a JSON body are those a claim names: each holds its
+/// text, at the top of the body or anywhere inside it. A body that is not
+/// whole JSON holds nothing.
+fn asks_body(body: &str, claim: &Claim) -> bool {
+    claim.body_with.is_empty()
+        || serde_json::from_str::<Value>(body).is_ok_and(|document| {
+            claim.body_with.iter().all(|(field, text)| {
+                mockforge_openapi::answers::field_holds(&document, field, text)
+            })
+        })
 }
 
 /// Whether the parameters of a query are those a claim names.
@@ -619,6 +633,7 @@ mod tests {
     use super::*;
     use crate::range::exchange::digest;
     use crate::range::testing::{exchange, pack};
+    use crate::range::Proof;
     use std::collections::BTreeMap;
 
     /// The same exchange with no credential at all.
@@ -743,6 +758,91 @@ mod tests {
             &redeem.prove.claim
         ));
         assert!(profile.prove.claim.with.is_empty() && profile.prove.claim.without.is_empty());
+    }
+
+    #[test]
+    fn the_fields_of_the_json_body_a_proof_names_are_looked_for_in_its_json() {
+        let operator = |fields: &[(&str, &str)]| Claim {
+            method: "POST".to_string(),
+            path: "/login".to_string(),
+            with: BTreeMap::new(),
+            without: Vec::new(),
+            query_with: BTreeMap::new(),
+            query_without: Vec::new(),
+            body_contains: None,
+            body_with: fields
+                .iter()
+                .map(|(field, text)| (field.to_string(), text.to_string()))
+                .collect(),
+        };
+        let password = operator(&[("password", "$gt")]);
+        let sent = |body: &str| asking(exchange(1, "POST", "/login", 200, ""), body);
+        // At the top of the body, and inside it; the value is read as JSON
+        // writes it when it is not a string.
+        assert!(asks(&sent(r#"{"email":"ada@example.com","password":{"$gt":""}}"#), &password));
+        assert!(asks(&sent(r#"{"user":{"password":{"$gt":""}}}"#), &password));
+        // Another field's value, a parameter of the query, a body that is not
+        // whole JSON, and the method.
+        for body in [
+            r#"{"email":{"$gt":""},"password":"hunter2"}"#,
+            r#"{"password":"hunter2"}"#,
+            "password=%24gt",
+            r#"{"password":{"$gt":""}"#,
+            "",
+        ] {
+            assert!(!asks(&sent(body), &password), "{body}");
+        }
+        assert!(!asks(
+            &asking(exchange(2, "GET", "/login", 200, ""), r#"{"password":{"$gt":""}}"#),
+            &password
+        ));
+        // Several fields: each must hold its text.
+        let both = operator(&[("password", "$gt"), ("role", "admin")]);
+        assert!(asks(&sent(r#"{"password":{"$gt":""},"role":"admin"}"#), &both));
+        assert!(!asks(&sent(r#"{"password":{"$gt":""},"role":"customer"}"#), &both));
+
+        // Judged: found at the exchange whose request holds the operator and
+        // whose answer shows what it should not.
+        let mut pack = pack();
+        pack.flaws = vec![Flaw {
+            id: "login-takes-an-operator".to_string(),
+            title: "A document query takes an operator where a value was expected".to_string(),
+            severity: Severity::Critical,
+            cwe: None,
+            owasp: None,
+            prove: Proof {
+                claim: password.clone(),
+                serves: Serves {
+                    status: Some(200),
+                    has: BTreeMap::from([("authenticated".to_string(), Value::from(true))]),
+                    ..Serves::default()
+                },
+            },
+        }];
+        let ordinary = asking(
+            exchange(1, "POST", "/login", 200, r#"{"authenticated":true}"#),
+            r#"{"email":"ada@example.com","password":"hunter2"}"#,
+        );
+        let none = judge(&pack, std::slice::from_ref(&ordinary));
+        assert_eq!(
+            verdict(&none, "login-takes-an-operator").why,
+            "never asked for POST /login with `password` holding `$gt` in the body"
+        );
+        assert_eq!(verdict(&none, "login-takes-an-operator").finding, Finding::Missed);
+        let shown = asking(
+            exchange(2, "POST", "/login", 200, r#"{"authenticated":true,"user":{"id":"u_1024"}}"#),
+            r#"{"email":"ada@example.com","password":{"$gt":""}}"#,
+        );
+        let found = judge(&pack, &[ordinary, shown]);
+        let found_verdict = verdict(&found, "login-takes-an-operator");
+        assert_eq!(
+            (found_verdict.finding, found_verdict.asked, found_verdict.exchange),
+            (Finding::Found, 1, Some(2))
+        );
+        assert_eq!(
+            found_verdict.why,
+            "POST /login with `password` holding `$gt` in the body answered 200"
+        );
     }
 
     #[test]

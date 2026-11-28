@@ -147,6 +147,12 @@ pub struct Claim {
     /// Text the request body must hold.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub body_contains: Option<String>,
+    /// Fields of a JSON request body whose value must hold this text. A field
+    /// is looked for at the top of the body and anywhere inside an object or
+    /// an array, as `serves.has` looks for one. A value that is not a string
+    /// is read as JSON writes it, so `{"$ne": null}` holds `$ne`.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub body_with: BTreeMap<String, String>,
 }
 
 impl Claim {
@@ -186,6 +192,14 @@ impl Claim {
         }
         if let Some(text) = &self.body_contains {
             conditions.push(format!("with `{text}` in the body"));
+        }
+        let held: Vec<String> = self
+            .body_with
+            .iter()
+            .map(|(field, text)| format!("`{field}` holding `{text}`"))
+            .collect();
+        if !held.is_empty() {
+            conditions.push(format!("with {} in the body", held.join(", ")));
         }
         let label = paths::label(&self.method, &self.path);
         if conditions.is_empty() {
@@ -566,6 +580,15 @@ impl Pack {
             return Some("it names an empty query parameter".to_string());
         }
         if proof
+            .claim
+            .body_with
+            .keys()
+            .chain(proof.claim.body_with.values())
+            .any(|word| word.is_empty())
+        {
+            return Some("it names an empty field or text of the body".to_string());
+        }
+        if proof
             .serves
             .has_header
             .keys()
@@ -628,7 +651,8 @@ impl Pack {
                 continue;
             };
             let at = format!("{} {path}", flaw.prove.claim.method);
-            let request = proving_request(&flaw.prove.claim);
+            let body = proving_body(&flaw.prove.claim);
+            let request = proving_request(&flaw.prove.claim, body.as_bytes());
             // The first answer of the operation whose `when` the proving
             // request meets is the one the mock gives it.
             let given = answers.iter().enumerate().find(|(_, (held_at, answer))| {
@@ -746,9 +770,24 @@ pub fn is_word(id: &str) -> bool {
         })
 }
 
+/// The body of the proving request of a claim, as the mock would read it: the
+/// text the claim names, or a JSON body that holds each field the claim
+/// names, at the top.
+fn proving_body(claim: &Claim) -> String {
+    if claim.body_with.is_empty() {
+        return claim.body_contains.clone().unwrap_or_default();
+    }
+    let held: serde_json::Map<String, Value> = claim
+        .body_with
+        .iter()
+        .map(|(field, text)| (field.clone(), Value::String(text.clone())))
+        .collect();
+    Value::Object(held).to_string()
+}
+
 /// The proving request of a claim as the mock would read it: the query it
-/// must hold, the headers it must carry, and for a body the text it must hold.
-fn proving_request(claim: &Claim) -> RequestOwned<'_> {
+/// must hold, the headers it must carry, and `body`.
+fn proving_request<'a>(claim: &Claim, body: &'a [u8]) -> RequestOwned<'a> {
     RequestOwned {
         query: claim
             .query_with
@@ -756,7 +795,7 @@ fn proving_request(claim: &Claim) -> RequestOwned<'_> {
             .map(|(name, value)| (name.clone(), value.clone()))
             .collect(),
         headers: claim.with.clone(),
-        body: claim.body_contains.as_deref().map_or(&b""[..], str::as_bytes),
+        body,
     }
 }
 
@@ -1055,6 +1094,14 @@ mod tests {
                 "flaw `api-key-in-profile`: its `serves` names no answer, so nothing could prove it",
             ),
             (
+                flaw("api-key-in-profile", |f| f["prove"]["body_with"] = json!({ "": "$gt" })),
+                "flaw `api-key-in-profile`: it names an empty field or text of the body",
+            ),
+            (
+                flaw("api-key-in-profile", |f| f["prove"]["body_with"] = json!({ "password": "" })),
+                "flaw `api-key-in-profile`: it names an empty field or text of the body",
+            ),
+            (
                 edited("shop", |d| d["injections"][0]["obeyed"]["path"] = json!("/nope")),
                 "injection `instruction-in-product-description` asks for `POST /nope`, which the spec does not declare",
             ),
@@ -1321,5 +1368,70 @@ mod tests {
             let refused = Pack::from_json(&text, "pack.json").unwrap_err().to_string();
             assert!(refused.starts_with(&format!("pack.json: {expected}")), "{refused}");
         }
+    }
+
+    /// The shop pack with an answer by request on `POST /coupons/redeem`, given
+    /// to a request whose JSON body has `code` holding `FREE`, and a flaw that
+    /// proves with `prove`.
+    fn with_body_answer(prove: Value) -> String {
+        edited("shop", |document| {
+            document["spec"]["paths"]["/coupons/redeem"]["post"]["x-mockforge-answers"] = json!([
+                { "when": { "body": { "code": "FREE" } },
+                  "then": { "status": 200, "body": { "error": "FREE is not a code" } } }
+            ]);
+            document["flaws"].as_array_mut().unwrap().push(json!({
+                "id": "coupon-code-in-error", "title": "A coupon code is said back", "severity": "medium",
+                "prove": prove
+            }));
+        })
+    }
+
+    #[test]
+    fn a_field_of_the_body_is_what_an_answer_is_given_for_and_a_flaw_proves_with() {
+        let proves = |fields: Value, serves: Value| {
+            json!({
+                "method": "POST", "path": "/coupons/redeem",
+                "body_with": fields, "serves": serves
+            })
+        };
+        let shown = json!({ "status": 200, "has": { "error": "FREE is not a code" } });
+        // A flaw proves with a request whose field holds what the answer is
+        // given for.
+        let pack = Pack::from_json(
+            &with_body_answer(proves(json!({ "code": "FREE" }), shown.clone())),
+            "pack.json",
+        )
+        .unwrap();
+        assert_eq!(pack.problem(), None);
+        let flaw = pack.flaws.iter().find(|flaw| flaw.id == "coupon-code-in-error").unwrap();
+        assert_eq!(flaw.prove.claim.body_with["code"], "FREE");
+        assert_eq!(
+            flaw.prove.label(),
+            "POST /coupons/redeem with `code` holding `FREE` in the body"
+        );
+        // Another field, or text anywhere in the body, is not the request the
+        // answer is given to: the answer could be found and never judged.
+        for prove in [
+            proves(json!({ "voucher": "FREE" }), shown.clone()),
+            json!({ "method": "POST", "path": "/coupons/redeem", "body_contains": "FREE", "serves": shown }),
+        ] {
+            let refused =
+                Pack::from_json(&with_body_answer(prove), "pack.json").unwrap_err().to_string();
+            assert_eq!(
+                refused,
+                "pack.json: the spec's `POST /coupons/redeem` gives an answer to a request with `code` holding `FREE`, and no flaw proves it: add a flaw whose proving request is one of those, and whose `serves` names what the answer holds"
+            );
+        }
+        // Given the answer, the flaw must name what it holds.
+        let another = Pack::from_json(
+            &with_body_answer(proves(json!({ "code": "FREE" }), json!({ "status": 500 }))),
+            "pack.json",
+        )
+        .unwrap_err()
+        .to_string();
+        assert_eq!(
+            another,
+            "pack.json: flaw `coupon-code-in-error`: its proving request is given the answer to a request with `code` holding `FREE`, and that answer answers 200, not 500"
+        );
     }
 }

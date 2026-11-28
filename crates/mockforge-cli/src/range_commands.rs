@@ -148,6 +148,9 @@ fn flaws_text() -> String {
         for name in kind.prove.query_without {
             proved.push(format!("no `{name}` in the query"));
         }
+        for (field, text) in kind.prove.body_with {
+            proved.push(format!("a body whose `{field}` holds `{text}`"));
+        }
         if let Some(held) = kind.prove.body_contains {
             proved.push(format!("a body that holds `{held}`"));
         }
@@ -237,13 +240,13 @@ fn flaws_text() -> String {
     // value reads as a shell redirect to the docs check, and as a puzzle to a
     // person.
     let first = blocks.first().copied().unwrap_or("<kind>");
-    // A kind injected through a query parameter is named in the line that
-    // shows how, with a parameter of its own.
-    let injected = range::catalogue::FlawKind::by_id("sql-injection")
-        .map(|kind| kind.id)
-        .unwrap_or("<kind>");
+    // Kinds injected through a parameter are named in the lines that show
+    // how, with a parameter of their own.
+    let id =
+        |id: &str| range::catalogue::FlawKind::by_id(id).map(|kind| kind.id).unwrap_or("<kind>");
+    let (injected, through_body) = (id("sql-injection"), id("nosql-injection"));
     text.push_str(&format!(
-        "\n{} kind(s). To plant one:\n  mockforge range new --har traffic.har --id my-api --flaw {first} --at \"GET /v1/orders/{{id}}\"\nOne injected through a query parameter takes its name after a colon:\n  mockforge range new --har traffic.har --id my-api --flaw {injected}:q --at \"GET /search\"\n",
+        "\n{} kind(s). To plant one:\n  mockforge range new --har traffic.har --id my-api --flaw {first} --at \"GET /v1/orders/{{id}}\"\nOne injected through a query parameter takes its name after a colon:\n  mockforge range new --har traffic.har --id my-api --flaw {injected}:q --at \"GET /search\"\nOne injected through a field of the JSON body takes `body.` and the field's name:\n  mockforge range new --har traffic.har --id my-api --flaw {through_body}:body.password --at \"POST /login\"\n",
         blocks.len()
     ));
     text
@@ -298,9 +301,10 @@ pub(crate) struct NewArgs {
     pub keep_keys: bool,
     /// A kind of flaw to plant, by its id as `range flaws` lists it. A kind
     /// injected through a query parameter takes the parameter's name after a
-    /// colon: `sql-injection:q`. Each is planted at the operation of the
-    /// `--at` of its place
-    #[arg(long = "flaw", value_name = "KIND[:PARAMETER]")]
+    /// colon: `sql-injection:q`. One injected through a field of the JSON
+    /// body takes `body.` and the field's name: `nosql-injection:body.password`.
+    /// Each is planted at the operation of the `--at` of its place
+    #[arg(long = "flaw", value_name = "KIND[:PARAMETER|:body.FIELD]")]
     pub flaws: Vec<String>,
     /// Where to plant a flaw: `METHOD PATH`, a path of the pack. There is one
     /// for each `--flaw`
@@ -974,11 +978,19 @@ fn new(args: NewArgs) -> Result<i32, String> {
     let mut planted = Vec::new();
     for (flaw, at) in args.flaws.iter().zip(&args.at) {
         // `KIND` names a kind; `KIND:PARAMETER` names one too, and the query
-        // parameter it is injected through.
-        let (named, parameter) = flaw
+        // parameter it is injected through; `KIND:body.FIELD` names the field
+        // of the JSON request body it is injected through.
+        let (named, given) = flaw
             .split_once(':')
-            .map_or((flaw.as_str(), None), |(named, parameter)| (named, Some(parameter)));
-        let parameter = parameter.filter(|name| !name.is_empty());
+            .map_or((flaw.as_str(), None), |(named, given)| (named, Some(given)));
+        let given = given.filter(|name| !name.is_empty());
+        let (parameter, field) = match given {
+            Some(given) => match given.strip_prefix("body.") {
+                Some(field) => (None, Some(field)),
+                None => (Some(given), None),
+            },
+            None => (None, None),
+        };
         let Some(kind) = range::catalogue::FlawKind::by_id(named) else {
             let known: Vec<&str> = range::catalogue::KINDS.iter().map(|kind| kind.id).collect();
             return Err(format!(
@@ -998,6 +1010,7 @@ fn new(args: NewArgs) -> Result<i32, String> {
             method,
             path,
             parameter,
+            field,
         });
     }
     let asked = range::skeleton::Asked {

@@ -240,6 +240,7 @@ fn finish(
             operation,
             path,
             planted.parameter,
+            planted.field,
         )?);
     }
     // The flaw is proved at the first operation, in the order of the spec,
@@ -1235,12 +1236,14 @@ mod tests {
                 method: "get",
                 path: "/v1/orders/{orderId}",
                 parameter: None,
+                field: None,
             },
             Planted {
                 kind: key,
                 method: "GET",
                 path: "/v1/me",
                 parameter: None,
+                field: None,
             },
         ];
         let mut asked = asked("api");
@@ -1276,6 +1279,7 @@ mod tests {
             method: "POST",
             path: "/v1/nope",
             parameter: None,
+            field: None,
         }];
         asked.flaws = &wrong;
         let error = from_har(&recording, "traffic.har", &asked).unwrap_err().to_string();
@@ -1342,6 +1346,7 @@ mod tests {
             method: "GET",
             path: "/v1/orders",
             parameter: Some("q"),
+            field: None,
         }];
         let mut asked = asked("api");
         asked.flaws = &flaws;
@@ -1361,12 +1366,80 @@ mod tests {
             method: "GET",
             path: "/v1/orders",
             parameter: Some("term"),
+            field: None,
         }];
         asked.flaws = &flaws;
         let error = from_har(&recording, "traffic.har", &asked).unwrap_err().to_string();
         assert_eq!(
             error,
             "traffic.har: `GET /v1/orders` declares no query parameter `term`: it declares `q`"
+        );
+    }
+
+    #[test]
+    fn a_kind_is_injected_through_a_field_of_the_body_the_recording_sent() {
+        let recording = archive(&[exchange(
+            "https://api.example.net/v1/lookup",
+            "POST",
+            200,
+            "application/json",
+            r#"{"id":5000,"found":true}"#,
+            r#"{"url": "https://example.net/a", "n": 1}"#,
+        )]);
+        let ssrf = crate::range::catalogue::FlawKind::by_id("ssrf").unwrap();
+        let flaws = [Planted {
+            kind: ssrf,
+            method: "POST",
+            path: "/v1/lookup",
+            parameter: None,
+            field: Some("url"),
+        }];
+        let mut asked = asked("api");
+        asked.flaws = &flaws;
+        let skeleton = from_har(&recording, "traffic.har", &asked).unwrap();
+        // The pack can be run, the flaw names the field, and the answer to
+        // the injection is given to the request whose field holds it.
+        assert_eq!(skeleton.pack.problem(), None);
+        assert_eq!(skeleton.pack.flaws[0].id, "ssrf-post-v1-lookup-url");
+        let (_, operation) = skeleton.pack.resolve("POST", "/v1/lookup").unwrap();
+        assert_eq!(
+            operation["x-mockforge-answers"][0]["when"],
+            json!({ "body": { "url": "169.254.169.254" } })
+        );
+        assert_eq!(
+            operation["x-mockforge-answers"][0]["then"]["body"]["url"],
+            "{{request.body.url}}"
+        );
+
+        // A field the recording never sent is refused, and the ones it did
+        // are named. So is a parameter of the query for a kind that takes the
+        // field alone.
+        let kind = |id: &str| crate::range::catalogue::FlawKind::by_id(id).unwrap();
+        let flaws = [Planted {
+            kind: kind("ssrf"),
+            method: "POST",
+            path: "/v1/lookup",
+            parameter: None,
+            field: Some("address"),
+        }];
+        asked.flaws = &flaws;
+        let error = from_har(&recording, "traffic.har", &asked).unwrap_err().to_string();
+        assert_eq!(
+            error,
+            "traffic.har: `POST /v1/lookup` declares no field `address` of its JSON request body: the fields of its JSON body are `n`, `url`"
+        );
+        let flaws = [Planted {
+            kind: kind("nosql-injection"),
+            method: "POST",
+            path: "/v1/lookup",
+            parameter: Some("url"),
+            field: None,
+        }];
+        asked.flaws = &flaws;
+        let error = from_har(&recording, "traffic.har", &asked).unwrap_err().to_string();
+        assert_eq!(
+            error,
+            "traffic.har: `nosql-injection` is injected through a field of the JSON body, and `url` names a query parameter: name the field after the kind, as `nosql-injection:body.password`"
         );
     }
 }
