@@ -485,8 +485,11 @@ pub fn asks(exchange: &Exchange, claim: &Claim) -> bool {
 fn asks_body(body: &str, claim: &Claim) -> bool {
     claim.body_with.is_empty()
         || serde_json::from_str::<Value>(body).is_ok_and(|document| {
-            claim.body_with.iter().all(|(field, text)| {
-                mockforge_openapi::answers::field_holds(&document, field, text)
+            claim.body_with.iter().all(|(field, holds)| {
+                holds
+                    .texts()
+                    .iter()
+                    .any(|text| mockforge_openapi::answers::field_holds(&document, field, text))
             })
         })
 }
@@ -498,8 +501,8 @@ fn asks_query(query: &[(String, String)], claim: &Claim) -> bool {
         .query_with
         .iter()
         .all(|(name, value)| query.iter().any(|(held, asked)| held == name && asked == value))
-        && claim.query_contains.iter().all(|(name, text)| {
-            query.iter().any(|(held, asked)| held == name && asked.contains(text))
+        && claim.query_contains.iter().all(|(name, holds)| {
+            query.iter().any(|(held, asked)| held == name && holds.met_by(asked))
         })
         && claim
             .query_without
@@ -555,11 +558,51 @@ pub fn lacks(exchange: &Exchange, serves: &Serves) -> Option<String> {
             return Some(format!("{answered}, which does not carry `{name}` set to {value}"));
         }
     }
-    serves
+    if let Some(name) = serves
         .lacks_header
         .iter()
         .find(|name| response_header(exchange, name).is_some())
-        .map(|name| format!("{answered}, which carries a `{name}` header"))
+    {
+        return Some(format!("{answered}, which carries a `{name}` header"));
+    }
+    for name in &serves.reflects {
+        let Some(sent) = sent_as(exchange, name) else {
+            return Some(format!(
+                "{answered}, which does not hold `{name}` as it was sent: the request sent none"
+            ));
+        };
+        if !holds_sent(exchange, &sent) {
+            return Some(format!("{answered}, which does not hold `{name}` as it was sent"));
+        }
+    }
+    None
+}
+
+/// What a request sent for a name: the last value of the parameter of its
+/// query, or else what the field of its JSON body holds. `None` when the
+/// request sent nothing by that name.
+fn sent_as(exchange: &Exchange, name: &str) -> Option<String> {
+    let sent = |value: &str| (!value.is_empty()).then(|| value.to_string());
+    mockforge_openapi::answers::decoded(&exchange.query)
+        .into_iter()
+        .rev()
+        .find(|(held, _)| held == name)
+        .and_then(|(_, value)| sent(&value))
+        .or_else(|| {
+            serde_json::from_str::<Value>(&exchange.request_body)
+                .ok()
+                .and_then(|document| mockforge_openapi::answers::field_text(&document, name))
+                .and_then(|value| sent(&value))
+        })
+}
+
+/// Whether an answer holds a value as it was sent, in its body or in a
+/// header: as the text, or as JSON writes it inside a string.
+fn holds_sent(exchange: &Exchange, sent: &str) -> bool {
+    let written = serde_json::to_string(sent).unwrap_or_default();
+    exchange.response_body.contains(sent)
+        || exchange.response_body.contains(written.trim_matches('"'))
+        || exchange.response_headers.values().any(|value| value.contains(sent))
 }
 
 /// What an answer the spec gives by request lacks to be the one `serves`
@@ -596,6 +639,15 @@ pub fn answer_shows(answer: &Answer, serves: &Serves) -> Option<String> {
             .any(|(held, held_value)| held.eq_ignore_ascii_case(name) && held_value != value)
         {
             return Some(format!("carries `{name}` set to another value, not {value}"));
+        }
+    }
+    for name in &serves.reflects {
+        // Said back with a token of the request, which is read when it comes.
+        let in_query = format!("{{{{request.query.{name}}}}}");
+        let in_body = format!("{{{{request.body.{name}}}}}");
+        let says = |held: &str| held.contains(&in_query) || held.contains(&in_body);
+        if !says(&text) && !answer.then.headers.values().any(|value| says(value)) {
+            return Some(format!("does not say `{name}` back as it was sent"));
         }
     }
     serves
@@ -800,7 +852,7 @@ mod tests {
             times: None,
             body_with: fields
                 .iter()
-                .map(|(field, text)| (field.to_string(), text.to_string()))
+                .map(|(field, text)| (field.to_string(), (*text).into()))
                 .collect(),
         };
         let password = operator(&[("password", "$gt")]);
@@ -882,7 +934,7 @@ mod tests {
             with: BTreeMap::new(),
             without: Vec::new(),
             query_with: BTreeMap::new(),
-            query_contains: BTreeMap::from([("q".to_string(), "' OR ".to_string())]),
+            query_contains: BTreeMap::from([("q".to_string(), "' OR ".into())]),
             query_without: Vec::new(),
             body_contains: None,
             body_with: BTreeMap::new(),
@@ -944,6 +996,49 @@ mod tests {
         assert_eq!(
             found_verdict.why,
             "GET /orders with `q` holding `' OR ` in the query answered 500"
+        );
+    }
+
+    #[test]
+    fn an_answer_is_shown_by_what_the_request_sent() {
+        let serves = Serves {
+            reflects: vec!["q".to_string()],
+            ..Serves::default()
+        };
+        let mut sent = exchange(1, "GET", "/search", 200, "");
+        sent.query = "q=%3Cscript%3E".to_string();
+        // Said back as it was sent.
+        sent.response_body = r#"{"search": "<script>"}"#.to_string();
+        assert_eq!(lacks(&sent, &serves), None);
+        // Said back as JSON writes it inside a string.
+        sent.query = "q=%3Cscript%20src%3D%22x%22%3E".to_string();
+        sent.response_body = r#"{"search": "<script src=\"x\">"}"#.to_string();
+        assert_eq!(lacks(&sent, &serves), None);
+        // Said back escaped for a browser: not as it was sent.
+        sent.response_body = r#"{"search": "&lt;script src=&quot;x&quot;&gt;"}"#.to_string();
+        assert_eq!(
+            lacks(&sent, &serves),
+            Some("answered 200, which does not hold `q` as it was sent".to_string())
+        );
+        // Said back in a header, as a redirect says the address it was asked for.
+        sent.response_body = String::new();
+        sent.status = 302;
+        sent.response_headers =
+            BTreeMap::from([("location".to_string(), "<script src=\"x\">".to_string())]);
+        assert_eq!(lacks(&sent, &serves), None);
+        // A parameter of the query or a field of the body, whichever was sent.
+        sent.query = String::new();
+        sent.request_body = r#"{"q": "<script>"}"#.to_string();
+        sent.response_body = r#"{"echo": "<script>"}"#.to_string();
+        assert_eq!(lacks(&sent, &serves), None);
+        // Sent by no name the answer is asked about.
+        sent.request_body = r#"{"term": "<script>"}"#.to_string();
+        assert_eq!(
+            lacks(&sent, &serves),
+            Some(
+                "answered 302, which does not hold `q` as it was sent: the request sent none"
+                    .to_string()
+            )
         );
     }
 

@@ -134,6 +134,8 @@ fn flaws_text() -> String {
     let width = range::catalogue::KINDS.iter().map(|kind| kind.id.len()).max().unwrap_or(0);
     let mut text = String::new();
     let mut blocks = Vec::new();
+    // What a value must hold, as a person reads it: one text, or one of several.
+    let held = |marks: &[&str]| mockforge_openapi::answers::held(marks);
     for kind in range::catalogue::KINDS {
         let mut proved = Vec::new();
         for (name, value) in kind.prove.with {
@@ -145,14 +147,14 @@ fn flaws_text() -> String {
         for (name, value) in kind.prove.query_with {
             proved.push(format!("a query carrying `{name}` set to `{value}`"));
         }
-        for (name, text) in kind.prove.query_contains {
-            proved.push(format!("a query whose `{name}` holds `{text}`"));
+        for (name, marks) in kind.prove.query_contains {
+            proved.push(format!("a query whose `{name}` holds {}", held(marks)));
         }
         for name in kind.prove.query_without {
             proved.push(format!("no `{name}` in the query"));
         }
-        for (field, text) in kind.prove.body_with {
-            proved.push(format!("a body whose `{field}` holds `{text}`"));
+        for (field, marks) in kind.prove.body_with {
+            proved.push(format!("a body whose `{field}` holds {}", held(marks)));
         }
         if let Some(held) = kind.prove.body_contains {
             proved.push(format!("a body that holds `{held}`"));
@@ -176,6 +178,9 @@ fn flaws_text() -> String {
         }
         for (name, value) in kind.shows.has_header {
             shows.push(format!("the `{name}` header set to `{value}`"));
+        }
+        for name in kind.shows.reflects {
+            shows.push(format!("holding `{name}` as it was sent"));
         }
         for name in kind.shows.lacks_header {
             shows.push(format!("no `{name}` header"));

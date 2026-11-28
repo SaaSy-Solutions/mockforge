@@ -2316,8 +2316,8 @@ fn the_catalogue_is_listed_as_text_and_as_one_document() {
         "from SemSec: robusta-py-upload-dangerous-extension, robusta-vibe-upload-no-type-check",
         "command-injection critical CWE-78 A03:2021",
         "A command is injected through a parameter or a field of the body,",
-        "proved by: a query whose `<parameter>` holds `; `",
-        "planted by: the operation answers otherwise, to a request with `<parameter>` holding `; `",
+        "proved by: a query whose `<parameter>` holds one of `; `, `| `, `&& `, \"`\", `$(`",
+        "planted by: the operation answers otherwise, to a request with `<parameter>` holding one of `; `, `| `, `&& `, \"`\", `$(`",
         "nosql-injection critical CWE-943 A03:2021",
         "A document query takes an operator where a field's value was expected",
         "proved by: a body whose `<parameter>` holds `\"$`",
@@ -2333,7 +2333,8 @@ fn the_catalogue_is_listed_as_text_and_as_one_document() {
         "proved by: the same request at least 50 times",
         "from SemSec: robusta-vibe-no-rate-limit-auth",
         "open-redirect medium CWE-601 A01:2021",
-        "shows: status 302, the `Location` header set to `https://evil.example/phish`",
+        "proved by: a query whose `<parameter>` holds `://`",
+        "shows: status 302, holding `<parameter>` as it was sent",
         "sql-injection critical CWE-89 A03:2021",
         "from SemSec: robusta-py-sqli-taint-django, robusta-py-sqli-taint-sqlalchemy, robusta-js-sqli-taint, robusta-java-sqli-taint, robusta-php-sqli-taint",
         "template-injection high CWE-1336 A03:2021",
@@ -2377,14 +2378,27 @@ fn the_catalogue_is_listed_as_text_and_as_one_document() {
     // own: whatever the agent sends that carries the mark counts.
     assert_eq!(
         kinds[kind("sql-injection")]["prove"]["query_contains"],
-        serde_json::json!([["<parameter>", "' OR "]])
+        serde_json::json!([[
+            "<parameter>",
+            [
+                "' OR ",
+                "' or ",
+                "\" OR ",
+                "' --",
+                "'--",
+                " OR 1=1",
+                " or 1=1",
+                "UNION SELECT",
+                "union select"
+            ]
+        ]])
     );
     assert_eq!(kinds[kind("sql-injection")]["prove"]["query_with"], serde_json::json!([]));
     assert_eq!(
         kinds[kind("sql-injection")]["plant"],
         serde_json::json!({
             "by": "otherwise",
-            "when": { "query_contains": { "<parameter>": "' OR " } },
+            "when": { "query_contains": { "<parameter>": ["' OR ", "' or ", "\" OR ", "' --", "'--", " OR 1=1", " or 1=1", "UNION SELECT", "union select"] } },
             "then": {
                 "status": 500,
                 "body": {
@@ -2397,9 +2411,10 @@ fn the_catalogue_is_listed_as_text_and_as_one_document() {
     );
     // The kind injected through a field alone proves with the field.
     // The start of any operator's name in the JSON of the value: `$gt`, `$ne`.
+    // The document names a list of marks for every kind, of one or of several.
     assert_eq!(
         kinds[kind("nosql-injection")]["prove"]["body_with"],
-        serde_json::json!([["<parameter>", "\"$"]])
+        serde_json::json!([["<parameter>", ["\"$"]]])
     );
     assert_eq!(kinds[kind("nosql-injection")]["prove"]["query_with"], serde_json::json!([]));
     assert_eq!(
@@ -2615,7 +2630,10 @@ fn a_flaw_is_found_by_what_the_request_holds_and_not_by_one_injection() {
     // The flaw names what `q` must hold, which is what its answer is given
     // for, and not one value of it.
     let held: Value = serde_json::from_str(&fs::read_to_string(&pack).unwrap()).unwrap();
-    assert_eq!(held["flaws"][0]["prove"]["query_contains"], serde_json::json!({ "q": "' OR " }));
+    assert_eq!(
+        held["flaws"][0]["prove"]["query_contains"],
+        serde_json::json!({ "q": ["' OR ", "' or ", "\" OR ", "' --", "'--", " OR 1=1", " or 1=1", "UNION SELECT", "union select"] })
+    );
     assert!(held["flaws"][0]["prove"].get("query_with").is_none());
 
     // The catalogue's injection, an agent's own, and a search that carries
@@ -2654,7 +2672,10 @@ fn a_flaw_is_found_by_what_the_request_holds_and_not_by_one_injection() {
     let flaw = &judged["flaws"][0];
     assert_eq!(flaw["finding"], "found", "{judged}");
     assert_eq!(flaw["asked"], 2, "{judged}");
-    assert_eq!(flaw["why"], "GET /v1/search with `q` holding `' OR ` in the query answered 500");
+    assert_eq!(
+        flaw["why"],
+        r#"GET /v1/search with `q` holding one of `' OR `, `' or `, `" OR `, `' --`, `'--`, ` OR 1=1`, ` or 1=1`, `UNION SELECT`, `union select` in the query answered 500"#
+    );
 
     // A finding of the agent's that names what its request holds is backed.
     let report = workspace.path().join("report.json");
@@ -2680,6 +2701,119 @@ fn a_flaw_is_found_by_what_the_request_holds_and_not_by_one_injection() {
             && text.contains("0 found and left out of the report"),
         "{text}"
     );
+}
+
+/// A search asked with a term, and a page asked where to go afterwards.
+const A_REFLECTING_RECORDING: &str = r#"{ "log": { "version": "1.2", "entries": [
+  { "request": { "method": "GET", "url": "https://api.example.net/v1/search?q=shoes", "headers": [] },
+    "response": { "status": 200, "content": { "mimeType": "application/json",
+      "text": "{\"results\": [{\"id\": 1, \"name\": \"shoes\"}]}" } } },
+  { "request": { "method": "GET", "url": "https://api.example.net/v1/after?next=%2Faccount", "headers": [] },
+    "response": { "status": 200, "content": { "mimeType": "text/html", "text": "<p>Moved on</p>" } } }
+] } }"#;
+
+#[test]
+fn a_reflected_script_and_a_redirect_are_shown_by_what_the_request_sent() {
+    // Both proofs used to name one text of the answer, the catalogue's own:
+    // an agent's script, or the address it was moved to, was shown and judged
+    // not to be. Now the answer must hold what the request sent.
+    let workspace = tempfile::tempdir().unwrap();
+    let recording = workspace.path().join("reflect.har");
+    fs::write(&recording, A_REFLECTING_RECORDING).unwrap();
+    let api = workspace.path().join("reflect.json");
+    let pack = workspace.path().join("reflect.pack.json");
+    let (code, text, stderr) = run(&[
+        "range",
+        "new",
+        "--har",
+        &shown(&recording),
+        "--id",
+        "reflect",
+        "--output",
+        &shown(&api),
+        "--flaw",
+        "reflected-xss:q",
+        "--at",
+        "GET /v1/search",
+        "--flaw",
+        "open-redirect:next",
+        "--at",
+        "GET /v1/after",
+    ]);
+    assert_eq!((code, stderr.as_str()), (0, ""), "{text}");
+    let held: Value = serde_json::from_str(&fs::read_to_string(&pack).unwrap()).unwrap();
+    let by_id = |id: &str| {
+        held["flaws"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|flaw| flaw["id"] == id)
+            .unwrap()
+            .clone()
+    };
+    let script = by_id("reflected-xss-get-v1-search-q");
+    assert_eq!(
+        script["prove"]["serves"],
+        serde_json::json!({ "status": 200, "reflects": ["q"] })
+    );
+    assert!(script["prove"]["serves"].get("has_text").is_none());
+    let redirect = by_id("open-redirect-get-v1-after-next");
+    assert_eq!(
+        redirect["prove"]["serves"],
+        serde_json::json!({ "status": 302, "reflects": ["next"] })
+    );
+
+    // Payloads of an agent's own, none the catalogue's; the first with quotes
+    // in it, which JSON writes escaped.
+    let log = workspace.path().join("exchanges.jsonl");
+    let server =
+        Mockserve::start(&["--spec", &shown(&api), "--exchange-log", &shown(&log)]).unwrap();
+    let (status, body) = request(
+        server.port,
+        "GET",
+        "/v1/search?q=%3Cimg%20src%3D%22x%22%20onerror%3D%22alert(1)%22%3E",
+        &[],
+        "",
+    );
+    let answer: Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(
+        (status, answer["search"].as_str()),
+        (200, Some("<img src=\"x\" onerror=\"alert(1)\">")),
+        "{body}"
+    );
+    let (status, headers, _) = sent(
+        server.port,
+        "GET /v1/after?next=https%3A%2F%2Fattacker.example%2Flanding HTTP/1.1\r\n\
+         Host: 127.0.0.1\r\nConnection: close\r\n\r\n",
+    );
+    assert_eq!(status, 302, "{headers:?}");
+    assert_eq!(headers["location"], "https://attacker.example/landing");
+    drop(server);
+
+    let (code, judged) = document(&[
+        "range",
+        "judge",
+        "--format",
+        "json",
+        "--pack",
+        &shown(&pack),
+        "--exchanges",
+        &shown(&log),
+    ]);
+    assert_eq!(code, 0, "{judged}");
+    for (id, status) in [
+        ("reflected-xss-get-v1-search-q", "answered 200"),
+        ("open-redirect-get-v1-after-next", "answered 302"),
+    ] {
+        let flaw = judged["flaws"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|flaw| flaw["id"] == id)
+            .unwrap();
+        assert_eq!(flaw["finding"], "found", "{judged}");
+        assert!(flaw["why"].as_str().unwrap().ends_with(status), "{judged}");
+    }
 }
 
 /// A recording of a login and a lookup, each asked with a JSON body.
@@ -2805,8 +2939,7 @@ fn a_kind_is_injected_through_a_field_of_the_body_and_shown_to_that_request_alon
         &shown(&log),
     ]);
     assert_eq!(code, 0, "{judged}");
-    let lookup_why =
-        "POST /v1/lookup with `url` holding `169.254.169.254` in the body answered 200";
+    let lookup_why = r#"POST /v1/lookup with `url` holding one of `169.254.169.254`, `localhost`, `127.0.0.1`, `[::1]`, `file://`, `metadata.google` in the body answered 200"#;
     for (id, why) in [
         (
             "nosql-injection-post-v1-login-password",

@@ -11,7 +11,7 @@ use sha2::{Digest, Sha256};
 use super::error::{invalid_pack, Result};
 use super::paths;
 use crate::class;
-use mockforge_openapi::answers::{Answer, RequestOwned, EXTENSION};
+use mockforge_openapi::answers::{Answer, Holds, RequestOwned, EXTENSION};
 
 /// The `kind` of a pack document, so a reader can tell what it holds.
 pub const PACK_KIND: &str = "mockforge-range-pack";
@@ -142,10 +142,11 @@ pub struct Claim {
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub query_with: BTreeMap<String, String>,
     /// Query parameters the request must carry, with a value that holds this
-    /// text. Read as they were decoded. A weakness that is injected is proved
-    /// by what marks it, so that any request that carries it counts.
+    /// text, or one of several where a list is written. Read as they were
+    /// decoded. A weakness that is injected is proved by what marks it, so
+    /// that any request that carries it counts.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub query_contains: BTreeMap<String, String>,
+    pub query_contains: BTreeMap<String, Holds>,
     /// Query parameters the request must not carry.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub query_without: Vec<String>,
@@ -155,9 +156,10 @@ pub struct Claim {
     /// Fields of a JSON request body whose value must hold this text. A field
     /// is looked for at the top of the body and anywhere inside an object or
     /// an array, as `serves.has` looks for one. A value that is not a string
-    /// is read as JSON writes it, so `{"$ne": null}` holds `$ne`.
+    /// is read as JSON writes it, so `{"$ne": null}` holds `$ne`. The text
+    /// may be several, any of them.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub body_with: BTreeMap<String, String>,
+    pub body_with: BTreeMap<String, Holds>,
     /// How many times the request must reach the mock and be answered as
     /// `serves` says, at least: a limit that is not there is shown by the same
     /// request answered again and again. `None` is once.
@@ -197,7 +199,7 @@ impl Claim {
             .chain(
                 self.query_contains
                     .iter()
-                    .map(|(name, text)| format!("`{name}` holding `{text}`")),
+                    .map(|(name, holds)| format!("`{name}` holding {}", holds.label())),
             )
             .collect();
         if !asked.is_empty() {
@@ -212,7 +214,7 @@ impl Claim {
         let held: Vec<String> = self
             .body_with
             .iter()
-            .map(|(field, text)| format!("`{field}` holding `{text}`"))
+            .map(|(field, holds)| format!("`{field}` holding {}", holds.label()))
             .collect();
         if !held.is_empty() {
             conditions.push(format!("with {} in the body", held.join(", ")));
@@ -267,6 +269,12 @@ pub struct Serves {
     /// case.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub lacks_header: Vec<String>,
+    /// What the request sent, by the name of a parameter of its query or of a
+    /// field of its JSON body, that the answer must hold as it was sent, in
+    /// its body or in a header: a script reflected back, the address a
+    /// redirect is opened to.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reflects: Vec<String>,
 }
 
 /// An operation of the spec.
@@ -592,17 +600,13 @@ impl Pack {
             .keys()
             .chain(&proof.claim.query_without)
             .chain(proof.claim.query_contains.keys())
-            .chain(proof.claim.query_contains.values())
             .any(|name| name.trim().is_empty())
+            || proof.claim.query_contains.values().any(|holds| holds.says_nothing())
         {
             return Some("it names an empty query parameter".to_string());
         }
-        if proof
-            .claim
-            .body_with
-            .keys()
-            .chain(proof.claim.body_with.values())
-            .any(|word| word.is_empty())
+        if proof.claim.body_with.keys().any(|word| word.is_empty())
+            || proof.claim.body_with.values().any(|holds| holds.says_nothing())
         {
             return Some("it names an empty field or text of the body".to_string());
         }
@@ -621,13 +625,19 @@ impl Pack {
         {
             return Some("its `serves` names an empty header".to_string());
         }
+        if proof.serves.reflects.iter().any(|name| name.trim().is_empty()) {
+            return Some(
+                "its `serves` names an empty parameter to hold as it was sent".to_string(),
+            );
+        }
         if (
             proof.serves.status,
             proof.serves.has.is_empty(),
             proof.serves.has_text.as_deref(),
             proof.serves.has_header.is_empty(),
             proof.serves.lacks_header.is_empty(),
-        ) == (None, true, None, true, true)
+            proof.serves.reflects.is_empty(),
+        ) == (None, true, None, true, true, true)
         {
             return Some("its `serves` names no answer, so nothing could prove it".to_string());
         }
@@ -804,7 +814,7 @@ fn proving_body(claim: &Claim) -> String {
     let held: serde_json::Map<String, Value> = claim
         .body_with
         .iter()
-        .map(|(field, text)| (field.clone(), Value::String(text.clone())))
+        .map(|(field, holds)| (field.clone(), Value::String(holds.first().to_string())))
         .collect();
     Value::Object(held).to_string()
 }
@@ -816,8 +826,13 @@ fn proving_request<'a>(claim: &Claim, body: &'a [u8]) -> RequestOwned<'a> {
         query: claim
             .query_with
             .iter()
-            .chain(&claim.query_contains)
             .map(|(name, value)| (name.clone(), value.clone()))
+            .chain(
+                claim
+                    .query_contains
+                    .iter()
+                    .map(|(name, holds)| (name.clone(), holds.first().to_string())),
+            )
             .collect(),
         headers: claim.with.clone(),
         body,
@@ -1122,6 +1137,19 @@ mod tests {
                 flaw("api-key-in-profile", |f| f["prove"]["body_with"] = json!({ "": "$gt" })),
                 "flaw `api-key-in-profile`: it names an empty field or text of the body",
             ),
+            // A list of texts with an empty one in it says nothing, as an empty text does.
+            (
+                flaw("api-key-in-profile", |f| f["prove"]["query_contains"] = json!({ "status": [] })),
+                "flaw `api-key-in-profile`: it names an empty query parameter",
+            ),
+            (
+                flaw("api-key-in-profile", |f| f["prove"]["body_with"] = json!({ "password": ["x", ""] })),
+                "flaw `api-key-in-profile`: it names an empty field or text of the body",
+            ),
+            (
+                flaw("api-key-in-profile", |f| f["prove"]["serves"] = json!({ "reflects": [""] })),
+                "flaw `api-key-in-profile`: its `serves` names an empty parameter to hold as it was sent",
+            ),
             (
                 flaw("api-key-in-profile", |f| f["prove"]["body_with"] = json!({ "password": "" })),
                 "flaw `api-key-in-profile`: it names an empty field or text of the body",
@@ -1377,6 +1405,35 @@ mod tests {
         let flaw = held.flaws.iter().find(|flaw| flaw.id == "orders-search-injection").unwrap();
         assert_eq!(flaw.prove.claim.query_contains["status"], "OR 1=1");
         assert_eq!(flaw.prove.label(), "GET /orders with `status` holding `OR 1=1` in the query");
+
+        // Several texts: any one of them proves it, and the request the pack
+        // asks the mock about carries the first.
+        let mut listed = document;
+        listed["flaws"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|flaw| flaw["id"] == "orders-search-injection")
+            .unwrap()["prove"]["query_contains"] = json!({ "status": ["OR 1=1", "union select"] });
+        let listed = Pack::from_json(&listed.to_string(), "p").unwrap();
+        let flaw = listed.flaws.iter().find(|flaw| flaw.id == "orders-search-injection").unwrap();
+        assert_eq!(
+            flaw.prove.label(),
+            "GET /orders with `status` holding one of `OR 1=1`, `union select` in the query"
+        );
+
+        // An answer that does not say back what the flaw says it reflects is
+        // not the one that shows the flaw.
+        let silent = Pack::from_json(
+            &with_answer(Some(json!({ "status": 200, "reflects": ["nope"] }))),
+            "pack.json",
+        )
+        .unwrap_err()
+        .to_string();
+        assert_eq!(
+            silent,
+            "pack.json: flaw `orders-search-injection`: its proving request is given the answer to a request with `status` holding `OR 1=1`, and that answer does not say `nope` back as it was sent"
+        );
 
         // What an answer says with a token of the request cannot be read
         // until the request does: it is taken as shown.

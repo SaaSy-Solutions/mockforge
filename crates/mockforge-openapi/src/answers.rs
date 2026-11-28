@@ -20,8 +20,11 @@
 //! The mock gives the first answer whose `when` the request meets, and the
 //! operation's example when none does. A `when` names what the request holds
 //! ([`When`]): a parameter of its query, a header, text of its body, or a
-//! field of its JSON body. A `then` is the answer ([`Then`]), whose body may
-//! name the request as an example may, with `{{request.body.role}}`.
+//! field of its JSON body. What a parameter or a field must hold is one text
+//! or several, any of them ([`Holds`]): an injected weakness is shown by any
+//! of its marks. A `then` is the answer ([`Then`]), whose body may name the
+//! request as an example may, with `{{request.body.role}}`, and whose headers
+//! may too.
 
 use std::collections::BTreeMap;
 
@@ -34,6 +37,90 @@ use serde_json::Value;
 /// The extension an operation carries its answers under.
 pub const EXTENSION: &str = "x-mockforge-answers";
 
+/// What the value of a parameter of the query, or of a field of a JSON body,
+/// must hold: one text, or, where a list is written, any one of those texts.
+/// A weakness that is injected is shown by any of several marks, as an API
+/// that has it answers `; id`, `| id` and `&& id` alike.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum Holds {
+    /// The value holds this text.
+    Text(String),
+    /// The value holds any one of these texts.
+    Any(Vec<String>),
+}
+
+impl Holds {
+    /// One text.
+    pub fn text(text: &str) -> Self {
+        Self::Text(text.to_string())
+    }
+
+    /// The texts, as written.
+    pub fn texts(&self) -> &[String] {
+        match self {
+            Self::Text(text) => std::slice::from_ref(text),
+            Self::Any(texts) => texts,
+        }
+    }
+
+    /// The first text: what a proving request carries when a proof names
+    /// several.
+    pub fn first(&self) -> &str {
+        self.texts().first().map_or("", String::as_str)
+    }
+
+    /// Whether a value holds one of the texts.
+    pub fn met_by(&self, value: &str) -> bool {
+        self.texts().iter().any(|text| value.contains(text))
+    }
+
+    /// What is held, as a report writes it: `` `' OR ` ``, or, where there
+    /// are several, `` one of `' OR `, `" OR ` ``.
+    pub fn label(&self) -> String {
+        let texts: Vec<&str> = self.texts().iter().map(String::as_str).collect();
+        held(&texts)
+    }
+
+    /// Whether nothing is said: no text, or an empty one.
+    pub fn says_nothing(&self) -> bool {
+        let texts = self.texts();
+        texts.is_empty() || texts.iter().any(String::is_empty)
+    }
+}
+
+/// What a value must hold, as a report writes it: one text in backticks,
+/// or, where there are several, `` one of `' OR `, `" OR ` ``. A text that
+/// holds a backtick itself is written in double quotes, so that the list can
+/// be read.
+pub fn held(texts: &[&str]) -> String {
+    let quoted = |text: &str| {
+        if text.contains('`') {
+            format!("\"{}\"", shown(text))
+        } else {
+            format!("`{}`", shown(text))
+        }
+    };
+    let mut written: Vec<String> = texts.iter().map(|text| quoted(text)).collect();
+    match written.len() {
+        0 => String::new(),
+        1 => written.remove(0),
+        _ => format!("one of {}", written.join(", ")),
+    }
+}
+
+impl From<&str> for Holds {
+    fn from(text: &str) -> Self {
+        Self::text(text)
+    }
+}
+
+impl PartialEq<&str> for Holds {
+    fn eq(&self, text: &&str) -> bool {
+        self.texts().iter().any(|held| held == text)
+    }
+}
+
 /// What a request must be like for an answer to be the one given. Each field
 /// names something the request holds; a request meets the `when` when it
 /// holds all of them.
@@ -44,9 +131,10 @@ pub struct When {
     /// were decoded.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub query: BTreeMap<String, String>,
-    /// Query parameters whose value holds this text.
+    /// Query parameters whose value holds this text, or one of these texts
+    /// where a list is written.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub query_contains: BTreeMap<String, String>,
+    pub query_contains: BTreeMap<String, Holds>,
     /// Headers the request carries, with these values. Names are read without
     /// regard to case; values are not.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
@@ -57,9 +145,10 @@ pub struct When {
     /// Fields of a JSON body whose value holds this text. A field is looked
     /// for at the top of the body and anywhere inside an object or an array,
     /// as an answer's `serves` looks for one. A value that is not a string is
-    /// read as JSON writes it, so `{"$ne": null}` holds `$ne`.
+    /// read as JSON writes it, so `{"$ne": null}` holds `$ne`. The text may
+    /// be several, any of them.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub body: BTreeMap<String, String>,
+    pub body: BTreeMap<String, Holds>,
 }
 
 impl When {
@@ -71,7 +160,7 @@ impl When {
             && self
                 .query_contains
                 .iter()
-                .all(|(name, text)| parameter(request, name).any(|value| value.contains(text)))
+                .all(|(name, holds)| parameter(request, name).any(|value| holds.met_by(value)))
             && self.headers.iter().all(|(name, value)| {
                 request.headers.iter().any(|(held, held_value)| {
                     held.eq_ignore_ascii_case(name) && held_value == value
@@ -81,7 +170,7 @@ impl When {
                 .body_contains
                 .as_deref()
                 .is_none_or(|text| contains(request.body, text.as_bytes()))
-            && self.body.iter().all(|(field, text)| body_holds(request.body, field, text))
+            && self.body.iter().all(|(field, holds)| body_holds(request.body, field, holds))
     }
 
     /// The request this `when` names, as a report writes it: `` `status`
@@ -92,8 +181,8 @@ impl When {
         for (name, value) in &self.query {
             named.push(format!("`{name}` set to `{}`", shown(value)));
         }
-        for (name, text) in &self.query_contains {
-            named.push(format!("`{name}` holding `{}`", shown(text)));
+        for (name, holds) in &self.query_contains {
+            named.push(format!("`{name}` holding {}", holds.label()));
         }
         for (name, value) in &self.headers {
             named.push(format!("the `{name}` header set to `{}`", shown(value)));
@@ -101,8 +190,8 @@ impl When {
         if let Some(text) = &self.body_contains {
             named.push(format!("a body holding `{}`", shown(text)));
         }
-        for (field, text) in &self.body {
-            named.push(format!("`{field}` holding `{}`", shown(text)));
+        for (field, holds) in &self.body {
+            named.push(format!("`{field}` holding {}", holds.label()));
         }
         named.join(", ")
     }
@@ -128,8 +217,8 @@ impl When {
                 return empty("value", name);
             }
         }
-        for (name, text) in &self.query_contains {
-            if name.is_empty() || text.is_empty() {
+        for (name, holds) in &self.query_contains {
+            if name.is_empty() || holds.says_nothing() {
                 return empty("text", name);
             }
         }
@@ -141,8 +230,8 @@ impl When {
         if self.body_contains.as_deref() == Some("") {
             return Some("its `when` names empty text for the body".to_string());
         }
-        for (field, text) in &self.body {
-            if field.is_empty() || text.is_empty() {
+        for (field, holds) in &self.body {
+            if field.is_empty() || holds.says_nothing() {
                 return empty("text", field);
             }
         }
@@ -150,12 +239,32 @@ impl When {
     }
 }
 
-/// Whether a JSON body holds `field` with a value whose text holds `text`:
-/// at the top of the body, or anywhere inside an object or an array. A value
-/// that is not a string is read as JSON writes it. A body that is not whole
-/// JSON holds nothing.
-pub fn body_holds(body: &[u8], field: &str, text: &str) -> bool {
-    serde_json::from_slice::<Value>(body).is_ok_and(|document| field_holds(&document, field, text))
+/// Whether a JSON body holds `field` with a value whose text holds one of the
+/// texts: at the top of the body, or anywhere inside an object or an array. A
+/// value that is not a string is read as JSON writes it. A body that is not
+/// whole JSON holds nothing.
+pub fn body_holds(body: &[u8], field: &str, holds: &Holds) -> bool {
+    serde_json::from_slice::<Value>(body)
+        .is_ok_and(|document| holds.texts().iter().any(|text| field_holds(&document, field, text)))
+}
+
+/// What a JSON document holds for `field`, as text: the first one found, at
+/// the top or anywhere inside an object or an array. `None` when it holds
+/// none. A value that is not a string is read as JSON writes it.
+pub fn field_text(document: &Value, field: &str) -> Option<String> {
+    found_field(document, field).map(as_text)
+}
+
+/// A field of a JSON document, the first one found, at the top or anywhere
+/// inside an object or an array.
+fn found_field<'a>(document: &'a Value, field: &str) -> Option<&'a Value> {
+    match document {
+        Value::Object(object) => object
+            .get(field)
+            .or_else(|| object.values().find_map(|inner| found_field(inner, field))),
+        Value::Array(items) => items.iter().find_map(|inner| found_field(inner, field)),
+        _ => None,
+    }
 }
 
 /// Whether a JSON document holds `field` with a value whose text holds
@@ -173,7 +282,7 @@ pub fn field_holds(document: &Value, field: &str, text: &str) -> bool {
 }
 
 /// A value as text: a string as it is, anything else as JSON writes it.
-fn as_text(value: &Value) -> String {
+pub fn as_text(value: &Value) -> String {
     value
         .as_str()
         .map_or_else(|| serde_json::to_string(value).unwrap_or_default(), str::to_string)
@@ -200,8 +309,9 @@ pub struct Then {
     /// are expanded, as they are in an example.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub body: Option<Value>,
-    /// Headers of the answer, set as they are written. Names are read without
-    /// regard to case.
+    /// Headers of the answer. Names are read without regard to case; a value
+    /// is set as it is written, with the tokens that name the request
+    /// expanded as they are in the body.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub headers: BTreeMap<String, String>,
 }
@@ -271,18 +381,27 @@ impl Answer {
     /// headers the spec declares for its status, then its own. A declared
     /// header is kept unless the answer sets it.
     pub fn with_spec_headers(&self, declared: Vec<(String, String)>, body: Value) -> Response {
+        let own = self
+            .then
+            .headers
+            .iter()
+            .map(|(name, value)| (name.clone(), value.clone()))
+            .collect();
+        self.with_headers(declared, body, own)
+    }
+
+    /// The same, with the answer's own headers as the router expanded them:
+    /// `{{request.query.next}}` in a value is what the request sent.
+    pub fn with_headers(
+        &self,
+        declared: Vec<(String, String)>,
+        body: Value,
+        own: Vec<(String, String)>,
+    ) -> Response {
         let status = StatusCode::from_u16(self.then.status).unwrap_or(StatusCode::OK);
         let mut response = (status, axum::Json(body)).into_response();
         set_headers(&mut response, declared, false);
-        set_headers(
-            &mut response,
-            self.then
-                .headers
-                .iter()
-                .map(|(name, value)| (name.clone(), value.clone()))
-                .collect(),
-            true,
-        );
+        set_headers(&mut response, own, true);
         response
     }
 }
@@ -521,6 +640,57 @@ mod tests {
         assert!(!operator.matches(&in_query.asked()));
         // Nothing asked is `{}` as it is written.
         assert_eq!(serde_json::to_value(When::default()).unwrap(), json!({}));
+    }
+
+    #[test]
+    fn several_texts_are_met_by_any_one_of_them() {
+        let when: When = serde_json::from_value(json!({
+            "query_contains": { "host": ["localhost", "127.0.0.1", "[::1]"] },
+            "body": { "url": "169.254.169.254" }
+        }))
+        .unwrap();
+        assert_eq!(
+            when.label(),
+            "`host` holding one of `localhost`, `127.0.0.1`, `[::1]`, `url` holding `169.254.169.254`"
+        );
+        // Written as read.
+        assert_eq!(
+            serde_json::to_value(&when).unwrap(),
+            json!({
+                "query_contains": { "host": ["localhost", "127.0.0.1", "[::1]"] },
+                "body": { "url": "169.254.169.254" }
+            })
+        );
+        fn met(query: &str) -> RequestOwned<'_> {
+            request(query, &[], br#"{"url": "http://169.254.169.254/latest"}"#)
+        }
+        for query in ["host=localhost", "host=127.0.0.1&x=1", "host=%5B%3A%3A1%5D"] {
+            assert!(when.matches(&met(query).asked()), "{query}");
+        }
+        for query in ["host=example.net", "host=local", ""] {
+            assert!(!when.matches(&met(query).asked()), "{query}");
+        }
+        // A list of one is the text.
+        let one: When = serde_json::from_value(json!({"query_contains": {"q": ["x"]}})).unwrap();
+        assert_eq!(one.label(), "`q` holding `x`");
+        assert_eq!(serde_json::to_value(&one).unwrap(), json!({"query_contains": {"q": ["x"]}}));
+        // An empty list, or an empty text in a list, says nothing.
+        for nothing in [
+            json!({"query_contains": {"q": []}}),
+            json!({"body": {"q": ["x", ""]}}),
+        ] {
+            let when: When = serde_json::from_value(nothing.clone()).unwrap();
+            assert!(when.problem().is_some(), "{nothing}");
+        }
+        // A mark that is a backtick is written in double quotes, so that the
+        // list can be read; and the first text is what a proving request carries.
+        let ticks: When =
+            serde_json::from_value(json!({"query_contains": {"cmd": ["; ", "`", "$("]}})).unwrap();
+        assert_eq!(ticks.label(), "`cmd` holding one of `; `, \"`\", `$(`");
+        let holds = Holds::Any(vec!["a".to_string(), "b".to_string()]);
+        assert_eq!((holds.first(), holds.texts().len()), ("a", 2));
+        assert!(holds.met_by("xby") && !holds.met_by("xy"));
+        assert_eq!(Holds::text("x").first(), "x");
     }
 
     #[test]

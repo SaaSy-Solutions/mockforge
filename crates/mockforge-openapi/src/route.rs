@@ -175,15 +175,53 @@ impl OpenApiRoute {
         crate::request_template::expand(answer.then.body(), &asked)
     }
 
+    /// The headers an answer sets, with the tokens that name the request
+    /// expanded in their values, as the body's are: a redirect says back the
+    /// address it was asked for.
+    pub fn answer_headers(
+        &self,
+        answer: &Answer,
+        path_params: &std::collections::HashMap<String, String>,
+        query: crate::request_template::Query<'_>,
+        headers: &axum::http::HeaderMap,
+        body: &[u8],
+    ) -> Vec<(String, String)> {
+        let asked = crate::request_template::Asked::of(
+            &self.method,
+            &self.path,
+            path_params,
+            query,
+            headers,
+            body,
+        );
+        answer
+            .then
+            .headers
+            .iter()
+            .map(|(name, value)| {
+                let expanded = crate::request_template::expand(
+                    serde_json::Value::String(value.clone()),
+                    &asked,
+                );
+                (name.clone(), expanded.as_str().unwrap_or(value).to_string())
+            })
+            .collect()
+    }
+
     /// An answer as a response: its status and the body it is given with,
-    /// the headers the spec declares for its status, and its own headers
-    /// over them.
+    /// the headers the spec declares for its status, and its own headers,
+    /// expanded, over them.
     pub fn answer_response(
         &self,
         answer: &Answer,
         body: serde_json::Value,
+        headers: Vec<(String, String)>,
     ) -> axum::http::Response<axum::body::Body> {
-        answer.with_spec_headers(self.mock_response_headers_for_status(answer.then.status), body)
+        answer.with_headers(
+            self.mock_response_headers_for_status(answer.then.status),
+            body,
+            headers,
+        )
     }
 
     /// Parse AI configuration from OpenAPI operation's vendor extensions

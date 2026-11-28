@@ -1356,7 +1356,7 @@ mod tests {
         let (_, operation) = skeleton.pack.resolve("GET", "/v1/orders").unwrap();
         assert_eq!(
             operation["x-mockforge-answers"][0]["when"],
-            json!({ "query_contains": { "q": "' OR " } })
+            json!({ "query_contains": { "q": ["' OR ", "' or ", "\" OR ", "' --", "'--", " OR 1=1", " or 1=1", "UNION SELECT", "union select"] } })
         );
 
         // A parameter the recording never asked with is refused, and the ones
@@ -1404,7 +1404,7 @@ mod tests {
         let (_, operation) = skeleton.pack.resolve("POST", "/v1/lookup").unwrap();
         assert_eq!(
             operation["x-mockforge-answers"][0]["when"],
-            json!({ "body": { "url": "169.254.169.254" } })
+            json!({ "body": { "url": ["169.254.169.254", "localhost", "127.0.0.1", "[::1]", "file://", "metadata.google"] } })
         );
         assert_eq!(
             operation["x-mockforge-answers"][0]["then"]["body"]["url"],

@@ -955,12 +955,16 @@ A proving request may name the query string: `query_with` names parameters it
 must carry, with their values, `query_contains` names those whose value must
 hold a text, and `query_without` names those it must not. It may name the
 fields of a JSON body: `body_with` names those whose value must hold a text,
-wherever in the body the field is. It may say how many times the request must
-have come, with `times`: a limit that is not there is shown by the same
-request answered again and again. A kind planted from the catalogue is proved
-by the mark its answer is given for, so every request the mock answered weakly
-counts and not the one injection the kind was written with. The answer that shows a
-flaw may name its headers: `has_header` and `lacks_header`. An operation of
+wherever in the body the field is. A text may be a list, any of which the value
+may hold. It may say how many times the request must have come, with `times`:
+a limit that is not there is shown by the same request answered again and
+again. A kind planted from the catalogue is proved by the marks its answer is
+given for, and every kind that is injected has several, as an API that has the
+weakness answers them alike: so every request the mock answered weakly counts,
+and not one injection the kind was written with. The answer that shows a flaw
+may name its headers, `has_header` and `lacks_header`, and what the request
+sent, with `reflects`: a script reflected back, the address a redirect is
+opened to. An operation of
 a pack's spec may give answers by request (`x-mockforge-answers`), which is
 how an injected weakness is planted honestly.
 

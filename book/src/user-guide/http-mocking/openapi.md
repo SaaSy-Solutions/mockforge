@@ -394,14 +394,25 @@ and a request meets it when it holds all of what is named:
 | field | met when |
 | --- | --- |
 | `query` | The request carries each parameter, with that value. Read as it was decoded. |
-| `query_contains` | The value of each parameter holds that text. |
+| `query_contains` | The value of each parameter holds that text, or one of those texts where a list is written. |
 | `headers` | The request carries each header, with that value. Names are read in any case. |
 | `body_contains` | The body holds that text. |
-| `body` | Each field of the JSON body has a value that holds that text. A field is looked for at the top of the body and anywhere inside an object or an array; a value that is not a string is read as JSON writes it. |
+| `body` | Each field of the JSON body has a value that holds that text, or one of those texts where a list is written. A field is looked for at the top of the body and anywhere inside an object or an array; a value that is not a string is read as JSON writes it. |
+
+A list is any of its texts. A weakness that is injected is shown by several marks alike, as an API that has it answers them: `"localhost"` and `"127.0.0.1"` are an internal address alike.
+
+```yaml
+        - when:
+            query_contains: { url: ["localhost", "127.0.0.1", "169.254.169.254"] }
+          then:
+            status: 500
+```
 
 A `then` is the answer: `status` (`200` when left out), `body` as JSON (`{}`
 when left out) and `headers`. The body may name the request as an example
-may, so that the answer says a field back:
+may, so that the answer says a field back, and so may the value of a
+header: a redirect says back the address it was asked for with
+`Location: "{{request.query.next}}"`.
 
 ```yaml
         - when:
