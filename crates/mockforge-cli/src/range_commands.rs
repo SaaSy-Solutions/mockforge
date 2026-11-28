@@ -56,6 +56,9 @@ pub(crate) enum RangeCommand {
     /// Begin a pack from a recording or from a spec: the API as it is, with
     /// nothing planted
     New(NewArgs),
+    /// List the kinds of flaw a pack can plant today, each with the request
+    /// that shows it and the answer that does
+    Flaws(FlawsArgs),
     /// Judge a run: what its exchange log counts for against a pack
     Judge(JudgeArgs),
     /// Run an agent against a pack and judge its run, in one command
@@ -89,6 +92,109 @@ pub(crate) struct ListArgs {
     /// Print one JSON document instead of text
     #[arg(long, value_enum, default_value = "text")]
     pub format: Format,
+}
+
+/// `range flaws`.
+#[derive(Args, Debug)]
+pub(crate) struct FlawsArgs {
+    /// Print one JSON document instead of text
+    #[arg(long, value_enum, default_value = "text")]
+    pub format: Format,
+}
+
+fn flaws(args: FlawsArgs) -> Result<i32, String> {
+    match args.format {
+        Format::Json => {
+            let json = pretty(&range::catalogue::KINDS).map_err(|error| error.to_string())?;
+            println!("{json}");
+        }
+        Format::Text => print!("{}", flaws_text()),
+    }
+    Ok(EXIT_OK)
+}
+
+/// What a value of a header looks like in a line: its start, and that there is more.
+fn shown_value(value: &str) -> String {
+    let mut shown: String = value.chars().take(14).collect();
+    if value.chars().count() > 14 {
+        shown.push('…');
+    }
+    shown
+}
+
+/// The catalogue as a person reads it: one kind per block, each with what
+/// proves it, what the answer holds, what planting it changes, and the SemSec
+/// rules whose class it is.
+fn flaws_text() -> String {
+    let width = range::catalogue::KINDS.iter().map(|kind| kind.id.len()).max().unwrap_or(0);
+    let mut text = String::new();
+    let mut blocks = Vec::new();
+    for kind in range::catalogue::KINDS {
+        let mut proved = Vec::new();
+        for (name, value) in kind.prove.with {
+            proved.push(format!("the `{name}` header set to `{}`", shown_value(value)));
+        }
+        for name in kind.prove.without {
+            proved.push(format!("no `{name}` header"));
+        }
+        if let Some(held) = kind.prove.body_contains {
+            proved.push(format!("a body that holds `{held}`"));
+        }
+        if proved.is_empty() {
+            proved.push("the operation itself".to_string());
+        }
+
+        let mut shows = vec![match kind.shows.status {
+            Some(status) => format!("status {status}"),
+            None => "the operation's own success".to_string(),
+        }];
+        for (name, value) in kind.shows.has {
+            shows.push(format!("holding `{name}` as {value}"));
+        }
+        if let Some(held) = kind.shows.has_text {
+            shows.push(format!("and the text `{held}`"));
+        }
+
+        let planted = match kind.plant {
+            range::catalogue::Plant::AsRecorded => {
+                "nothing: the operation answers a request it should have refused".to_string()
+            }
+            range::catalogue::Plant::Fields { fields } => format!(
+                "the answer gains {}",
+                fields
+                    .iter()
+                    .map(|(name, _)| format!("`{name}`"))
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            ),
+            range::catalogue::Plant::Failure { status, .. } => {
+                format!("the operation answers {status} and nothing else")
+            }
+        };
+
+        text.push_str(&format!(
+            "{:<width$} {:<8} {} {}\n  {}\n  proved by: {}\n  shows: {}\n  planted by: {}\n  from SemSec: {}\n",
+            kind.id,
+            kind.severity.label(),
+            kind.cwe,
+            kind.owasp,
+            kind.title,
+            proved.join(", "),
+            shows.join(", "),
+            planted,
+            kind.from.join(", "),
+        ));
+        blocks.push(kind.id);
+    }
+    // The first kind's id is named in both lines: a placeholder in a flag's
+    // value reads as a shell redirect to the docs check, and as a puzzle to a
+    // person.
+    let first = blocks.first().copied().unwrap_or("<kind>");
+    text.push_str(&format!(
+        "\n{} kind(s). To plant one:\n  mockforge range new --har traffic.har --id my-api --flaw {first} --at \"GET /v1/orders/{{id}}\"\n",
+        blocks.len()
+    ));
+    text
 }
 
 /// `range write`.
@@ -134,6 +240,18 @@ pub(crate) struct NewArgs {
     /// beside it, as <id>.pack.json
     #[arg(long, value_name = "FILE")]
     pub output: Option<PathBuf>,
+    /// Keep a key of a known shape as it was recorded. Without this, each is
+    /// replaced by a made-up key of the same shape
+    #[arg(long)]
+    pub keep_keys: bool,
+    /// A kind of flaw to plant, by its id as `range flaws` lists it. Each is
+    /// planted at the operation of the `--at` of its place
+    #[arg(long = "flaw", value_name = "KIND")]
+    pub flaws: Vec<String>,
+    /// Where to plant a flaw: `METHOD PATH`, a path of the pack. There is one
+    /// for each `--flaw`
+    #[arg(long, value_name = "METHOD PATH")]
+    pub at: Vec<String>,
     /// Replace files that are already there
     #[arg(long)]
     pub force: bool,
@@ -173,6 +291,7 @@ pub(crate) fn handle_range_command(args: RangeArgs) -> mockforge_core::Result<()
         RangeCommand::List(args) => list(args),
         RangeCommand::Write(args) => write(args),
         RangeCommand::New(args) => new(args),
+        RangeCommand::Flaws(args) => flaws(args),
         RangeCommand::Judge(args) => judge(args),
         RangeCommand::Run(args) => crate::range_run::run(args),
     };
@@ -626,10 +745,38 @@ fn new(args: NewArgs) -> Result<i32, String> {
             args.id
         ));
     }
+    // Each --flaw is planted at the --at of its place.
+    if args.flaws.len() != args.at.len() {
+        return Err(format!(
+            "{} --flaw and {} --at: a flaw is planted at one operation, so there are as many of one as of the other",
+            args.flaws.len(),
+            args.at.len()
+        ));
+    }
+    let mut planted = Vec::new();
+    for (flaw, at) in args.flaws.iter().zip(&args.at) {
+        let Some(kind) = range::catalogue::FlawKind::by_id(flaw) else {
+            let known: Vec<&str> = range::catalogue::KINDS.iter().map(|kind| kind.id).collect();
+            return Err(format!(
+                "no kind of flaw has the id `{flaw}`; `range flaws` lists them: {}",
+                known.join(", ")
+            ));
+        };
+        let mut words = at.split_whitespace();
+        let takes = "--at takes `METHOD PATH`, as `POST /orders`";
+        let method = words.next().ok_or_else(|| format!("{takes}; `{at}` names no method"))?;
+        let path = words.next().ok_or_else(|| format!("{takes}; `{at}` names no path"))?;
+        if words.next().is_some() {
+            return Err(format!("{takes}; `{at}` holds more than two words"));
+        }
+        planted.push(range::catalogue::Planted { kind, method, path });
+    }
     let asked = range::skeleton::Asked {
         id: &args.id,
         title: args.title.as_deref(),
         brief: brief.trim(),
+        keep_keys: args.keep_keys,
+        flaws: &planted,
     };
     // Read and checked before anything is written, so a recording that is not
     // one leaves no file behind.
@@ -693,15 +840,34 @@ fn new(args: NewArgs) -> Result<i32, String> {
             skeleton.credentials.join(", ")
         );
     }
+    if args.keep_keys {
+        println!(
+            "keys of a known shape are kept as they were recorded (--keep-keys): read through the answers for them"
+        );
+    } else if skeleton.keys.count > 0 {
+        println!(
+            "{} key(s) of a known shape in the answers were replaced by made-up ones of the same shape ({}): the API keeps the weakness and not the key",
+            skeleton.keys.count,
+            skeleton.keys.providers.join(", ")
+        );
+    }
     if matches!(source, Source::Recording(_)) {
         println!(
             "the answers are what the recording held: read through them for what should not be in a pack"
         );
     }
-    println!(
-        "one flaw is a placeholder, `{}`, at the lowest severity: replace it with flaws of this API",
-        range::skeleton::PLACEHOLDER
-    );
+    if planted.is_empty() {
+        println!(
+            "one flaw is a placeholder, `{}`, at the lowest severity: replace it with flaws of this API",
+            range::skeleton::PLACEHOLDER
+        );
+    } else {
+        println!(
+            "{} flaw(s) planted from the catalogue: {}",
+            planted.len(),
+            pack.flaws.iter().map(|flaw| flaw.id.as_str()).collect::<Vec<&str>>().join(", ")
+        );
+    }
 
     println!("\nserve it:     mockforge serve --spec {} --http-port 8080", api_path.display());
     println!("the brief:    {}", pack.brief);
@@ -832,7 +998,7 @@ mod tests {
         for id in range::shipped_ids() {
             assert!(text.contains(&format!("\n{id}\n")), "{id}");
         }
-        assert!(text.contains("\n2 pack(s). To run one:\n  mockforge range write shop\n"));
+        assert!(text.contains("\n3 pack(s). To run one:\n  mockforge range write shop\n"));
         assert!(text.contains("\n  mockforge serve --spec shop.json --http-port 8080\n"));
         // Each entry is named with what proves it, takes it or asks for it,
         // and with the class the pack gives it after how much it matters.
@@ -851,6 +1017,13 @@ mod tests {
         assert!(text.starts_with("\nshop\n  title     A shop API"));
         assert!(!text.contains("demo-user-a"), "{text}");
         assert!(!text.contains("demo-operator-a"), "{text}");
+        assert!(
+            text.contains(
+                "generated
+  title     An app a generator wrote"
+            ),
+            "{text}"
+        );
         // The webhook receiver's first flaw is named with the header it must lack.
         assert!(text.contains(
             "github-event-taken-with-no-signature (critical, CWE-347 A08:2021): POST /webhooks/github without x-hub-signature-256; "

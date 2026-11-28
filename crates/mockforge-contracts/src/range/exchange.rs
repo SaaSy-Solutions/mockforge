@@ -6,7 +6,9 @@
 //! proving request is in the log, with the answer that shows it.
 //!
 //! A header that carries a credential is written as a digest of its value,
-//! never as sent. A log is evidence, and evidence is passed around.
+//! never as sent. So is a value that is a key of a known shape
+//! ([`crate::keys`]), whatever the header is called, and a whole JSON string
+//! of a body that is one. A log is evidence, and evidence is passed around.
 
 use std::collections::BTreeMap;
 
@@ -14,6 +16,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use super::error::{bad_exchange, Result};
+use crate::keys;
 
 /// The headers whose value is a credential, in lower case.
 pub const CREDENTIAL_HEADERS: [&str; 4] = [
@@ -73,10 +76,11 @@ pub fn is_credential(name: &str) -> bool {
     CREDENTIAL_HEADERS.contains(&lower.as_str())
 }
 
-/// A header's value as the log holds it: a digest for a credential, and
+/// A header's value as the log holds it: a digest for a credential, and for
+/// a value that is a key of a known shape whatever the header is called; and
 /// itself for anything else.
 pub fn header_value(name: &str, value: &str) -> String {
-    if is_credential(name) {
+    if is_credential(name) || keys::is_key(value) {
         digest(value)
     } else {
         value.to_string()
@@ -90,10 +94,18 @@ pub fn digest(text: &str) -> String {
 }
 
 /// The start of a body as the log holds it: its first [`BODY_LIMIT`] bytes as
-/// text, and whether that is less than the whole.
+/// text, with every whole JSON string that is a key of a known shape written
+/// as its digest, and whether that is less than the whole.
 pub fn held(bytes: &[u8]) -> (String, bool) {
     let cut = &bytes[..bytes.len().min(BODY_LIMIT)];
-    (String::from_utf8_lossy(cut).to_string(), bytes.len() > BODY_LIMIT)
+    (without_keys(&String::from_utf8_lossy(cut)), bytes.len() > BODY_LIMIT)
+}
+
+/// A text with every whole JSON string that is a key of a known shape written
+/// as its digest. The rest of the text is as it was, and a key that is only
+/// part of a longer string is left there.
+pub fn without_keys(text: &str) -> String {
+    keys::replace_json_strings(text, |held| keys::is_key(held).then(|| digest(held)))
 }
 
 /// Read an exchange log: one exchange per line. A line that is not an
@@ -208,5 +220,36 @@ mod tests {
         // Bytes that are not text are held as what text they make up.
         let (text, _) = held(&[0xff, b'a']);
         assert_eq!(text.chars().count(), 2);
+    }
+
+    #[test]
+    fn a_key_is_known_by_its_shape_and_written_as_its_digest() {
+        let key = "AKIAIOSFODNN7EXAMPLE";
+        // Whatever the header is called; a value of no known shape is itself.
+        assert_eq!(header_value("x-api-key", key), digest(key));
+        assert_eq!(header_value("X-Api-Key", "v1"), "v1");
+        assert_eq!(header_value("x-trace", "sk_live_x"), "sk_live_x");
+
+        // A whole JSON string of a body. A key that is part of a longer string
+        // is left there: the log says what the body said.
+        let body = format!(
+            r#"{{"api_key": "{key}", "id": 5000, "note": "see {key}", "made": "AKIAIOSFODNN7NOT"}}"#
+        );
+        let (text, truncated) = held(body.as_bytes());
+        assert!(!truncated);
+        assert_eq!(
+            text,
+            format!(
+                r#"{{"api_key": "{}", "id": 5000, "note": "see {key}", "made": "AKIAIOSFODNN7NOT"}}"#,
+                digest(key)
+            )
+        );
+
+        // A body cut inside a string is held as it is up to there.
+        let (text, _) = held(&body.as_bytes()[..30]);
+        assert_eq!(text, body[..30]);
+
+        // Text that is not JSON is not looked into.
+        assert_eq!(without_keys("Bearer AKIAIOSFODNN7EXAMPLE"), "Bearer AKIAIOSFODNN7EXAMPLE");
     }
 }

@@ -814,9 +814,9 @@ of the rule and of its findings, with the tags code scanning filters on.
 
 Write a shipped range pack's API (`write`), serve it with `serve --spec`, and
 give the agent the brief, the credential and the scope the pack names. A pack
-is an API with flaws planted in it, each with the request that proves it. Two
-packs ship: `shop`, a shop API, and `webhooks`, a receiver of the webhook
-events of six providers. See
+is an API with flaws planted in it, each with the request that proves it. Three
+packs ship: `shop`, a shop API; `webhooks`, a receiver of the webhook events of
+six providers; and `generated`, the app a generator writes. See
 [Range: a Safe Target for an Agent](../user-guide/range.md) for what a pack
 holds and what the mock cannot model yet.
 
@@ -826,6 +826,8 @@ mockforge range write shop
 mockforge range write webhooks
 mockforge range write all --output-dir range
 mockforge range new --har traffic.har --id orders
+mockforge range flaws
+mockforge range new --har traffic.har --id orders --flaw no-credential --at "POST /v1/orders"
 mockforge serve --spec shop.json --http-port 8080 --exchange-log exchanges.jsonl
 mockforge range judge --pack shop.pack.json --exchanges exchanges.jsonl
 mockforge range run --pack shop.pack.json --agent "my-agent --target {url} --report {report}"
@@ -836,6 +838,10 @@ mockforge range run --pack shop.pack.json --agent "my-agent --target {url} --rep
 `list`:
 
 - `--format text|json`: `json` prints one document and nothing else on stdout.
+
+`flaws`:
+
+- `--format text|json`: `json` prints the catalogue as one document.
 
 `write <PACK>`:
 
@@ -857,6 +863,13 @@ mockforge range run --pack shop.pack.json --agent "my-agent --target {url} --rep
 - `--brief <FILE>`: a file holding what to tell the agent.
 - `--output <FILE>`: where to write the API (default: `<id>.json`). The pack
   is written beside it.
+- `--keep-keys`: keep a key of a known shape as it was recorded. Without it,
+  each is replaced by a made-up key of the same shape, and the command says
+  how many.
+- `--flaw <KIND>`: a kind of flaw to plant, by its id as `range flaws` lists
+  it. Each is planted at the operation of the `--at` of its place.
+- `--at <METHOD PATH>`: where to plant a flaw: a path of the pack. There is
+  one for each `--flaw`.
 - `--force`: replace files that are already there.
 
 `judge`:
@@ -902,7 +915,17 @@ the answer it gives, one JSON line per exchange, whoever answered it. The log
 is opened before the server listens, and a file that is there is replaced. A
 header that carries a credential (`Authorization`, `Proxy-Authorization`,
 `Cookie`, `Set-Cookie`) is written as `sha256:` and the digest of its value,
-never as sent. A body is held up to 16 KiB, and what is cut is marked.
+never as sent. So is a value that is a key of a known shape, wherever it is
+the whole value of a header or a whole JSON string of a body: `AKIA…`,
+`ghp_…`, `sk_live_…` and some ninety other shapes. A body is held up to
+16 KiB, and what is cut is marked.
+
+`range flaws` lists the kinds of flaw a pack can plant today, each with the
+request that proves it, the answer that shows it, its CWE and OWASP
+category, and the SemSec rules whose class it is. `range new` plants a
+kind at an operation with `--flaw KIND --at "METHOD PATH"`: the operation's
+answer is changed as the kind says, and the flaw that proves it is added to
+the pack with its class.
 
 `range judge` reads that log against the pack. A flaw is `found` when its
 proving request reached the mock and the mock answered as the pack says,
@@ -954,7 +977,9 @@ properties. The exit code is the judge's in every form.
 an id are one operation, `GET /v1/orders/{orderId}`, and its answer echoes the
 id it is asked for. An operation answers as the recording answered it most
 often. A header that carries a credential is named with a value to replace and
-never copied; answer bodies are copied as they were recorded. The pack holds
+never copied, and a key of a known shape in an answer is replaced by a made-up
+key of the same shape unless `--keep-keys` is given; the rest of the answer
+bodies is copied as they were recorded. The pack holds
 one flaw, `nothing-planted-yet`, at the `info` severity, so that it can be
 served and judged before any is planted: a pack that plants nothing is
 refused. The exit code is `2` when the recording or the spec cannot be read,

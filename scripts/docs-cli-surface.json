@@ -3859,6 +3859,19 @@
      },
      "positionals": 0,
      "subcommands": {
+      "flaws": {
+       "aliases": {},
+       "flags": {
+        "--format": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
       "help": {
        "aliases": {},
        "flags": {},
@@ -3898,11 +3911,14 @@
       "new": {
        "aliases": {},
        "flags": {
+        "--at": 1,
         "--brief": 1,
+        "--flaw": 1,
         "--force": 0,
         "--har": 1,
         "--help": 0,
         "--id": 1,
+        "--keep-keys": 0,
         "--log-level": 1,
         "--output": 1,
         "--spec": 1,

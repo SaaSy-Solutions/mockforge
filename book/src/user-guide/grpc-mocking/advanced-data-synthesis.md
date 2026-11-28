@@ -30,7 +30,7 @@ The generator automatically infers appropriate data types based on field names:
 | `created_at`, `updated_at`, `timestamp` | ISO timestamps | `2023-10-15T14:30:00Z` |
 | `latitude`, `longitude` | Geographic coordinates | `40.7128`, `-74.0060` |
 | `url`, `website` | Valid URLs | `https://example.com` |
-| `token`, `api_key` | Security tokens | `sk_live_4eC39HqLyjWDarjtT1zdp7dc` |
+| `token`, `api_key` | Security tokens | `sk_live_4f2a9c81e7b3d6a04f2a9c81` |
 
 ### Deterministic Generation
 
