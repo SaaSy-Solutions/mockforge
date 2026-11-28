@@ -9,6 +9,8 @@
 //! - **Deterministic normalization**: Replace timestamps, UUIDs, and random IDs
 //! - **Field-level scrubbing**: Target specific JSON fields or headers
 //! - **Capture filtering**: Selectively record based on status codes or patterns
+//! - **Keys by their shape**: Replace a provider's key wherever it is, with a
+//!   made-up key of the same shape
 //!
 //! # Environment Variables
 //!
@@ -23,7 +25,8 @@
 //!   "rules": [
 //!     {"type": "field", "field": "email", "replacement": "user@example.com"},
 //!     {"type": "uuid", "replacement": "00000000-0000-0000-0000-{{counter:012}}"},
-//!     {"type": "email", "replacement": "user{{counter}}@example.com"}
+//!     {"type": "email", "replacement": "user{{counter}}@example.com"},
+//!     {"type": "key"}
 //!   ]
 //! }'
 //!
@@ -36,12 +39,23 @@
 //! value is replaced the same way wherever it appears, and two different
 //! values never share one. A replacement without it is used for every match.
 //!
+//! The `key` rule takes no replacement. A key is known by the shape of its
+//! value and not by the name of the header or of the field that holds it, by
+//! the table of `mockforge_contracts::keys`. Every key of a known shape is
+//! replaced with a made-up key of the same shape: the same key is replaced
+//! the same way wherever it appears, in this recording and in the next, and
+//! nothing of the key is kept. A recording can then be kept and shared
+//! without a credential in it. A shape says what a key looks like and not
+//! that a value is one: a value of a known shape that is not a key is
+//! replaced too.
+//!
 //! If `MOCKFORGE_CAPTURE_SCRUB` is set but cannot be read, nothing sensitive
 //! reaches the recording: everything but the method, the path and the status
 //! is redacted until the configuration is fixed.
 
 use crate::{RecordedRequest, RecordedResponse, RecorderError, Result};
 use chrono::{DateTime, Utc};
+use mockforge_contracts::keys;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -162,6 +176,13 @@ pub enum ScrubRule {
         #[serde(default = "default_creditcard_replacement")]
         replacement: String,
     },
+
+    /// Scrub every key of a known shape, wherever it is, with a made-up key
+    /// of the same shape. A key is known by the shape of its value, by the
+    /// table of `mockforge_contracts::keys`, and not by the name of the
+    /// header or of the field that holds it. The same key is replaced the
+    /// same way wherever it appears.
+    Key,
 }
 
 /// Target location for scrubbing
@@ -528,6 +549,7 @@ impl Scrubber {
                         result = self.scrub_credit_cards(&result, replacement);
                     }
                 }
+                ScrubRule::Key => result = self.scrub_keys(&result),
                 ScrubRule::Field {
                     field,
                     replacement,
@@ -568,6 +590,16 @@ impl Scrubber {
     /// Scrub credit card numbers
     fn scrub_credit_cards(&self, input: &str, replacement: &str) -> String {
         self.scrub_pattern(&CREDIT_CARD_REGEX, Pseudonym::CreditCard, input, replacement, false)
+    }
+
+    /// Scrub every key of a known shape, wherever it is: the whole of a
+    /// header's value or a part of it, as `Bearer <key>` is; a parameter of a
+    /// query string; a string of a JSON body, or the name of a field that is
+    /// itself a key. Each is replaced with a made-up key of the same shape
+    /// that keeps nothing of the key, and a key gives the same made-up key
+    /// every time.
+    fn scrub_keys(&self, input: &str) -> String {
+        keys::replace_runs(input, keys::made_up_like)
     }
 
     /// Replace every match of `pattern` in `input`.
@@ -1543,5 +1575,57 @@ mod tests {
     fn test_default_sample_rate() {
         let rate = default_sample_rate();
         assert_eq!(rate, 1.0);
+    }
+
+    /// The key rule as the configuration names it, and nothing else needed.
+    #[test]
+    fn test_the_key_rule_is_read_from_the_configuration() {
+        let config: ScrubConfig = serde_json::from_str(r#"{"rules": [{"type": "key"}]}"#).unwrap();
+        assert!(matches!(config.rules.as_slice(), [ScrubRule::Key]));
+        let written = serde_json::to_string(&ScrubRule::Key).unwrap();
+        assert_eq!(written, r#"{"type":"key"}"#);
+    }
+
+    #[test]
+    fn test_a_key_is_scrubbed_by_its_shape_and_made_up_in_its_place() {
+        let scrubber = Scrubber::new(ScrubConfig {
+            rules: vec![ScrubRule::Key],
+            ..ScrubConfig::default()
+        })
+        .unwrap();
+        let stripe = "sk_live_4f2a9c81e7b3d6a04f2a9c81";
+        let made = keys::made_up_like(stripe).unwrap();
+
+        // Whole, after `Bearer`, and in a parameter of a query string.
+        assert_eq!(scrubber.scrub_string(stripe, ScrubTarget::Headers), made);
+        assert_eq!(
+            scrubber.scrub_string(&format!("Bearer {stripe}"), ScrubTarget::Headers),
+            format!("Bearer {made}")
+        );
+        assert_eq!(
+            scrubber.scrub_string(&format!("a=1&key={stripe}&b=2"), ScrubTarget::Body),
+            format!("a=1&key={made}&b=2")
+        );
+        // In strings of a JSON body, and where a field is named by one.
+        let body = format!(
+            r#"{{"token": "{stripe}", "sk_live_4f2a9c81e7b3d6a04f2a9c81": "mine", "note": "see {stripe}.", "shape": "sk_live_", "id": 5000}}"#
+        );
+        assert_eq!(
+            scrubber.scrub_string(&body, ScrubTarget::Body),
+            format!(
+                r#"{{"token": "{made}", "{made}": "mine", "note": "see {made}.", "shape": "sk_live_", "id": 5000}}"#
+            )
+        );
+        // The made-up key is a key of the same shape, and nothing of the key
+        // is in it beyond what the shape fixes.
+        assert_eq!(keys::format_of(&made).unwrap().provider, "Stripe");
+        assert!(!made.contains("4f2a9c81"));
+    }
+
+    #[test]
+    fn test_without_the_key_rule_a_key_is_recorded_as_it_was() {
+        let scrubber = Scrubber::new(ScrubConfig::default()).unwrap();
+        let stripe = "sk_live_4f2a9c81e7b3d6a04f2a9c81";
+        assert_eq!(scrubber.scrub_string(stripe, ScrubTarget::All), stripe);
     }
 }

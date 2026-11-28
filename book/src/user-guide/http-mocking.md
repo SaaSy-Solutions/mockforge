@@ -469,6 +469,7 @@ export MOCKFORGE_CAPTURE_SCRUB='{
     {"type": "email", "replacement": "user{{counter}}@example.com"},
     {"type": "ip_address", "replacement": "127.0.0.1"},
     {"type": "credit_card", "replacement": "XXXX-XXXX-XXXX-XXXX"},
+    {"type": "key"},
     {"type": "regex", "pattern": "sk-[A-Za-z0-9]{20,}", "replacement": "sk-REDACTED"}
   ]
 }'
@@ -480,6 +481,7 @@ export MOCKFORGE_CAPTURE_SCRUB='{
 | `field` | One JSON field, by a path such as `user.email`, and a header of the same name. |
 | `regex` | Every match of a pattern. |
 | `uuid`, `email`, `ip_address`, `credit_card` | Every value of that shape. |
+| `key` | Every key of a known shape, with a made-up key of the same shape. |
 
 `{{counter}}` in the replacement of a built-in rule is the value's
 pseudonym. The same UUID, address, IP or card number is replaced the same way
@@ -487,8 +489,33 @@ wherever it appears in a recording, and two different values never share one,
 so a converted fixture still tells one user from another. A replacement
 without it is used for every match. `counter_seed` sets the first number.
 
-Only text bodies are scrubbed. A body recorded in another encoding is stored
-as it arrived.
+##### Keep keys out of a recording
+
+The `key` rule takes no replacement. A key is known by the shape of its
+value, not by the name of the header or of the field that holds it, so the
+rule needs no list of names to keep up to date. It finds a key wherever the
+request or the answer holds one:
+
+- as the whole of a header's value, or after a scheme, as in `Bearer <key>`;
+- as a parameter of the query string;
+- as a string of a JSON body, or as the name of a field that is itself a key.
+
+Each key is replaced with a made-up key of the same shape. The same key gives
+the same made-up key in every exchange of a recording and in the next
+recording, so a converted fixture and a pack begun from the recording still
+agree, and nothing of the key is kept beyond what its shape fixes. The shapes
+are those of the table `mockforge_contracts::keys`, the one the exchange log
+and `range new` use: the keys of about a hundred kinds, from AWS, Anthropic,
+GitHub, Google, OpenAI, Slack, Stripe and the others.
+
+```bash
+export MOCKFORGE_CAPTURE_SCRUB='{"rules": [{"type": "key"}]}'
+```
+
+A shape says what a key looks like and not that a value is one. A value of a
+known shape that is not a key is replaced too, in the same shape, so a
+recording made with the rule is still fit to replay. Only text bodies are
+scrubbed. A body recorded in another encoding is stored as it arrived.
 
 If `MOCKFORGE_CAPTURE_SCRUB` cannot be read, the recorder keeps the method,
 the path and the status and redacts everything else, so a mistake in the

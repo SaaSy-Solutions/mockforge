@@ -938,6 +938,121 @@ fn replace_in(value: &mut Value, replaced: &mut Replaced) {
     }
 }
 
+/// The characters, beside letters and digits, that a key can be made of. A
+/// colon is among them for the one provider that puts one in its key.
+const SIGNS: [char; 6] = ['_', '.', '+', '-', '/', ':'];
+
+fn is_key_character(character: char) -> bool {
+    character.is_ascii_alphanumeric() || SIGNS.contains(&character)
+}
+
+/// What an escape of JSON text means for a run of a key's characters.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Escape {
+    /// A character a key is made of, as `\/` or `\uXXXX` writes it: the run
+    /// goes on.
+    Character(char),
+    /// An escape a key cannot hold, taken from the text: the run ends before
+    /// it, and the character after the backslash starts nothing.
+    Ends(char),
+    /// Not an escape of JSON text: the backslash is an ordinary character,
+    /// which ends the run, and what follows it is read again.
+    None,
+}
+
+/// What the escape that follows a backslash in `rest` means for a run.
+fn escaped(rest: &mut std::iter::Peekable<std::str::Chars<'_>>) -> Escape {
+    match rest.peek().copied() {
+        Some('/') => {
+            rest.next();
+            Escape::Character('/')
+        }
+        Some('u') => {
+            let mut look = rest.clone();
+            look.next();
+            let mut code = 0u32;
+            for _ in 0..4 {
+                let Some(digit) = look.next().and_then(|character| character.to_digit(16)) else {
+                    return Escape::None;
+                };
+                code = code * 16 + digit;
+            }
+            match char::from_u32(code).filter(|named| is_key_character(*named)) {
+                Some(named) => {
+                    *rest = look;
+                    Escape::Character(named)
+                }
+                None => Escape::None,
+            }
+        }
+        Some(simple @ ('"' | '\\' | 'b' | 'f' | 'n' | 'r' | 't')) => {
+            rest.next();
+            Escape::Ends(simple)
+        }
+        _ => Escape::None,
+    }
+}
+
+/// End a run: what `instead` gives for it takes its place when it is a key.
+/// A run that ends with full stops is tried without them too, and keeps the
+/// stops, so that a key at the end of a sentence is found.
+fn keep_run(run: &mut String, out: &mut String, instead: &impl Fn(&str) -> Option<String>) {
+    if run.is_empty() {
+        return;
+    }
+    let taken = instead(run).or_else(|| {
+        let bare = run.trim_end_matches('.');
+        if bare.len() == run.len() {
+            return None;
+        }
+        let mut with_stops = instead(bare)?;
+        with_stops.push_str(&run[bare.len()..]);
+        Some(with_stops)
+    });
+    match taken {
+        Some(other) => out.push_str(&other),
+        None => out.push_str(run),
+    }
+    run.clear();
+}
+
+/// The text with every run of the characters a key is made of that is a key
+/// of a known shape replaced by what `instead` gives for it, wherever the run
+/// is: the whole of a header's value or the key after `Bearer`, a parameter
+/// of a query string, a string of a body of any kind. In JSON text `\/` and
+/// `\uXXXX` count as the characters they name, so that a key with an escaped
+/// character is found too. Everything that is not a key is left as it is.
+pub fn replace_runs(text: &str, instead: impl Fn(&str) -> Option<String>) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut run = String::new();
+    let mut rest = text.chars().peekable();
+    while let Some(character) = rest.next() {
+        let held = if character == '\\' {
+            escaped(&mut rest)
+        } else {
+            Escape::Character(character)
+        };
+        match held {
+            Escape::Character(held) if is_key_character(held) => run.push(held),
+            Escape::Character(other) => {
+                keep_run(&mut run, &mut out, &instead);
+                out.push(other);
+            }
+            Escape::Ends(after) => {
+                keep_run(&mut run, &mut out, &instead);
+                out.push('\\');
+                out.push(after);
+            }
+            Escape::None => {
+                keep_run(&mut run, &mut out, &instead);
+                out.push(character);
+            }
+        }
+    }
+    keep_run(&mut run, &mut out, &instead);
+    out
+}
+
 /// The text with every whole JSON string of a known shape's key replaced by
 /// what `instead` gives for it. A string that is not whole, because the body
 /// was cut inside it, is left as it is, and so is all the rest of the text.
@@ -1143,5 +1258,67 @@ mod tests {
 
     fn digest_of(text: &str) -> String {
         format!("{:x}", Sha256::digest(text.as_bytes()))
+    }
+
+    /// A key of Grafana's cloud shape, with a slash in it. It is made here
+    /// and not written whole, so that the tree holds no example it does not
+    /// name.
+    fn grafana_key() -> String {
+        format!("glc_eyJ{}/{}/{}", "a".repeat(20), "b".repeat(20), "c".repeat(20))
+    }
+
+    #[test]
+    fn a_key_is_found_wherever_a_run_of_its_characters_is_one() {
+        let stripe = "sk_live_4f2a9c81e7b3d6a04f2a9c81";
+        let github = "ghp_0123456789012345678901234567890123456789";
+        let made_stripe = made_up_like(stripe).unwrap();
+        let made_github = made_up_like(github).unwrap();
+        let text = format!("Bearer {stripe}?key={github}&after={stripe}");
+        assert_eq!(
+            replace_runs(&text, made_up_like),
+            format!("Bearer {made_stripe}?key={made_github}&after={made_stripe}")
+        );
+        // A prefix of a key's shape with nothing after it is not a key.
+        assert_eq!(replace_runs("sk_live_", made_up_like), "sk_live_");
+        // Text with no key in it is left as it is.
+        let plain = "https://api.example.com/v1/users/123?limit=5 text/html;charset=utf-8";
+        assert_eq!(replace_runs(plain, made_up_like), plain);
+    }
+
+    #[test]
+    fn a_key_at_the_end_of_a_sentence_is_found_and_the_stop_kept() {
+        let key = "sk_live_4f2a9c81e7b3d6a04f2a9c81";
+        let made = made_up_like(key).unwrap();
+        assert_eq!(
+            replace_runs(&format!("the key was {key}."), made_up_like),
+            format!("the key was {made}.")
+        );
+        // The same key gives the same made-up key, and nothing of it is kept
+        // beyond what its shape fixes.
+        assert!(made.starts_with("sk_live_"));
+        assert_ne!(made, key);
+        assert!(!made.contains("4f2a9c81"));
+    }
+
+    #[test]
+    fn an_escaped_key_of_json_text_is_found_and_the_escapes_left_as_written() {
+        let key = grafana_key();
+        assert!(is_key(&key));
+        let made = made_up_like(&key).unwrap();
+        // A slash may be written `\/`.
+        let escaped = key.replace('/', "\\/");
+        assert_eq!(
+            replace_runs(&format!("{{\"token\": \"{escaped}\"}}"), made_up_like),
+            format!("{{\"token\": \"{made}\"}}")
+        );
+        // A character may be written as the code it names.
+        let named = key.replace('/', "\\u002f");
+        assert_eq!(replace_runs(&named, made_up_like), made);
+        // An escape a key cannot hold ends the run, and what follows it is
+        // read from its start.
+        let both = format!("\"{key}\\n{key}\"");
+        assert_eq!(replace_runs(&both, made_up_like), format!("\"{made}\\n{made}\""));
+        // A backslash that escapes nothing of JSON is an ordinary character.
+        assert_eq!(replace_runs(&format!("{key}\\{key}"), made_up_like), format!("{made}\\{made}"));
     }
 }
