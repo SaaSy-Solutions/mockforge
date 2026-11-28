@@ -145,6 +145,9 @@ fn flaws_text() -> String {
         for (name, value) in kind.prove.query_with {
             proved.push(format!("a query carrying `{name}` set to `{value}`"));
         }
+        for (name, text) in kind.prove.query_contains {
+            proved.push(format!("a query whose `{name}` holds `{text}`"));
+        }
         for name in kind.prove.query_without {
             proved.push(format!("no `{name}` in the query"));
         }

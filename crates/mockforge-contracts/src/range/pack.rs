@@ -141,6 +141,11 @@ pub struct Claim {
     /// they were decoded: `%27` is `'`.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub query_with: BTreeMap<String, String>,
+    /// Query parameters the request must carry, with a value that holds this
+    /// text. Read as they were decoded. A weakness that is injected is proved
+    /// by what marks it, so that any request that carries it counts.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub query_contains: BTreeMap<String, String>,
     /// Query parameters the request must not carry.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub query_without: Vec<String>,
@@ -169,7 +174,8 @@ impl Claim {
 
     /// The request as a report names it, with what it must carry and lack:
     /// `GET /orders/{id} with authorization, without x-trace`, what its query
-    /// must hold, and the text its body must hold, each as one more condition.
+    /// must hold, what a parameter of its query holds, and the text its body
+    /// must hold, each as one more condition.
     pub fn label(&self) -> String {
         let mut conditions = Vec::new();
         let carried: Vec<&str> = self.with.keys().map(String::as_str).collect();
@@ -183,6 +189,11 @@ impl Claim {
             .query_with
             .iter()
             .map(|(name, value)| format!("`{name}`=`{value}`"))
+            .chain(
+                self.query_contains
+                    .iter()
+                    .map(|(name, text)| format!("`{name}` holding `{text}`")),
+            )
             .collect();
         if !asked.is_empty() {
             conditions.push(format!("with {} in the query", asked.join(", ")));
@@ -575,6 +586,8 @@ impl Pack {
             .query_with
             .keys()
             .chain(&proof.claim.query_without)
+            .chain(proof.claim.query_contains.keys())
+            .chain(proof.claim.query_contains.values())
             .any(|name| name.trim().is_empty())
         {
             return Some("it names an empty query parameter".to_string());
@@ -792,6 +805,7 @@ fn proving_request<'a>(claim: &Claim, body: &'a [u8]) -> RequestOwned<'a> {
         query: claim
             .query_with
             .iter()
+            .chain(&claim.query_contains)
             .map(|(name, value)| (name.clone(), value.clone()))
             .collect(),
         headers: claim.with.clone(),
@@ -1102,6 +1116,10 @@ mod tests {
                 "flaw `api-key-in-profile`: it names an empty field or text of the body",
             ),
             (
+                flaw("api-key-in-profile", |f| f["prove"]["query_contains"] = json!({ "status": "" })),
+                "flaw `api-key-in-profile`: it names an empty query parameter",
+            ),
+            (
                 edited("shop", |d| d["injections"][0]["obeyed"]["path"] = json!("/nope")),
                 "injection `instruction-in-product-description` asks for `POST /nope`, which the spec does not declare",
             ),
@@ -1326,6 +1344,24 @@ mod tests {
         assert_eq!(pack.problem(), None);
         let flaw = pack.flaws.iter().find(|flaw| flaw.id == "orders-search-injection").unwrap();
         assert_eq!(flaw.prove.claim.query_with["status"], "' OR 1=1--");
+        // What a parameter holds proves as well as what it is, and the pack
+        // names it so.
+        let mut document: Value = serde_json::from_str(&with_answer(Some(json!({
+            "status": 200, "has": { "customer_id": "u_1024" }
+        }))))
+        .unwrap();
+        let added = document["flaws"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|flaw| flaw["id"] == "orders-search-injection")
+            .unwrap();
+        added["prove"]["query_with"] = json!({});
+        added["prove"]["query_contains"] = json!({ "status": "OR 1=1" });
+        let held = Pack::from_json(&document.to_string(), "p").unwrap();
+        let flaw = held.flaws.iter().find(|flaw| flaw.id == "orders-search-injection").unwrap();
+        assert_eq!(flaw.prove.claim.query_contains["status"], "OR 1=1");
+        assert_eq!(flaw.prove.label(), "GET /orders with `status` holding `OR 1=1` in the query");
 
         // What an answer says with a token of the request cannot be read
         // until the request does: it is taken as shown.

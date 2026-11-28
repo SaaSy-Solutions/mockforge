@@ -952,9 +952,12 @@ answers the request that carries the injection, and every other request as it
 did.
 
 A proving request may name the query string: `query_with` names parameters it
-must carry, with their values, and `query_without` names those it must not.
-It may name the fields of a JSON body: `body_with` names those whose value
-must hold a text, wherever in the body the field is. The answer that shows a
+must carry, with their values, `query_contains` names those whose value must
+hold a text, and `query_without` names those it must not. It may name the
+fields of a JSON body: `body_with` names those whose value must hold a text,
+wherever in the body the field is. A kind planted from the catalogue is proved
+by the mark its answer is given for, so every request the mock answered weakly
+counts and not the one injection the kind was written with. The answer that shows a
 flaw may name its headers: `has_header` and `lacks_header`. An operation of
 a pack's spec may give answers by request (`x-mockforge-answers`), which is
 how an injected weakness is planted honestly.

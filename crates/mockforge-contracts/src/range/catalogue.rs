@@ -99,6 +99,10 @@ pub struct Prove {
     /// Query parameters the request carries, with their values, as they were
     /// decoded.
     pub query_with: &'static [(&'static str, &'static str)],
+    /// Query parameters the request carries, with a value that holds these
+    /// texts, as they were decoded: the mark the answer is given for, so that
+    /// any request that carries the injection counts and not one of its own.
+    pub query_contains: &'static [(&'static str, &'static str)],
     /// Query parameters the request must not carry.
     pub query_without: &'static [&'static str],
     /// Fields of the JSON request body whose value holds these texts, as the
@@ -526,48 +530,52 @@ impl FlawKind {
         if let Some(text) = self.prove.body_contains {
             prove["body_contains"] = json!(text);
         }
-        if !self.prove.query_with.is_empty() {
-            // The name is written as it was given, and the request's field or
-            // parameter is read as it was decoded.
-            let named: serde_json::Map<String, Value> = self
-                .prove
-                .query_with
-                .iter()
-                .map(|(name, value)| {
-                    let name = if name == &PARAMETER {
-                        parameter.or(field).unwrap_or(name)
-                    } else {
-                        name
-                    };
-                    (name.to_string(), json!(value))
-                })
-                .collect();
-            // A kind that goes through either proves with the one it was
-            // planted through.
-            prove[if field.is_some() {
-                "body_with"
+        // The name is written as it was given, and the request's field or
+        // parameter is read as it was decoded. A kind that goes through either
+        // proves with the one it was planted through: what a parameter of the
+        // query would carry is what the field of the body holds.
+        let given = |name: &'static str, through: Option<&str>, other: Option<&str>| {
+            through
+                .filter(|_| name == PARAMETER)
+                .or(other.filter(|_| name == PARAMETER))
+                .unwrap_or(name)
+                .to_string()
+        };
+        let (mut with, mut holds, mut body) = (
+            serde_json::Map::<String, Value>::new(),
+            serde_json::Map::<String, Value>::new(),
+            serde_json::Map::<String, Value>::new(),
+        );
+        for (name, value) in self.prove.query_with {
+            let named = given(name, parameter, field);
+            if field.is_some() {
+                body.insert(named, json!(value));
             } else {
-                "query_with"
-            }] = Value::Object(named);
+                with.insert(named, json!(value));
+            }
+        }
+        for (name, value) in self.prove.query_contains {
+            let named = given(name, parameter, field);
+            if field.is_some() {
+                body.insert(named, json!(value));
+            } else {
+                holds.insert(named, json!(value));
+            }
+        }
+        for (name, value) in self.prove.body_with {
+            body.insert(given(name, field, parameter), json!(value));
+        }
+        if !with.is_empty() {
+            prove["query_with"] = Value::Object(with);
+        }
+        if !holds.is_empty() {
+            prove["query_contains"] = Value::Object(holds);
         }
         if !self.prove.query_without.is_empty() {
             prove["query_without"] = json!(self.prove.query_without);
         }
-        if !self.prove.body_with.is_empty() {
-            prove["body_with"] = Value::Object(
-                self.prove
-                    .body_with
-                    .iter()
-                    .map(|(name, value)| {
-                        let name = if name == &PARAMETER {
-                            field.or(parameter).unwrap_or(name)
-                        } else {
-                            name
-                        };
-                        (name.to_string(), json!(value))
-                    })
-                    .collect(),
-            );
+        if !body.is_empty() {
+            prove["body_with"] = Value::Object(body);
         }
         let mut serves = json!({});
         if let Some(status) = shows.status {
@@ -642,6 +650,7 @@ pub const KINDS: &[FlawKind] = &[
             body_contains: None,
             query_with: &[],
             query_without: &[],
+            query_contains: &[],
             body_with: &[],
         },
         shows: Shows {
@@ -675,6 +684,7 @@ pub const KINDS: &[FlawKind] = &[
             body_contains: None,
             query_with: &[],
             query_without: &[],
+            query_contains: &[],
             body_with: &[],
         },
         shows: Shows {
@@ -705,8 +715,9 @@ pub const KINDS: &[FlawKind] = &[
             with: &[],
             without: &[],
             body_contains: None,
-            query_with: &[(PARAMETER, "127.0.0.1; id")],
+            query_with: &[],
             query_without: &[],
+            query_contains: &[(PARAMETER, "; ")],
             body_with: &[],
         },
         shows: Shows {
@@ -740,6 +751,7 @@ pub const KINDS: &[FlawKind] = &[
             body_contains: None,
             query_with: &[],
             query_without: &[],
+            query_contains: &[],
             body_with: &[],
         },
         shows: Shows {
@@ -772,6 +784,7 @@ pub const KINDS: &[FlawKind] = &[
             body_contains: None,
             query_with: &[],
             query_without: &[],
+            query_contains: &[],
             body_with: &[],
         },
         shows: Shows {
@@ -804,6 +817,7 @@ pub const KINDS: &[FlawKind] = &[
             body_contains: Some("\"role\""),
             query_with: &[],
             query_without: &[],
+            query_contains: &[],
             body_with: &[],
         },
         shows: Shows {
@@ -840,6 +854,7 @@ pub const KINDS: &[FlawKind] = &[
             body_contains: None,
             query_with: &[],
             query_without: &[],
+            query_contains: &[],
             body_with: &[],
         },
         shows: Shows {
@@ -873,7 +888,10 @@ pub const KINDS: &[FlawKind] = &[
             body_contains: None,
             query_with: &[],
             query_without: &[],
-            body_with: &[(PARAMETER, "$gt")],
+            query_contains: &[],
+            // The start of an operator's name in the JSON of the field's value:
+            // `$gt`, `$ne`, `$regex` or another. A string never reads so.
+            body_with: &[(PARAMETER, "\"$")],
         },
         shows: Shows {
             status: None,
@@ -883,7 +901,7 @@ pub const KINDS: &[FlawKind] = &[
             lacks_header: &[],
         },
         plant: Plant::Otherwise {
-            when_: r#"{ "body": { "<parameter>": "$gt" } }"#,
+            when_: r#"{ "body": { "<parameter>": "\"$" } }"#,
             then_: r#"{ "body": { "authenticated": true, "user": { "id": "u_1024", "email": "ada@example.com", "role": "customer" } } }"#,
         },
         through: Through::BodyField,
@@ -899,8 +917,9 @@ pub const KINDS: &[FlawKind] = &[
             with: &[],
             without: &[],
             body_contains: None,
-            query_with: &[(PARAMETER, "https://evil.example/phish")],
+            query_with: &[],
             query_without: &[],
+            query_contains: &[(PARAMETER, "evil.example")],
             body_with: &[],
         },
         shows: Shows {
@@ -929,6 +948,7 @@ pub const KINDS: &[FlawKind] = &[
             body_contains: None,
             query_with: &[],
             query_without: &[],
+            query_contains: &[],
             body_with: &[],
         },
         shows: Shows {
@@ -965,8 +985,9 @@ pub const KINDS: &[FlawKind] = &[
             with: &[],
             without: &[],
             body_contains: None,
-            query_with: &[(PARAMETER, "../../../../etc/passwd")],
+            query_with: &[],
             query_without: &[],
+            query_contains: &[(PARAMETER, "../")],
             body_with: &[],
         },
         shows: Shows {
@@ -997,8 +1018,9 @@ pub const KINDS: &[FlawKind] = &[
             with: &[],
             without: &[],
             body_contains: None,
-            query_with: &[(PARAMETER, "<script>alert(document.domain)</script>")],
+            query_with: &[],
             query_without: &[],
+            query_contains: &[(PARAMETER, "<script>")],
             body_with: &[],
         },
         shows: Shows {
@@ -1025,8 +1047,9 @@ pub const KINDS: &[FlawKind] = &[
             with: &[],
             without: &[],
             body_contains: None,
-            query_with: &[(PARAMETER, "' OR '1'='1' --")],
+            query_with: &[],
             query_without: &[],
+            query_contains: &[(PARAMETER, "' OR ")],
             body_with: &[],
         },
         shows: Shows {
@@ -1060,11 +1083,9 @@ pub const KINDS: &[FlawKind] = &[
             with: &[],
             without: &[],
             body_contains: None,
-            query_with: &[(
-                PARAMETER,
-                "http://169.254.169.254/latest/dynamic/instance-identity/document",
-            )],
+            query_with: &[],
             query_without: &[],
+            query_contains: &[(PARAMETER, "169.254.169.254")],
             body_with: &[],
         },
         shows: Shows {
@@ -1093,6 +1114,7 @@ pub const KINDS: &[FlawKind] = &[
             body_contains: None,
             query_with: &[(PARAMETER, "{{7*7}}")],
             query_without: &[],
+            query_contains: &[],
             body_with: &[],
         },
         shows: Shows {
@@ -1121,6 +1143,7 @@ pub const KINDS: &[FlawKind] = &[
             body_contains: None,
             query_with: &[],
             query_without: &[],
+            query_contains: &[],
             body_with: &[],
         },
         shows: Shows {
@@ -1150,6 +1173,7 @@ pub const KINDS: &[FlawKind] = &[
             body_contains: Some(".php"),
             query_with: &[],
             query_without: &[],
+            query_contains: &[],
             body_with: &[],
         },
         shows: Shows {
@@ -1509,7 +1533,10 @@ mod tests {
             flaw["title"],
             "SQL is injected through a parameter or a field of the body, `q` of GET /orders/{id}"
         );
-        assert_eq!(flaw["prove"]["query_with"], json!({ "q": "' OR '1'='1' --" }));
+        // Proved by the mark the answer is given for, and by no injection of
+        // the catalogue's own.
+        assert_eq!(flaw["prove"]["query_contains"], json!({ "q": "' OR " }));
+        assert!(flaw["prove"].get("query_with").is_none());
         let mut otherwise = served.clone();
         otherwise.as_object_mut().unwrap().remove("x-mockforge-answers");
         assert_eq!(otherwise, before);
@@ -1580,11 +1607,9 @@ mod tests {
             flaw["title"],
             "A server-side request is made to an address from a parameter or a field of the body, `q` of GET /orders/{id}"
         );
-        assert_eq!(
-            flaw["prove"]["body_with"],
-            json!({ "q": "http://169.254.169.254/latest/dynamic/instance-identity/document" })
-        );
+        assert_eq!(flaw["prove"]["body_with"], json!({ "q": "169.254.169.254" }));
         assert!(flaw["prove"].get("query_with").is_none());
+        assert!(flaw["prove"].get("query_contains").is_none());
         let mut otherwise = served.clone();
         otherwise.as_object_mut().unwrap().remove("x-mockforge-answers");
         assert_eq!(otherwise, before);
@@ -1608,10 +1633,11 @@ mod tests {
             .plant("POST", "/login", &mut login, "traffic.har", None, Some("password"))
             .unwrap();
         assert_eq!(flaw["id"], "nosql-injection-post-login-password");
-        assert_eq!(flaw["prove"]["body_with"], json!({ "password": "$gt" }));
+        // Any operator: the start of its name in the JSON of the value.
+        assert_eq!(flaw["prove"]["body_with"], json!({ "password": "\"$" }));
         assert_eq!(
             login["x-mockforge-answers"][0]["when"],
-            json!({ "body": { "password": "$gt" } })
+            json!({ "body": { "password": "\"$" } })
         );
         assert_eq!(login["x-mockforge-answers"][0]["then"]["status"], 200);
         assert_eq!(login["x-mockforge-answers"][0]["then"]["body"]["authenticated"], true);
@@ -1664,6 +1690,7 @@ mod tests {
                 .prove
                 .body_with
                 .first()
+                .or_else(|| kind.prove.query_contains.first())
                 .or_else(|| kind.prove.query_with.first())
                 .unwrap()
                 .1;
@@ -1679,10 +1706,10 @@ mod tests {
                 .iter()
                 .find_map(|carried| written[*carried][PARAMETER].as_str())
                 .unwrap_or_else(|| panic!("{}: its `when` names no parameter", kind.id));
-            // The flaw is proved by the field the kind names, holding the
-            // injection; the answer is given to any request whose field
-            // holds what marks it, and says the field back, not a parameter.
-            assert!(text.contains(needle), "{}: {text} does not hold {needle}", kind.id);
+            // The flaw is proved by the field the kind names holding what
+            // marks the injection, which is what the answer is given for; and
+            // the answer says the field back, not a parameter.
+            assert_eq!(text, needle, "{}", kind.id);
             assert_eq!(flaw["prove"]["body_with"], json!({ "q": text }), "{}", kind.id);
             assert_eq!(flaw["id"], format!("{}-get-orders-id-q", kind.id));
             assert_eq!(
@@ -1717,9 +1744,24 @@ mod tests {
     #[test]
     fn every_kind_injected_through_a_query_parameter_plants_an_answer_the_flaw_proves() {
         for kind in KINDS.iter().filter(|kind| kind.through.is_query()) {
-            // One parameter to prove it with, exactly, and it is the placeholder.
-            assert_eq!(kind.prove.query_with.len(), 1, "{}", kind.id);
-            assert_eq!(kind.prove.query_with[0].0, PARAMETER, "{}", kind.id);
+            // One parameter to prove it with, and it is the placeholder.
+            assert_eq!(
+                kind.prove.query_with.len() + kind.prove.query_contains.len(),
+                1,
+                "{}",
+                kind.id
+            );
+            assert_eq!(
+                kind.prove
+                    .query_with
+                    .first()
+                    .or_else(|| kind.prove.query_contains.first())
+                    .unwrap()
+                    .0,
+                PARAMETER,
+                "{}",
+                kind.id
+            );
             // The operation answers the injection, and no request else.
             let Plant::Otherwise { when_, then_: _ } = kind.plant else {
                 panic!("{} is injected through a parameter and answers otherwise", kind.id)
@@ -1731,9 +1773,27 @@ mod tests {
             let flaw = kind
                 .plant("GET", "/orders/{id}", &mut served, "traffic.har", Some("q"), None)
                 .unwrap();
-            // The flaw is proved by the parameter the kind names, and is one
-            // flaw of that kind through that parameter.
-            assert_eq!(flaw["prove"]["query_with"], json!({ "q": kind.prove.query_with[0].1 }));
+            // The flaw is proved by the parameter the kind names holding what
+            // marks the injection, which is what the answer is given for; and
+            // it is one flaw of that kind through that parameter.
+            let (field, text) = if kind.prove.query_with.len() == 1 {
+                ("query_with", kind.prove.query_with[0].1)
+            } else {
+                ("query_contains", kind.prove.query_contains[0].1)
+            };
+            let (other, answer_key) = if field == "query_with" {
+                ("query_contains", "query")
+            } else {
+                ("query_with", "query_contains")
+            };
+            assert_eq!(flaw["prove"][field], json!({ "q": text }), "{}", kind.id);
+            assert_eq!(flaw["prove"][other], Value::Null, "{}", kind.id);
+            assert_eq!(
+                served["x-mockforge-answers"][0]["when"][answer_key],
+                json!({ "q": text }),
+                "{}: the answer is given for what proves the flaw",
+                kind.id
+            );
             assert_eq!(flaw["id"], format!("{}-get-orders-id-q", kind.id));
             assert_eq!(served["x-mockforge-answers"].as_array().unwrap().len(), 1);
         }

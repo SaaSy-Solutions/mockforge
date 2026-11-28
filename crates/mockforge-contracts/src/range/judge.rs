@@ -438,9 +438,10 @@ impl From<&Exchange> for OutOfScope {
 
 /// Whether an exchange is the request a claim names: the method, the path,
 /// the headers it must carry and must not carry, the query it must hold and
-/// must not, the text its body must hold, and the fields of its JSON body
-/// that must hold a text. A credential is compared by its digest, as the log
-/// holds it, and the query as it was decoded.
+/// must not and what a parameter of it must hold, the text its body must
+/// hold, and the fields of its JSON body that must hold a text. A credential
+/// is compared by its digest, as the log holds it, and the query as it was
+/// decoded.
 pub fn asks(exchange: &Exchange, claim: &Claim) -> bool {
     exchange.method == claim.method
         && paths::matches(&claim.path, &exchange.path)
@@ -448,7 +449,9 @@ pub fn asks(exchange: &Exchange, claim: &Claim) -> bool {
             header(exchange, name).is_some_and(|held| held == header_value(name, value))
         })
         && claim.without.iter().all(|name| header(exchange, name).is_none())
-        && ((claim.query_with.is_empty() && claim.query_without.is_empty())
+        && ((claim.query_with.is_empty()
+            && claim.query_contains.is_empty()
+            && claim.query_without.is_empty())
             || asks_query(&mockforge_openapi::answers::decoded(&exchange.query), claim))
         && claim
             .body_contains
@@ -469,12 +472,16 @@ fn asks_body(body: &str, claim: &Claim) -> bool {
         })
 }
 
-/// Whether the parameters of a query are those a claim names.
+/// Whether the parameters of a query are those a claim names: each it must
+/// carry is there, with its value or holding its text.
 fn asks_query(query: &[(String, String)], claim: &Claim) -> bool {
     claim
         .query_with
         .iter()
         .all(|(name, value)| query.iter().any(|(held, asked)| held == name && asked == value))
+        && claim.query_contains.iter().all(|(name, text)| {
+            query.iter().any(|(held, asked)| held == name && asked.contains(text))
+        })
         && claim
             .query_without
             .iter()
@@ -768,6 +775,7 @@ mod tests {
             with: BTreeMap::new(),
             without: Vec::new(),
             query_with: BTreeMap::new(),
+            query_contains: BTreeMap::new(),
             query_without: Vec::new(),
             body_contains: None,
             body_with: fields
@@ -842,6 +850,79 @@ mod tests {
         assert_eq!(
             found_verdict.why,
             "POST /login with `password` holding `$gt` in the body answered 200"
+        );
+    }
+
+    #[test]
+    fn a_flaw_is_proved_by_what_a_request_holds_and_not_by_one_injection() {
+        // The mark the answer is given for, as a kind of the catalogue plants it.
+        let mark = Claim {
+            method: "GET".to_string(),
+            path: "/orders".to_string(),
+            with: BTreeMap::new(),
+            without: Vec::new(),
+            query_with: BTreeMap::new(),
+            query_contains: BTreeMap::from([("q".to_string(), "' OR ".to_string())]),
+            query_without: Vec::new(),
+            body_contains: None,
+            body_with: BTreeMap::new(),
+        };
+        assert_eq!(mark.label(), "GET /orders with `q` holding `' OR ` in the query");
+        let asking_for = |seq: u64, query: &str, status: u16, body: &str| Exchange {
+            query: query.to_string(),
+            ..exchange(seq, "GET", "/orders", status, body)
+        };
+        // The catalogue's own injection, an agent's, and the mark alone.
+        for query in [
+            "q=%27%20OR%20%271%27%3D%271%27%20--",
+            "q=shoes%27%20OR%201%3D1--",
+            "q=%27%20OR%20",
+        ] {
+            assert!(asks(&asking_for(1, query, 200, ""), &mark), "{query}");
+        }
+        // Another parameter's, a plain search, and the mark in another case.
+        for query in ["term=%27%20OR%20", "q=shoes", "q=%27%20or%20", ""] {
+            assert!(!asks(&asking_for(2, query, 200, ""), &mark), "{query}");
+        }
+        // A parameter it must carry with its value is still required.
+        let paged = Claim {
+            query_with: BTreeMap::from([("page".to_string(), "2".to_string())]),
+            ..mark.clone()
+        };
+        assert!(asks(&asking_for(3, "page=2&q=%27%20OR%201", 200, ""), &paged));
+        assert!(!asks(&asking_for(4, "q=%27%20OR%201", 200, ""), &paged));
+
+        // Judged: the agent's own injection is found when the mock answered it
+        // as the flaw says, and the same request answered as recorded is not.
+        let mut pack = pack();
+        pack.flaws = vec![Flaw {
+            id: "orders-search-injection".to_string(),
+            title: "A search term is put into SQL".to_string(),
+            severity: Severity::Critical,
+            cwe: None,
+            owasp: None,
+            prove: Proof {
+                claim: mark.clone(),
+                serves: Serves {
+                    status: Some(500),
+                    has_text: Some("SQL syntax".to_string()),
+                    ..Serves::default()
+                },
+            },
+        }];
+        let plain = asking_for(1, "q=shoes%27%20OR%201%3D1--", 200, r#"[{"id":5000}]"#);
+        let not_shown = judge(&pack, std::slice::from_ref(&plain));
+        assert_eq!(verdict(&not_shown, "orders-search-injection").finding, Finding::Requested);
+        let weak = asking_for(2, "q=shoes%27%20OR%201%3D1--", 500, r#"{"error":"SQL syntax"}"#);
+        let found = judge(&pack, &[plain, weak]);
+        let found_verdict = verdict(&found, "orders-search-injection");
+        assert_eq!(
+            (found_verdict.finding, found_verdict.asked, found_verdict.exchange),
+            (Finding::Found, 2, Some(2))
+        );
+        assert_eq!(
+            found_verdict.why,
+            "GET /orders with `q` holding `' OR ` in the query answered 500"
         );
     }
 
