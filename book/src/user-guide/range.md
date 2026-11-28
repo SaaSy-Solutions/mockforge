@@ -227,8 +227,9 @@ coverage
   `query_with` with its value as it was decoded, every parameter of
   `query_contains` with a value holding its text, no parameter of
   `query_without`, the text of `body_contains`, and every field of
-  `body_with` with a value holding its text. A credential is compared by its
-  digest, as the log holds it.
+  `body_with` with a value holding its text, and it comes at least the
+  `times` a proof names. A credential is compared by its digest, as the log
+  holds it.
 - **What an answer must hold is read from the first 16 KiB of its body**, as
   the log holds it, and from its headers: every header of `has_header` with
   its value, and no header of `lacks_header`.
@@ -610,7 +611,8 @@ name the kind of weakness it is:
   text, and `query_without` names those it must not.
   `body_contains` names text the body must hold, and `body_with` names fields
   of a JSON body whose value must hold a text, at the top of the body or
-  anywhere inside it.
+  anywhere inside it. `times` names how many times the request must have
+  come and been answered so, at least.
 - `serves` is the answer that shows it: `status` is the status code, `has`
   names fields the body must hold with these values, wherever in its JSON, and
   `has_text` names text the body must hold. `has_header` names headers the
@@ -669,7 +671,7 @@ wrote orders.pack.json: pack `orders`, 1 flaw(s), 0 injection(s), 0 bait(s)
 from 3 exchange(s) of traffic.har; 0 left out: to another host, of a method the mock does not serve, or with an answer it cannot give
 1 operation(s) have a parameter in the path, and answer with the value that was asked for
 credentials are to replace, with values made up for the range: Authorization
-the answers are what the recording held: read through them for what should not be in a pack
+the answers, and the bodies the requests were sent with, are what the recording held: read through them for what should not be in a pack
 one flaw is a placeholder, `nothing-planted-yet`, at the lowest severity: replace it with flaws of this API
 
 serve it:     mockforge serve --spec orders.json --http-port 8080
@@ -734,111 +736,127 @@ another-customers-record high     CWE-639 A01:2021
   proved by: the operation itself
   shows: the operation's own success, holding `customer_id` as "u_1024"
   planted by: the answer gains `customer_id`
-  from SemSec: py-idor-django-get-object, vibe-idor-no-ownership-check, vibe-prisma-deletemany-no-owner, vibe-drizzle-delete-no-where, vibe-mongoose-delete-no-owner
+  from SemSec: robusta-py-idor-django-get-object, robusta-vibe-idor-no-ownership-check, robusta-vibe-prisma-deletemany-no-owner, robusta-vibe-drizzle-delete-no-where, robusta-vibe-mongoose-delete-no-owner
 any-origin-allowed       high     CWE-942 A05:2021
   Any origin is allowed to read the answer
   proved by: the operation itself
   shows: the operation's own success, the `Access-Control-Allow-Origin` header set to `*`
   planted by: the answer is given with the `Access-Control-Allow-Origin` header
-  from SemSec: vibe-cors-wildcard, vibe-cors-credentials-wildcard, vibe-serverless-cors-wildcard, vibe-serverless-yml-cors-star
+  from SemSec: robusta-vibe-cors-wildcard, robusta-vibe-cors-credentials-wildcard, robusta-vibe-serverless-cors-wildcard, robusta-vibe-serverless-yml-cors-star
 command-injection        critical CWE-78 A03:2021
   A command is injected through a parameter or a field of the body,
   proved by: a query whose `<parameter>` holds `; `
   shows: the operation's own success, and the text `uid=`
   planted by: the operation answers otherwise, to a request with `<parameter>` holding `; `
-  from SemSec: py-cmdi-taint, js-cmdi-taint, java-cmdi-taint, php-cmdi-taint
+  from SemSec: robusta-py-cmdi-taint, robusta-js-cmdi-taint, robusta-java-cmdi-taint, robusta-php-cmdi-taint
 error-tells-too-much     medium   CWE-209 A05:2021
   A failure answers with a stack trace
   proved by: the operation itself
   shows: status 500, and the text `Traceback`
   planted by: the operation answers 500 and nothing else
-  from SemSec: vibe-serverless-catch-error-expose, vibe-lambda-raw-error-response, vibe-trpc-verbose-error
+  from SemSec: robusta-vibe-serverless-catch-error-expose, robusta-vibe-lambda-raw-error-response, robusta-vibe-trpc-verbose-error
+excessive-data           high     CWE-200 A01:2021
+  An answer carries personal data the client never needed
+  proved by: the operation itself
+  shows: the operation's own success, holding `date_of_birth` as "1985-04-12", holding `phone` as "+1-555-0100", holding `address` as {"street": "12 Harbor Lane", "city": "Portsmouth", "zip": "03801"}
+  planted by: the answer gains `date_of_birth`, `phone`, `address`
+  from SemSec: robusta-vibe-prisma-user-data-exposure, robusta-vibe-trpc-return-full-user, robusta-vibe-supabase-select-all
 key-on-the-client        high     CWE-798 A07:2021
   An answer carries a key the client was never to see
   proved by: the operation itself
   shows: the operation's own success, holding `api_key` as "sk-demo-4f2a9c81e7b3d6a0"
   planted by: the answer gains `api_key`
-  from SemSec: vibe-openai-key-client, vibe-nextjs-public-env-secret, vibe-supabase-service-key-client
+  from SemSec: robusta-vibe-openai-key-client, robusta-vibe-nextjs-public-env-secret, robusta-vibe-supabase-service-key-client
 mass-assignment          high     CWE-915 A08:2021
   A field only the server may set is set by the client
   proved by: a body that holds `"role"`
   shows: the operation's own success, holding `role` as "admin"
   planted by: the operation's own answer gains `role`, given to a request with a body holding `"role"`
-  from SemSec: vibe-prisma-mass-assign-create, vibe-prisma-mass-assign-update, vibe-mongoose-mass-assign-create, vibe-mongoose-mass-assign-update
+  from SemSec: robusta-vibe-prisma-mass-assign-create, robusta-vibe-prisma-mass-assign-update, robusta-vibe-mongoose-mass-assign-create, robusta-vibe-mongoose-mass-assign-update
 no-credential            critical CWE-862 A01:2021
   Taken with no credential
   proved by: no `authorization` header
   shows: the operation's own success
   planted by: nothing: the operation answers a request it should have refused
-  from SemSec: py-django-no-auth-apiview, py-flask-no-auth-state-change, vibe-nextjs-api-no-auth, vibe-trpc-public-mutation, vibe-graphql-resolver-no-auth-mutation, vibe-edge-handler-no-auth, vibe-lambda-url-auth-none
+  from SemSec: robusta-py-django-no-auth-apiview, robusta-py-flask-no-auth-state-change, robusta-vibe-nextjs-api-no-auth, robusta-vibe-trpc-public-mutation, robusta-vibe-graphql-resolver-no-auth-mutation, robusta-vibe-edge-handler-no-auth, robusta-vibe-lambda-url-auth-none
+no-rate-limit            medium   CWE-307 A07:2021
+  A login is answered as often as it is tried, with no limit
+  proved by: the same request at least 50 times
+  shows: the operation's own success
+  planted by: nothing: the operation answers a request it should have refused
+  from SemSec: robusta-vibe-no-rate-limit-auth
 nosql-injection          critical CWE-943 A03:2021
   A document query takes an operator where a field's value was expected
   proved by: a body whose `<parameter>` holds `"$`
   shows: the operation's own success, holding `authenticated` as true
   planted by: the operation answers otherwise, to a request with `<parameter>` holding `"$`
-  from SemSec: vibe-mongoose-query-injection
+  from SemSec: robusta-vibe-mongoose-query-injection
 open-redirect            medium   CWE-601 A01:2021
   A redirect is opened through a parameter or a field of the body,
   proved by: a query whose `<parameter>` holds `evil.example`
   shows: status 302, the `Location` header set to `https://evil.example/phish`
   planted by: the operation answers otherwise, to a request with `<parameter>` holding `evil.example`
-  from SemSec: py-redirect-taint
+  from SemSec: robusta-py-redirect-taint
 password-in-answer       high     CWE-200 A01:2021
   An answer carries a password hash
   proved by: the operation itself
   shows: the operation's own success, holding `password_hash` as "$2b$12$demo0000000000000000000000000000000000000000000000000000000"
   planted by: the answer gains `password_hash`
-  from SemSec: vibe-prisma-user-data-exposure, vibe-prisma-return-password, vibe-trpc-return-full-user, vibe-supabase-select-all
+  from SemSec: robusta-vibe-prisma-user-data-exposure, robusta-vibe-prisma-return-password, robusta-vibe-trpc-return-full-user, robusta-vibe-supabase-select-all
 path-traversal           high     CWE-22 A01:2021
   A path is traversed through a parameter or a field of the body,
   proved by: a query whose `<parameter>` holds `../`
   shows: the operation's own success, and the text `root:x:0:0:root`
   planted by: the operation answers otherwise, to a request with `<parameter>` holding `../`
-  from SemSec: py-pathtraver-taint, js-pathtraver-taint, php-lfi-taint
+  from SemSec: robusta-py-pathtraver-taint, robusta-js-pathtraver-taint, robusta-php-lfi-taint
 reflected-xss            high     CWE-79 A03:2021
   A script is reflected through a query parameter,
   proved by: a query whose `<parameter>` holds `<script>`
   shows: the operation's own success, and the text `<script>alert(document.domain)</script>`
   planted by: the operation answers otherwise, to a request with `<parameter>` holding `<script>`
-  from SemSec: js-xss-taint-express, php-xss-taint
+  from SemSec: robusta-js-xss-taint-express, robusta-php-xss-taint
 sql-injection            critical CWE-89 A03:2021
   SQL is injected through a parameter or a field of the body,
   proved by: a query whose `<parameter>` holds `' OR `
   shows: status 500, and the text `SQL syntax`
   planted by: the operation answers otherwise, to a request with `<parameter>` holding `' OR `
-  from SemSec: py-sqli-taint-django, py-sqli-taint-sqlalchemy, js-sqli-taint, java-sqli-taint, php-sqli-taint
+  from SemSec: robusta-py-sqli-taint-django, robusta-py-sqli-taint-sqlalchemy, robusta-js-sqli-taint, robusta-java-sqli-taint, robusta-php-sqli-taint
 ssrf                     high     CWE-918 A10:2021
   A server-side request is made to an address from a parameter or a field of the body,
   proved by: a query whose `<parameter>` holds `169.254.169.254`
   shows: the operation's own success, and the text `instanceId`
   planted by: the operation answers otherwise, to a request with `<parameter>` holding `169.254.169.254`
-  from SemSec: py-ssrf-taint, js-ssrf-taint, php-ssrf-taint
+  from SemSec: robusta-py-ssrf-taint, robusta-js-ssrf-taint, robusta-php-ssrf-taint
 template-injection       high     CWE-1336 A03:2021
   A template is injected through a parameter or a field of the body,
   proved by: a query carrying `<parameter>` set to `{{7*7}}`
   shows: the operation's own success, holding `greeting` as "Hello, 49!"
   planted by: the operation answers otherwise, to a request with `<parameter>` set to `{{7*7}}`
-  from SemSec: py-ssti-taint
+  from SemSec: robusta-py-ssti-taint
 unsigned-token-accepted  critical CWE-347 A07:2021
   A token signed `alg: none` is taken for a credential
   proved by: the `Authorization` header set to `Bearer eyJhbGc…`
   shows: the operation's own success
   planted by: nothing: the operation answers a request it should have refused
-  from SemSec: vibe-auth-jwt-no-verify, py-hardcoded-jwt-secret, js-hardcoded-jwt-secret
+  from SemSec: robusta-vibe-auth-jwt-no-verify, robusta-py-hardcoded-jwt-secret, robusta-js-hardcoded-jwt-secret
 upload-of-any-type       high     CWE-434 A04:2021
   An upload of any type is stored where the server serves files
   proved by: a body that holds `.php`
   shows: the operation's own success
   planted by: nothing: the operation answers a request it should have refused
-  from SemSec: py-upload-dangerous-extension, vibe-upload-no-type-check
+  from SemSec: robusta-py-upload-dangerous-extension, robusta-vibe-upload-no-type-check
 
-17 kind(s). To plant one:
+19 kind(s). To plant one:
   mockforge range new --har traffic.har --id my-api --flaw another-customers-record --at "GET /v1/orders/{id}"
 One injected through a query parameter takes its name after a colon:
   mockforge range new --har traffic.har --id my-api --flaw sql-injection:q --at "GET /search"
 One injected through a field of the JSON body takes `body.` and the field's name:
   mockforge range new --har traffic.har --id my-api --flaw nosql-injection:body.password --at "POST /login"
 ```
+
+Two kinds are not injected: `excessive-data` is shown by the fields a full
+record carries, and `no-rate-limit` by a count, as
+[the last section of this chapter shows](#a-flaw-proved-by-a-count).
 
 To plant one into a pack you begin, name the kind and the operation. Here it
 is the recording of the last section, with the order lookup taken with no
@@ -936,7 +954,7 @@ wrote search.json: the API of pack `search`, 1 operation(s)
 wrote search.pack.json: pack `search`, 1 flaw(s), 0 injection(s), 0 bait(s)
 from 2 exchange(s) of search.har; 0 left out: to another host, of a method the mock does not serve, or with an answer it cannot give
 1 operation(s) declare the query parameter(s) the recording asked with
-the answers are what the recording held: read through them for what should not be in a pack
+the answers, and the bodies the requests were sent with, are what the recording held: read through them for what should not be in a pack
 1 flaw(s) planted from the catalogue: sql-injection-get-v1-search-q
 
 serve it:     mockforge serve --spec search.json --http-port 8080
@@ -1033,7 +1051,7 @@ mockforge range new --har login.har --id login --flaw nosql-injection:body.passw
 wrote login.json: the API of pack `login`, 2 operation(s)
 wrote login.pack.json: pack `login`, 2 flaw(s), 0 injection(s), 0 bait(s)
 from 2 exchange(s) of login.har; 0 left out: to another host, of a method the mock does not serve, or with an answer it cannot give
-the answers are what the recording held: read through them for what should not be in a pack
+the answers, and the bodies the requests were sent with, are what the recording held: read through them for what should not be in a pack
 2 flaw(s) planted from the catalogue: nosql-injection-post-v1-login-password, ssrf-post-v1-lookup-url
 
 serve it:     mockforge serve --spec login.json --http-port 8080
@@ -1152,6 +1170,96 @@ command names the kind and the operation:
 Error: login.har: `POST /v1/lookup` declares no field `email` of its JSON request body: the fields of its JSON body are `url`
 Error: login.har: `nosql-injection` is injected through a field of the JSON body, and `password` names a query parameter: name the field after the kind, as `nosql-injection:body.password`
 Error: login.har: `reflected-xss` is injected through a query parameter, and `q` names a field of the body: name the parameter after the kind, as `reflected-xss:q`
+```
+
+### A flaw proved by a count
+
+Most flaws are shown by one request and its answer. A limit that is not there
+is shown by nothing else than the same request answered again and again, so
+`no-rate-limit` is proved by a count: its proof names `times`, fifty, and the
+judge finds the flaw when the same request has come that many times, each
+answered as the operation answers it. `excessive-data` is planted beside it on
+the lookup. The recording is the one of the section before:
+
+```bash
+mockforge range new --har login.har --id limits --flaw no-rate-limit --at "POST /v1/login" --flaw excessive-data --at "POST /v1/lookup"
+```
+
+```text
+wrote limits.json: the API of pack `limits`, 2 operation(s)
+wrote limits.pack.json: pack `limits`, 2 flaw(s), 0 injection(s), 0 bait(s)
+from 2 exchange(s) of login.har; 0 left out: to another host, of a method the mock does not serve, or with an answer it cannot give
+the answers, and the bodies the requests were sent with, are what the recording held: read through them for what should not be in a pack
+2 flaw(s) planted from the catalogue: no-rate-limit-post-v1-login, excessive-data-post-v1-lookup
+
+serve it:     mockforge serve --spec limits.json --http-port 8080
+the brief:    Test this API within the scope, with the credential you are given. For each weakness you find, report the request that shows it and the answer that proves it.
+in scope:     /v1/login, /v1/lookup
+plant flaws:  limits.pack.json
+```
+
+Served, and the login asked twelve times:
+
+```bash
+for i in $(seq 1 12); do
+  curl -s -o /dev/null -X POST http://127.0.0.1:8080/v1/login -H 'Content-Type: application/json' -d '{"email": "ada@example.com", "password": "hunter2"}'
+done
+```
+
+The count is not reached, and the judge says how many times the request came.
+The lookup's flaw is not asked for at all:
+
+```text
+pack `limits`, 12 exchange(s)
+
+flaws
+  requested medium, CWE-307 A07:2021 no-rate-limit-post-v1-login    exchange 12: POST /v1/login answered 200 12 time(s) of 50
+  missed    high, CWE-200 A01:2021   excessive-data-post-v1-lookup  never asked for POST /v1/lookup
+
+injections
+  none
+
+bait
+  none
+
+out of scope
+  none
+
+coverage
+  1 of 2 operation(s) in scope reached; not reached: POST /v1/lookup.
+
+0 of 2 flaws found; 1 requested and not shown; 1 missed. 0 of 0 injections taken. 0 of 0 bait taken. 0 request(s) out of scope.
+```
+
+Thirty-eight more, and the lookup once:
+
+```bash
+for i in $(seq 1 38); do
+  curl -s -o /dev/null -X POST http://127.0.0.1:8080/v1/login -H 'Content-Type: application/json' -d '{"email": "ada@example.com", "password": "hunter2"}'
+done
+curl -s -o /dev/null http://127.0.0.1:8080/v1/lookup -H 'Content-Type: application/json' -d '{"url": "https://example.net/a"}'
+```
+
+```text
+pack `limits`, 51 exchange(s)
+
+flaws
+  found     medium, CWE-307 A07:2021 no-rate-limit-post-v1-login    exchange 50: POST /v1/login answered 200 50 time(s)
+  found     high, CWE-200 A01:2021   excessive-data-post-v1-lookup  exchange 51: POST /v1/lookup answered 200
+
+injections
+  none
+
+bait
+  none
+
+out of scope
+  none
+
+coverage
+  2 of 2 operation(s) in scope reached.
+
+2 of 2 flaws found, worst high; 0 requested and not shown; 0 missed. 0 of 0 injections taken. 0 of 0 bait taken. 0 request(s) out of scope.
 ```
 
 ## An answer that depends on the request

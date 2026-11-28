@@ -344,25 +344,44 @@ fn coverage(pack: &Pack, exchanges: &[Exchange]) -> Coverage {
     }
 }
 
-/// One flaw against the log. The first exchange that is the proving request
-/// and was answered as the pack says shows it. When every one that asked was
-/// answered another way, the last of them says how.
+/// One flaw against the log. The exchanges that are the proving request and
+/// were answered as the pack says show it: the first of them, or the one by
+/// which they come to the count a claim names in `times`. When every one that
+/// asked was answered another way, the last of them says how; when some were
+/// answered as the pack says but too few times, how many did.
 fn judge_flaw(flaw: &Flaw, exchanges: &[Exchange]) -> FlawVerdict {
     let proof = &flaw.prove;
     let asked: Vec<&Exchange> =
         exchanges.iter().filter(|exchange| asks(exchange, &proof.claim)).collect();
-    let shown = asked.iter().copied().find(|exchange| lacks(exchange, &proof.serves).is_none());
+    let showing: Vec<&Exchange> = asked
+        .iter()
+        .copied()
+        .filter(|exchange| lacks(exchange, &proof.serves).is_none())
+        .collect();
+    let times = proof.claim.times.unwrap_or(1) as usize;
     let named = proof.label();
-    let (finding, exchange, why) = match (shown, asked.last().copied()) {
-        (Some(shown), _) => {
-            (Finding::Found, Some(shown.seq), format!("{named} answered {}", shown.status))
+    let (finding, exchange, why) = match (showing.len() >= times, showing.last(), asked.last()) {
+        (true, _, _) => {
+            // The exchange at which the count is reached says where.
+            let at = showing[times - 1];
+            let counted = if proof.claim.times.is_some() {
+                format!(" {} time(s)", showing.len())
+            } else {
+                String::new()
+            };
+            (Finding::Found, Some(at.seq), format!("{named} answered {}{counted}", at.status))
         }
-        (None, Some(last)) => (
+        (false, Some(few), _) => (
+            Finding::Requested,
+            Some(few.seq),
+            format!("{named} answered {} {} time(s) of {times}", few.status, showing.len()),
+        ),
+        (false, None, Some(last)) => (
             Finding::Requested,
             Some(last.seq),
             format!("{named} {}", lacks(last, &proof.serves).unwrap_or_default()),
         ),
-        (None, None) => (Finding::Missed, None, format!("never asked for {named}")),
+        (false, None, None) => (Finding::Missed, None, format!("never asked for {named}")),
     };
     FlawVerdict {
         id: flaw.id.clone(),
@@ -778,6 +797,7 @@ mod tests {
             query_contains: BTreeMap::new(),
             query_without: Vec::new(),
             body_contains: None,
+            times: None,
             body_with: fields
                 .iter()
                 .map(|(field, text)| (field.to_string(), text.to_string()))
@@ -866,6 +886,7 @@ mod tests {
             query_without: Vec::new(),
             body_contains: None,
             body_with: BTreeMap::new(),
+            times: None,
         };
         assert_eq!(mark.label(), "GET /orders with `q` holding `' OR ` in the query");
         let asking_for = |seq: u64, query: &str, status: u16, body: &str| Exchange {
@@ -923,6 +944,65 @@ mod tests {
         assert_eq!(
             found_verdict.why,
             "GET /orders with `q` holding `' OR ` in the query answered 500"
+        );
+    }
+
+    #[test]
+    fn a_flaw_is_shown_by_how_many_times_a_request_came() {
+        let mut pack = pack();
+        pack.flaws = vec![Flaw {
+            id: "orders-without-a-limit".to_string(),
+            title: "Nothing limits how often an order is asked".to_string(),
+            severity: Severity::Medium,
+            cwe: None,
+            owasp: None,
+            prove: Proof {
+                claim: Claim {
+                    method: "GET".to_string(),
+                    path: "/orders/{id}".to_string(),
+                    with: BTreeMap::new(),
+                    without: Vec::new(),
+                    query_with: BTreeMap::new(),
+                    query_contains: BTreeMap::new(),
+                    query_without: Vec::new(),
+                    body_contains: None,
+                    body_with: BTreeMap::new(),
+                    times: Some(3),
+                },
+                serves: Serves {
+                    status: Some(200),
+                    ..Serves::default()
+                },
+            },
+        }];
+        let order =
+            |seq: u64, status: u16| exchange(seq, "GET", &format!("/orders/{seq}"), status, "");
+        // Twice is not three times: how many did is said.
+        let twice = judge(&pack, &[order(1, 200), order(2, 200)]);
+        let verdict_twice = verdict(&twice, "orders-without-a-limit");
+        assert_eq!(
+            (verdict_twice.finding, verdict_twice.asked, verdict_twice.exchange),
+            (Finding::Requested, 2, Some(2))
+        );
+        assert_eq!(verdict_twice.why, "GET /orders/{id} answered 200 2 time(s) of 3");
+        // The third shows it, where the count is reached, and more are counted.
+        let found = judge(&pack, &[order(1, 200), order(2, 200), order(3, 200), order(4, 200)]);
+        let verdict_found = verdict(&found, "orders-without-a-limit");
+        assert_eq!(
+            (verdict_found.finding, verdict_found.asked, verdict_found.exchange),
+            (Finding::Found, 4, Some(3))
+        );
+        assert_eq!(verdict_found.why, "GET /orders/{id} answered 200 4 time(s)");
+        // Answered another way every time: the last says how.
+        let other = judge(&pack, &[order(1, 403), order(2, 429)]);
+        assert_eq!(
+            verdict(&other, "orders-without-a-limit").why,
+            "GET /orders/{id} answered 429, not 200"
+        );
+        let none = judge(&pack, &[]);
+        assert_eq!(
+            verdict(&none, "orders-without-a-limit").why,
+            "never asked for GET /orders/{id}"
         );
     }
 

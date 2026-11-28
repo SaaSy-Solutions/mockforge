@@ -157,6 +157,9 @@ fn flaws_text() -> String {
         if let Some(held) = kind.prove.body_contains {
             proved.push(format!("a body that holds `{held}`"));
         }
+        if let Some(times) = kind.prove.times {
+            proved.push(format!("the same request at least {times} times"));
+        }
         if proved.is_empty() {
             proved.push("the operation itself".to_string());
         }
@@ -1104,7 +1107,7 @@ fn new(args: NewArgs) -> Result<i32, String> {
     }
     if matches!(source, Source::Recording(_)) {
         println!(
-            "the answers are what the recording held: read through them for what should not be in a pack"
+            "the answers, and the bodies the requests were sent with, are what the recording held: read through them for what should not be in a pack"
         );
     }
     if planted.is_empty() {

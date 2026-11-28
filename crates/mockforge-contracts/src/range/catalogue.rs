@@ -108,6 +108,9 @@ pub struct Prove {
     /// Fields of the JSON request body whose value holds these texts, as the
     /// answer's `serves.has` looks for a field.
     pub body_with: &'static [(&'static str, &'static str)],
+    /// How many times the request must reach the mock and be answered as the
+    /// kind says, at least. `None` is once.
+    pub times: Option<u32>,
 }
 
 /// What the answer of a kind holds.
@@ -577,6 +580,9 @@ impl FlawKind {
         if !body.is_empty() {
             prove["body_with"] = Value::Object(body);
         }
+        if let Some(times) = self.prove.times {
+            prove["times"] = json!(times);
+        }
         let mut serves = json!({});
         if let Some(status) = shows.status {
             serves["status"] = json!(status);
@@ -652,6 +658,7 @@ pub const KINDS: &[FlawKind] = &[
             query_without: &[],
             query_contains: &[],
             body_with: &[],
+            times: None,
         },
         shows: Shows {
             status: None,
@@ -665,11 +672,11 @@ pub const KINDS: &[FlawKind] = &[
         },
         through: Through::Nothing,
         from: &[
-            "py-idor-django-get-object",
-            "vibe-idor-no-ownership-check",
-            "vibe-prisma-deletemany-no-owner",
-            "vibe-drizzle-delete-no-where",
-            "vibe-mongoose-delete-no-owner",
+            "robusta-py-idor-django-get-object",
+            "robusta-vibe-idor-no-ownership-check",
+            "robusta-vibe-prisma-deletemany-no-owner",
+            "robusta-vibe-drizzle-delete-no-where",
+            "robusta-vibe-mongoose-delete-no-owner",
         ],
     },
     FlawKind {
@@ -686,6 +693,7 @@ pub const KINDS: &[FlawKind] = &[
             query_without: &[],
             query_contains: &[],
             body_with: &[],
+            times: None,
         },
         shows: Shows {
             status: None,
@@ -699,10 +707,10 @@ pub const KINDS: &[FlawKind] = &[
         },
         through: Through::Nothing,
         from: &[
-            "vibe-cors-wildcard",
-            "vibe-cors-credentials-wildcard",
-            "vibe-serverless-cors-wildcard",
-            "vibe-serverless-yml-cors-star",
+            "robusta-vibe-cors-wildcard",
+            "robusta-vibe-cors-credentials-wildcard",
+            "robusta-vibe-serverless-cors-wildcard",
+            "robusta-vibe-serverless-yml-cors-star",
         ],
     },
     FlawKind {
@@ -719,6 +727,7 @@ pub const KINDS: &[FlawKind] = &[
             query_without: &[],
             query_contains: &[(PARAMETER, "; ")],
             body_with: &[],
+            times: None,
         },
         shows: Shows {
             status: None,
@@ -733,10 +742,10 @@ pub const KINDS: &[FlawKind] = &[
         },
         through: Through::QueryParameterOrBodyField,
         from: &[
-            "py-cmdi-taint",
-            "js-cmdi-taint",
-            "java-cmdi-taint",
-            "php-cmdi-taint",
+            "robusta-py-cmdi-taint",
+            "robusta-js-cmdi-taint",
+            "robusta-java-cmdi-taint",
+            "robusta-php-cmdi-taint",
         ],
     },
     FlawKind {
@@ -753,6 +762,7 @@ pub const KINDS: &[FlawKind] = &[
             query_without: &[],
             query_contains: &[],
             body_with: &[],
+            times: None,
         },
         shows: Shows {
             status: Some(500),
@@ -767,9 +777,59 @@ pub const KINDS: &[FlawKind] = &[
         },
         through: Through::Nothing,
         from: &[
-            "vibe-serverless-catch-error-expose",
-            "vibe-lambda-raw-error-response",
-            "vibe-trpc-verbose-error",
+            "robusta-vibe-serverless-catch-error-expose",
+            "robusta-vibe-lambda-raw-error-response",
+            "robusta-vibe-trpc-verbose-error",
+        ],
+    },
+    FlawKind {
+        id: "excessive-data",
+        title: "An answer carries personal data the client never needed",
+        severity: Severity::High,
+        cwe: "CWE-200",
+        owasp: "A01:2021",
+        prove: Prove {
+            with: &[],
+            without: &[],
+            body_contains: None,
+            query_with: &[],
+            query_without: &[],
+            query_contains: &[],
+            body_with: &[],
+            times: None,
+        },
+        shows: Shows {
+            status: None,
+            has: &[
+                ("date_of_birth", r#""1985-04-12""#),
+                ("phone", r#""+1-555-0100""#),
+                (
+                    "address",
+                    r#"{"street": "12 Harbor Lane", "city": "Portsmouth", "zip": "03801"}"#,
+                ),
+            ],
+            has_text: None,
+            has_header: &[],
+            lacks_header: &[],
+        },
+        // What a full record holds: the profile answers a date of birth, a
+        // phone number and an address that the client that asked for a name
+        // never needed.
+        plant: Plant::Fields {
+            fields: &[
+                ("date_of_birth", r#""1985-04-12""#),
+                ("phone", r#""+1-555-0100""#),
+                (
+                    "address",
+                    r#"{"street": "12 Harbor Lane", "city": "Portsmouth", "zip": "03801"}"#,
+                ),
+            ],
+        },
+        through: Through::Nothing,
+        from: &[
+            "robusta-vibe-prisma-user-data-exposure",
+            "robusta-vibe-trpc-return-full-user",
+            "robusta-vibe-supabase-select-all",
         ],
     },
     FlawKind {
@@ -786,6 +846,7 @@ pub const KINDS: &[FlawKind] = &[
             query_without: &[],
             query_contains: &[],
             body_with: &[],
+            times: None,
         },
         shows: Shows {
             status: None,
@@ -799,9 +860,9 @@ pub const KINDS: &[FlawKind] = &[
         },
         through: Through::Nothing,
         from: &[
-            "vibe-openai-key-client",
-            "vibe-nextjs-public-env-secret",
-            "vibe-supabase-service-key-client",
+            "robusta-vibe-openai-key-client",
+            "robusta-vibe-nextjs-public-env-secret",
+            "robusta-vibe-supabase-service-key-client",
         ],
     },
     FlawKind {
@@ -819,6 +880,7 @@ pub const KINDS: &[FlawKind] = &[
             query_without: &[],
             query_contains: &[],
             body_with: &[],
+            times: None,
         },
         shows: Shows {
             status: None,
@@ -836,10 +898,10 @@ pub const KINDS: &[FlawKind] = &[
         },
         through: Through::Nothing,
         from: &[
-            "vibe-prisma-mass-assign-create",
-            "vibe-prisma-mass-assign-update",
-            "vibe-mongoose-mass-assign-create",
-            "vibe-mongoose-mass-assign-update",
+            "robusta-vibe-prisma-mass-assign-create",
+            "robusta-vibe-prisma-mass-assign-update",
+            "robusta-vibe-mongoose-mass-assign-create",
+            "robusta-vibe-mongoose-mass-assign-update",
         ],
     },
     FlawKind {
@@ -856,6 +918,7 @@ pub const KINDS: &[FlawKind] = &[
             query_without: &[],
             query_contains: &[],
             body_with: &[],
+            times: None,
         },
         shows: Shows {
             status: None,
@@ -867,14 +930,43 @@ pub const KINDS: &[FlawKind] = &[
         plant: Plant::AsRecorded,
         through: Through::Nothing,
         from: &[
-            "py-django-no-auth-apiview",
-            "py-flask-no-auth-state-change",
-            "vibe-nextjs-api-no-auth",
-            "vibe-trpc-public-mutation",
-            "vibe-graphql-resolver-no-auth-mutation",
-            "vibe-edge-handler-no-auth",
-            "vibe-lambda-url-auth-none",
+            "robusta-py-django-no-auth-apiview",
+            "robusta-py-flask-no-auth-state-change",
+            "robusta-vibe-nextjs-api-no-auth",
+            "robusta-vibe-trpc-public-mutation",
+            "robusta-vibe-graphql-resolver-no-auth-mutation",
+            "robusta-vibe-edge-handler-no-auth",
+            "robusta-vibe-lambda-url-auth-none",
         ],
+    },
+    FlawKind {
+        id: "no-rate-limit",
+        title: "A login is answered as often as it is tried, with no limit",
+        severity: Severity::Medium,
+        cwe: "CWE-307",
+        owasp: "A07:2021",
+        prove: Prove {
+            with: &[],
+            without: &[],
+            body_contains: None,
+            query_with: &[],
+            query_without: &[],
+            query_contains: &[],
+            body_with: &[],
+            times: Some(50),
+        },
+        shows: Shows {
+            status: None,
+            has: &[],
+            has_text: None,
+            has_header: &[],
+            lacks_header: &[],
+        },
+        // The login answers as recorded, as many times as it is tried: no
+        // limit is planted, since the mock has none to begin with.
+        plant: Plant::AsRecorded,
+        through: Through::Nothing,
+        from: &["robusta-vibe-no-rate-limit-auth"],
     },
     FlawKind {
         id: "nosql-injection",
@@ -892,6 +984,7 @@ pub const KINDS: &[FlawKind] = &[
             // The start of an operator's name in the JSON of the field's value:
             // `$gt`, `$ne`, `$regex` or another. A string never reads so.
             body_with: &[(PARAMETER, "\"$")],
+            times: None,
         },
         shows: Shows {
             status: None,
@@ -905,7 +998,7 @@ pub const KINDS: &[FlawKind] = &[
             then_: r#"{ "body": { "authenticated": true, "user": { "id": "u_1024", "email": "ada@example.com", "role": "customer" } } }"#,
         },
         through: Through::BodyField,
-        from: &["vibe-mongoose-query-injection"],
+        from: &["robusta-vibe-mongoose-query-injection"],
     },
     FlawKind {
         id: "open-redirect",
@@ -921,6 +1014,7 @@ pub const KINDS: &[FlawKind] = &[
             query_without: &[],
             query_contains: &[(PARAMETER, "evil.example")],
             body_with: &[],
+            times: None,
         },
         shows: Shows {
             status: Some(302),
@@ -934,7 +1028,7 @@ pub const KINDS: &[FlawKind] = &[
             then_: r#"{ "status": 302, "headers": { "Location": "https://evil.example/phish" }, "body": {} }"#,
         },
         through: Through::QueryParameterOrBodyField,
-        from: &["py-redirect-taint"],
+        from: &["robusta-py-redirect-taint"],
     },
     FlawKind {
         id: "password-in-answer",
@@ -950,6 +1044,7 @@ pub const KINDS: &[FlawKind] = &[
             query_without: &[],
             query_contains: &[],
             body_with: &[],
+            times: None,
         },
         shows: Shows {
             status: None,
@@ -969,10 +1064,10 @@ pub const KINDS: &[FlawKind] = &[
         },
         through: Through::Nothing,
         from: &[
-            "vibe-prisma-user-data-exposure",
-            "vibe-prisma-return-password",
-            "vibe-trpc-return-full-user",
-            "vibe-supabase-select-all",
+            "robusta-vibe-prisma-user-data-exposure",
+            "robusta-vibe-prisma-return-password",
+            "robusta-vibe-trpc-return-full-user",
+            "robusta-vibe-supabase-select-all",
         ],
     },
     FlawKind {
@@ -989,6 +1084,7 @@ pub const KINDS: &[FlawKind] = &[
             query_without: &[],
             query_contains: &[(PARAMETER, "../")],
             body_with: &[],
+            times: None,
         },
         shows: Shows {
             status: None,
@@ -1003,9 +1099,9 @@ pub const KINDS: &[FlawKind] = &[
         },
         through: Through::QueryParameterOrBodyField,
         from: &[
-            "py-pathtraver-taint",
-            "js-pathtraver-taint",
-            "php-lfi-taint",
+            "robusta-py-pathtraver-taint",
+            "robusta-js-pathtraver-taint",
+            "robusta-php-lfi-taint",
         ],
     },
     FlawKind {
@@ -1022,6 +1118,7 @@ pub const KINDS: &[FlawKind] = &[
             query_without: &[],
             query_contains: &[(PARAMETER, "<script>")],
             body_with: &[],
+            times: None,
         },
         shows: Shows {
             status: None,
@@ -1035,7 +1132,7 @@ pub const KINDS: &[FlawKind] = &[
             then_: r#"{ "body": { "results": [], "search": "{{request.query.<parameter>}}", "message": "Nothing matched. Did you mean shoes?" } }"#,
         },
         through: Through::QueryParameter,
-        from: &["js-xss-taint-express", "php-xss-taint"],
+        from: &["robusta-js-xss-taint-express", "robusta-php-xss-taint"],
     },
     FlawKind {
         id: "sql-injection",
@@ -1051,6 +1148,7 @@ pub const KINDS: &[FlawKind] = &[
             query_without: &[],
             query_contains: &[(PARAMETER, "' OR ")],
             body_with: &[],
+            times: None,
         },
         shows: Shows {
             status: Some(500),
@@ -1065,11 +1163,11 @@ pub const KINDS: &[FlawKind] = &[
         },
         through: Through::QueryParameterOrBodyField,
         from: &[
-            "py-sqli-taint-django",
-            "py-sqli-taint-sqlalchemy",
-            "js-sqli-taint",
-            "java-sqli-taint",
-            "php-sqli-taint",
+            "robusta-py-sqli-taint-django",
+            "robusta-py-sqli-taint-sqlalchemy",
+            "robusta-js-sqli-taint",
+            "robusta-java-sqli-taint",
+            "robusta-php-sqli-taint",
         ],
     },
     FlawKind {
@@ -1087,6 +1185,7 @@ pub const KINDS: &[FlawKind] = &[
             query_without: &[],
             query_contains: &[(PARAMETER, "169.254.169.254")],
             body_with: &[],
+            times: None,
         },
         shows: Shows {
             status: None,
@@ -1100,7 +1199,11 @@ pub const KINDS: &[FlawKind] = &[
             then_: r#"{ "body": { "url": "{{request.query.<parameter>}}", "status_code": 200, "content_type": "text/plain", "body": "{\n  \"accountId\": \"123456789012\",\n  \"instanceId\": \"i-0c9f8e7d6c5b4a39f\",\n  \"instanceType\": \"t3.medium\",\n  \"region\": \"eu-central-1\",\n  \"privateIp\": \"10.0.14.37\"\n}" } }"#,
         },
         through: Through::QueryParameterOrBodyField,
-        from: &["py-ssrf-taint", "js-ssrf-taint", "php-ssrf-taint"],
+        from: &[
+            "robusta-py-ssrf-taint",
+            "robusta-js-ssrf-taint",
+            "robusta-php-ssrf-taint",
+        ],
     },
     FlawKind {
         id: "template-injection",
@@ -1116,6 +1219,7 @@ pub const KINDS: &[FlawKind] = &[
             query_without: &[],
             query_contains: &[],
             body_with: &[],
+            times: None,
         },
         shows: Shows {
             status: None,
@@ -1129,7 +1233,7 @@ pub const KINDS: &[FlawKind] = &[
             then_: r#"{ "body": { "greeting": "Hello, 49!", "asked": "{{request.query.<parameter>}}" } }"#,
         },
         through: Through::QueryParameterOrBodyField,
-        from: &["py-ssti-taint"],
+        from: &["robusta-py-ssti-taint"],
     },
     FlawKind {
         id: "unsigned-token-accepted",
@@ -1145,6 +1249,7 @@ pub const KINDS: &[FlawKind] = &[
             query_without: &[],
             query_contains: &[],
             body_with: &[],
+            times: None,
         },
         shows: Shows {
             status: None,
@@ -1156,9 +1261,9 @@ pub const KINDS: &[FlawKind] = &[
         plant: Plant::AsRecorded,
         through: Through::Nothing,
         from: &[
-            "vibe-auth-jwt-no-verify",
-            "py-hardcoded-jwt-secret",
-            "js-hardcoded-jwt-secret",
+            "robusta-vibe-auth-jwt-no-verify",
+            "robusta-py-hardcoded-jwt-secret",
+            "robusta-js-hardcoded-jwt-secret",
         ],
     },
     FlawKind {
@@ -1175,6 +1280,7 @@ pub const KINDS: &[FlawKind] = &[
             query_without: &[],
             query_contains: &[],
             body_with: &[],
+            times: None,
         },
         shows: Shows {
             status: None,
@@ -1185,7 +1291,10 @@ pub const KINDS: &[FlawKind] = &[
         },
         plant: Plant::AsRecorded,
         through: Through::Nothing,
-        from: &["py-upload-dangerous-extension", "vibe-upload-no-type-check"],
+        from: &[
+            "robusta-py-upload-dangerous-extension",
+            "robusta-vibe-upload-no-type-check",
+        ],
     },
 ];
 
@@ -1398,6 +1507,7 @@ mod tests {
             for name in kind.prove.without {
                 assert!(flaw.prove.claim.without.contains(&name.to_string()), "{}", kind.id);
             }
+            assert_eq!(flaw.prove.claim.times, kind.prove.times, "{}", kind.id);
             // A pack reads the names of headers without regard to case.
             for (name, value) in kind.prove.with {
                 assert_eq!(

@@ -158,6 +158,11 @@ pub struct Claim {
     /// is read as JSON writes it, so `{"$ne": null}` holds `$ne`.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub body_with: BTreeMap<String, String>,
+    /// How many times the request must reach the mock and be answered as
+    /// `serves` says, at least: a limit that is not there is shown by the same
+    /// request answered again and again. `None` is once.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub times: Option<u32>,
 }
 
 impl Claim {
@@ -600,6 +605,12 @@ impl Pack {
             .any(|word| word.is_empty())
         {
             return Some("it names an empty field or text of the body".to_string());
+        }
+        if proof.claim.times.is_some_and(|times| times < 2) {
+            return Some(
+                "its `times` is below 2: once is what a proof asks for when it names none"
+                    .to_string(),
+            );
         }
         if proof
             .serves
@@ -1118,6 +1129,10 @@ mod tests {
             (
                 flaw("api-key-in-profile", |f| f["prove"]["query_contains"] = json!({ "status": "" })),
                 "flaw `api-key-in-profile`: it names an empty query parameter",
+            ),
+            (
+                flaw("api-key-in-profile", |f| f["prove"]["times"] = json!(1)),
+                "flaw `api-key-in-profile`: its `times` is below 2: once is what a proof asks for when it names none",
             ),
             (
                 edited("shop", |d| d["injections"][0]["obeyed"]["path"] = json!("/nope")),
