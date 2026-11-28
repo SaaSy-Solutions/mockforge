@@ -683,3 +683,117 @@ async fn test_redact_everything_when_nothing_can_be_scrubbed_selectively() {
     assert_eq!(response.status_code, 200);
     assert!(recorded.contains("authorization"), "header names are kept");
 }
+
+/// A key of a known shape is scrubbed wherever the request holds it, and a
+/// made-up key of the same shape takes its place
+#[tokio::test]
+async fn test_a_key_of_a_known_shape_never_reaches_the_recording() {
+    let db = RecorderDatabase::new_in_memory().await.unwrap();
+    let scrubber = Scrubber::new(ScrubConfig {
+        rules: vec![ScrubRule::Key],
+        deterministic: false,
+        counter_seed: 0,
+    })
+    .unwrap();
+    let recorder = Recorder::with_scrubbing(db, scrubber, CaptureFilter::default());
+
+    let stripe = "sk_live_4f2a9c81e7b3d6a04f2a9c81";
+    let github = "ghp_0123456789012345678901234567890123456789";
+    let made_stripe = mockforge_contracts::keys::made_up_like(stripe).unwrap();
+    let made_github = mockforge_contracts::keys::made_up_like(github).unwrap();
+
+    let headers = HashMap::from([
+        ("authorization".to_string(), format!("Bearer {stripe}")),
+        ("x-token".to_string(), github.to_string()),
+        ("content-type".to_string(), "application/json".to_string()),
+    ]);
+    let body = json!({ "token": github, "note": format!("see {stripe}."), "id": 5000 }).to_string();
+    let query = format!("key={stripe}&limit=5");
+    let context = RequestContext::new(Some("127.0.0.1"), None, None);
+    let request_id = recorder
+        .record_http_request(
+            "POST",
+            "/api/me",
+            Some(&query),
+            &headers,
+            Some(body.as_bytes()),
+            &context,
+        )
+        .await
+        .unwrap();
+    // The mock's answer can hold a key too.
+    let answer = json!({ "api_key": stripe, "ok": true }).to_string();
+    recorder
+        .record_http_response(&request_id, 200, &headers, Some(answer.as_bytes()), 1)
+        .await
+        .unwrap();
+
+    let exchange = recorder.database().get_exchange(&request_id).await.unwrap().unwrap();
+    let recorded = format!(
+        "{} {} {} {}",
+        exchange.request.headers,
+        exchange.request.query_params.as_deref().unwrap_or_default(),
+        exchange.request.body.as_deref().unwrap_or_default(),
+        exchange.response.as_ref().unwrap().body.as_deref().unwrap_or_default(),
+    );
+    assert!(!recorded.contains(stripe), "the Stripe key was recorded: {recorded}");
+    assert!(!recorded.contains(github), "the GitHub token was recorded: {recorded}");
+    for made in [&made_stripe, &made_github] {
+        assert!(recorded.contains(made), "{made} is not in the recording: {recorded}");
+        assert!(mockforge_contracts::keys::is_key(made));
+    }
+    assert!(recorded.contains(&format!("Bearer {made_stripe}")), "the scheme is kept");
+    assert!(recorded.contains(r#""note":"see "#) && recorded.contains(&format!("{made_stripe}.")));
+    assert!(recorded.contains(r#""id":5000"#));
+    assert!(recorded.contains(&format!("key={made_stripe}&limit=5")));
+    // The made-up keys keep nothing of the keys beyond what their shapes fix.
+    assert!(!made_stripe.contains("4f2a9c81") && !made_github.contains("0123456789"));
+
+    // A second recording of the same key holds the same made-up key.
+    let request_id = recorder
+        .record_http_request(
+            "POST",
+            "/api/me",
+            None,
+            &HashMap::from([("x-token".to_string(), github.to_string())]),
+            None,
+            &context,
+        )
+        .await
+        .unwrap();
+    let again = recorder.database().get_exchange(&request_id).await.unwrap().unwrap();
+    assert!(again.request.headers.contains(&made_github));
+}
+
+/// Without the rule a key is recorded as it was: nothing is scrubbed unless
+/// it is said how
+#[tokio::test]
+async fn test_without_the_key_rule_a_key_is_recorded_as_it_was() {
+    let db = RecorderDatabase::new_in_memory().await.unwrap();
+    let scrubber = Scrubber::new(ScrubConfig {
+        rules: vec![ScrubRule::Email {
+            replacement: "user@example.com".to_string(),
+        }],
+        deterministic: false,
+        counter_seed: 0,
+    })
+    .unwrap();
+    let recorder = Recorder::with_scrubbing(db, scrubber, CaptureFilter::default());
+
+    let stripe = "sk_live_4f2a9c81e7b3d6a04f2a9c81";
+    let headers = HashMap::from([("authorization".to_string(), format!("Bearer {stripe}"))]);
+    let request_id = recorder
+        .record_http_request(
+            "GET",
+            "/api/me",
+            None,
+            &headers,
+            Some(json!({ "api_key": stripe }).to_string().as_bytes()),
+            &RequestContext::new(None, None, None),
+        )
+        .await
+        .unwrap();
+    let exchange = recorder.database().get_exchange(&request_id).await.unwrap().unwrap();
+    assert!(exchange.request.headers.contains(stripe));
+    assert!(exchange.request.body.as_deref().unwrap().contains(stripe));
+}

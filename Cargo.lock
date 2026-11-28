@@ -9563,6 +9563,7 @@ dependencies = [
  "har",
  "http 1.5.0",
  "http-body-util",
+ "mockforge-contracts",
  "mockforge-core",
  "mockforge-foundation",
  "mockforge-intelligence",

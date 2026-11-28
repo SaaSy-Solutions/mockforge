@@ -59,6 +59,7 @@ reqwest = { workspace = true }
 prometheus = "0.14"
 
 # Core types for OpenAPI generation
+mockforge-contracts = { version = "0.3.239", path = "../mockforge-contracts" }
 mockforge-core = { version = "0.3.239", path = "../mockforge-core" }
 mockforge-foundation = { path = "../mockforge-foundation" }
 mockforge-intelligence = { path = "../mockforge-intelligence" }
