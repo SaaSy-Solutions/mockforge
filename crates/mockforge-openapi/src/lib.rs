@@ -20,6 +20,9 @@
 //! - [`response_selection`] — [`ResponseSelectionMode`] + [`ResponseSelector`] for
 //!   choosing between multiple example responses (first / scenario / sequential /
 //!   random / weighted).
+//! - [`answers`] — answers by request ([`Answer`], [`When`], [`Then`]): what
+//!   an operation's `x-mockforge-answers` extension holds, and how a request
+//!   is told to be one an answer is given to.
 //! - [`spec_parser`] — unified [`OpenApiValidator`] / [`GraphQLValidator`] +
 //!   [`SpecFormat`] detector covering OpenAPI 2.0/3.0/3.1 and GraphQL.
 //! - [`validation`] — request/response validation helpers against an
@@ -27,6 +30,7 @@
 //! - [`swagger_convert`] — Swagger 2.0 → OpenAPI 3.0 conversion helper used by
 //!   [`spec`] (re-exported for advanced callers).
 
+pub mod answers;
 pub mod custom_fixture;
 pub mod multi_spec;
 pub mod openapi_routes;
@@ -43,6 +47,7 @@ pub mod spec_parser;
 pub mod swagger_convert;
 pub mod validation;
 
+pub use answers::{Answer, Then, When};
 pub use custom_fixture::CustomFixtureLoader;
 pub use request_fingerprint::RequestFingerprint;
 pub use response_rewriter::{OverrideHook, OverrideRequest, ResponseRewriter};

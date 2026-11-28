@@ -11,9 +11,15 @@ use sha2::{Digest, Sha256};
 use super::error::{invalid_pack, Result};
 use super::paths;
 use crate::class;
+use mockforge_openapi::answers::{Answer, RequestOwned, EXTENSION};
 
 /// The `kind` of a pack document, so a reader can tell what it holds.
 pub const PACK_KIND: &str = "mockforge-range-pack";
+
+/// The methods a path item of a spec may declare, in lower case.
+const METHODS: [&str; 8] = [
+    "get", "put", "post", "delete", "options", "head", "patch", "trace",
+];
 
 /// The version of the pack documents this version of MockForge reads.
 pub const PACK_SCHEMA_VERSION: u32 = 1;
@@ -115,7 +121,7 @@ pub struct Flaw {
 
 /// A request that shows something: the request half of a proof, and what a
 /// finding an agent reports names. A claim is met by an exchange when the
-/// method, the path, the headers and the body all match.
+/// method, the path, the headers, the query and the body all match.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Claim {
@@ -131,6 +137,13 @@ pub struct Claim {
     /// case.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub without: Vec<String>,
+    /// Query parameters the request must carry, with these values. Read as
+    /// they were decoded: `%27` is `'`.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub query_with: BTreeMap<String, String>,
+    /// Query parameters the request must not carry.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub query_without: Vec<String>,
     /// Text the request body must hold.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub body_contains: Option<String>,
@@ -149,8 +162,8 @@ impl Claim {
     }
 
     /// The request as a report names it, with what it must carry and lack:
-    /// `GET /orders/{id} with authorization, without x-trace`, and the text
-    /// its body must hold as one more condition.
+    /// `GET /orders/{id} with authorization, without x-trace`, what its query
+    /// must hold, and the text its body must hold, each as one more condition.
     pub fn label(&self) -> String {
         let mut conditions = Vec::new();
         let carried: Vec<&str> = self.with.keys().map(String::as_str).collect();
@@ -159,6 +172,17 @@ impl Claim {
         }
         if !self.without.is_empty() {
             conditions.push(format!("without {}", self.without.join(", ")));
+        }
+        let asked: Vec<String> = self
+            .query_with
+            .iter()
+            .map(|(name, value)| format!("`{name}`=`{value}`"))
+            .collect();
+        if !asked.is_empty() {
+            conditions.push(format!("with {} in the query", asked.join(", ")));
+        }
+        if !self.query_without.is_empty() {
+            conditions.push(format!("without {} in the query", self.query_without.join(", ")));
         }
         if let Some(text) = &self.body_contains {
             conditions.push(format!("with `{text}` in the body"));
@@ -191,7 +215,8 @@ impl Proof {
     }
 }
 
-/// The answer that shows a flaw. Each names something the answer must hold.
+/// The answer that shows a flaw. Each names something the answer must hold,
+/// or must not.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Serves {
@@ -204,6 +229,14 @@ pub struct Serves {
     /// Text the body must hold.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub has_text: Option<String>,
+    /// Headers the answer must carry, with these values. Names are read
+    /// without regard to case; values are not.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub has_header: BTreeMap<String, String>,
+    /// Headers the answer must not carry. Names are read without regard to
+    /// case.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub lacks_header: Vec<String>,
 }
 
 /// An operation of the spec.
@@ -340,6 +373,10 @@ impl Pack {
             for name in &mut proof.claim.without {
                 *name = name.to_lowercase();
             }
+            proof.serves.has_header = lower_names(std::mem::take(&mut proof.serves.has_header));
+            for name in &mut proof.serves.lacks_header {
+                *name = name.to_lowercase();
+            }
         }
         self
     }
@@ -445,6 +482,9 @@ impl Pack {
                 return Some(format!("flaw `{}`: {reason}", flaw.id));
             }
         }
+        if let Some(reason) = self.check_answers() {
+            return Some(reason);
+        }
         for injection in &self.injections {
             for (what, operation) in [
                 ("plants it at", &injection.planted),
@@ -516,13 +556,101 @@ impl Pack {
         {
             return Some("it names an empty header".to_string());
         }
+        if proof
+            .claim
+            .query_with
+            .keys()
+            .chain(&proof.claim.query_without)
+            .any(|name| name.trim().is_empty())
+        {
+            return Some("it names an empty query parameter".to_string());
+        }
+        if proof
+            .serves
+            .has_header
+            .keys()
+            .chain(&proof.serves.lacks_header)
+            .any(|name| name.trim().is_empty())
+        {
+            return Some("its `serves` names an empty header".to_string());
+        }
         if (
             proof.serves.status,
             proof.serves.has.is_empty(),
             proof.serves.has_text.as_deref(),
-        ) == (None, true, None)
+            proof.serves.has_header.is_empty(),
+            proof.serves.lacks_header.is_empty(),
+        ) == (None, true, None, true, true)
         {
             return Some("its `serves` names no answer, so nothing could prove it".to_string());
+        }
+        None
+    }
+
+    /// Whether the answers the spec gives by request
+    /// (`x-mockforge-answers`, [`mockforge_openapi::answers`]) are answers
+    /// flaws prove. The mock gives such an answer to the requests its `when`
+    /// names and to no others. So the answer a flaw's proving request is given
+    /// must be the one its `serves` names, and an answer no proving request is
+    /// given is a weakness served that could be found and never judged.
+    fn check_answers(&self) -> Option<String> {
+        let mut answers: Vec<(String, Answer)> = Vec::new();
+        for (path, item) in self.spec_paths()? {
+            let Some(operations) = item.as_object() else {
+                continue;
+            };
+            for (method, operation) in operations {
+                if !METHODS.contains(&method.as_str()) {
+                    continue;
+                }
+                let at = format!("{} {path}", method.to_ascii_uppercase());
+                let held = match Answer::read(operation.get(EXTENSION)) {
+                    Ok(held) => held,
+                    Err(reason) => {
+                        return Some(format!(
+                            "the spec's `{at}` holds answers it cannot serve: {reason}"
+                        ))
+                    }
+                };
+                for answer in held {
+                    if let Some(reason) = answer.problem() {
+                        return Some(format!("the spec's `{at}` gives an answer that {reason}"));
+                    }
+                    answers.push((at.clone(), answer));
+                }
+            }
+        }
+
+        let mut proved = vec![false; answers.len()];
+        for flaw in &self.flaws {
+            let Some((path, _)) = self.resolve(&flaw.prove.claim.method, &flaw.prove.claim.path)
+            else {
+                continue;
+            };
+            let at = format!("{} {path}", flaw.prove.claim.method);
+            let request = proving_request(&flaw.prove.claim);
+            // The first answer of the operation whose `when` the proving
+            // request meets is the one the mock gives it.
+            let given = answers.iter().enumerate().find(|(_, (held_at, answer))| {
+                held_at == &at && answer.when.matches(&request.asked())
+            });
+            if let Some((position, (_, answer))) = given {
+                proved[position] = true;
+                if let Some(reason) = super::judge::answer_shows(answer, &flaw.prove.serves) {
+                    return Some(format!(
+                        "flaw `{}`: its proving request is given the answer to a request with {}, and that answer {reason}",
+                        flaw.id,
+                        answer.when.label()
+                    ));
+                }
+            }
+        }
+        let unproved = answers.iter().zip(&proved).find(|(_, proved)| !**proved);
+        if let Some(((at, answer), _)) = unproved {
+            return Some(format!(
+                "the spec's `{at}` gives an answer to a request with {}, and no flaw proves it: add a flaw whose proving request is one of those, and whose `serves` names what the answer holds",
+                answer.when.label()
+            ));
         }
         None
     }
@@ -566,9 +694,6 @@ impl Pack {
     /// method. Sorted, and so the same in every build: the order of a JSON
     /// object's members is not kept.
     fn declared_operations(&self) -> Vec<Operation> {
-        const METHODS: [&str; 8] = [
-            "get", "put", "post", "delete", "options", "head", "patch", "trace",
-        ];
         let Some(spec_paths) = self.spec_paths() else {
             return Vec::new();
         };
@@ -619,6 +744,20 @@ pub fn is_word(id: &str) -> bool {
                     .chars()
                     .all(|character| character.is_ascii_lowercase() || character.is_ascii_digit())
         })
+}
+
+/// The proving request of a claim as the mock would read it: the query it
+/// must hold, the headers it must carry, and for a body the text it must hold.
+fn proving_request(claim: &Claim) -> RequestOwned<'_> {
+    RequestOwned {
+        query: claim
+            .query_with
+            .iter()
+            .map(|(name, value)| (name.clone(), value.clone()))
+            .collect(),
+        headers: claim.with.clone(),
+        body: claim.body_contains.as_deref().map_or(&b""[..], str::as_bytes),
+    }
 }
 
 /// The map with its names in lower case, and its values as they are.
@@ -1080,6 +1219,107 @@ mod tests {
                     flaw.id
                 );
             }
+        }
+    }
+
+    /// The shop pack with an answer by request on `GET /orders`, given to a
+    /// request whose `status` holds `OR 1=1`, and, when `serves` is one, a
+    /// flaw that proves with a request it is given to.
+    fn with_answer(serves: Option<Value>) -> String {
+        edited("shop", |document| {
+            document["spec"]["paths"]["/orders"]["get"]["x-mockforge-answers"] = json!([
+                { "when": { "query_contains": { "status": "OR 1=1" } },
+                  "then": { "status": 200, "body": [{ "id": 5000, "customer_id": "u_1024" }] } }
+            ]);
+            if let Some(serves) = serves {
+                document["flaws"].as_array_mut().unwrap().push(json!({
+                    "id": "orders-search-injection",
+                    "title": "A search term is put into SQL",
+                    "severity": "high",
+                    "prove": { "method": "GET", "path": "/orders",
+                               "query_with": { "status": "' OR 1=1--" },
+                               "serves": serves }
+                }));
+            }
+        })
+    }
+
+    #[test]
+    fn an_answer_by_request_is_what_a_flaw_proves_or_the_pack_is_refused() {
+        // An answer no proving request is given is a weakness served that
+        // could be found and never judged.
+        let refused = Pack::from_json(&with_answer(None), "pack.json").unwrap_err().to_string();
+        assert_eq!(
+            refused,
+            "pack.json: the spec's `GET /orders` gives an answer to a request with `status` holding `OR 1=1`, and no flaw proves it: add a flaw whose proving request is one of those, and whose `serves` names what the answer holds"
+        );
+
+        // A flaw proves with a request the answer is given to, and names
+        // another answer.
+        let another = |serves: Value| {
+            Pack::from_json(&with_answer(Some(serves)), "pack.json")
+                .unwrap_err()
+                .to_string()
+        };
+        assert_eq!(
+            another(json!({ "has": { "customer_id": "u_1007" } })),
+            "pack.json: flaw `orders-search-injection`: its proving request is given the answer to a request with `status` holding `OR 1=1`, and that answer does not hold `customer_id` as \"u_1007\""
+        );
+        assert_eq!(
+            another(json!({ "status": 500 })),
+            "pack.json: flaw `orders-search-injection`: its proving request is given the answer to a request with `status` holding `OR 1=1`, and that answer answers 200, not 500"
+        );
+
+        // The answer the flaw names: the pack is read, and the flaw keeps its query.
+        let pack = Pack::from_json(
+            &with_answer(Some(json!({ "status": 200, "has": { "customer_id": "u_1024" } }))),
+            "pack.json",
+        )
+        .unwrap();
+        assert_eq!(pack.problem(), None);
+        let flaw = pack.flaws.iter().find(|flaw| flaw.id == "orders-search-injection").unwrap();
+        assert_eq!(flaw.prove.claim.query_with["status"], "' OR 1=1--");
+
+        // What an answer says with a token of the request cannot be read
+        // until the request does: it is taken as shown.
+        let token = edited("shop", |document| {
+            document["spec"]["paths"]["/orders"]["get"]["x-mockforge-answers"] = json!([
+                { "when": { "query_contains": { "status": "OR 1=1" } },
+                  "then": { "status": 200, "body": { "error": "syntax error near {{request.query.status}}" } } }
+            ]);
+            document["flaws"].as_array_mut().unwrap().push(json!({
+                "id": "orders-search-injection", "title": "A search term is put into SQL", "severity": "high",
+                "prove": { "method": "GET", "path": "/orders", "query_with": { "status": "' OR 1=1--" },
+                           "serves": { "status": 200, "has_text": "syntax error" } }
+            }));
+        });
+        assert_eq!(Pack::from_json(&token, "pack.json").unwrap().problem(), None);
+    }
+
+    #[test]
+    fn an_answer_that_cannot_be_read_or_given_is_refused() {
+        let at_orders = |answers: Value| {
+            edited("shop", |document| {
+                document["spec"]["paths"]["/orders"]["get"]["x-mockforge-answers"] = answers;
+            })
+        };
+        let cases = vec![
+            (
+                at_orders(json!({ "when": {} })),
+                "the spec's `GET /orders` holds answers it cannot serve: `x-mockforge-answers` cannot be read: ",
+            ),
+            (
+                at_orders(json!([{ "when": {}, "then": {} }])),
+                "the spec's `GET /orders` gives an answer that its `when` names nothing, so its answer would be given to every request",
+            ),
+            (
+                at_orders(json!([{ "when": { "query": { "a": "1" } }, "then": { "status": 99 } }])),
+                "the spec's `GET /orders` gives an answer that its status `99` is not one HTTP has",
+            ),
+        ];
+        for (text, expected) in cases {
+            let refused = Pack::from_json(&text, "pack.json").unwrap_err().to_string();
+            assert!(refused.starts_with(&format!("pack.json: {expected}")), "{refused}");
         }
     }
 }

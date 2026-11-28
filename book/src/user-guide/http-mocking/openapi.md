@@ -327,8 +327,99 @@ MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true mockforge serve --spec api-spec.json
 It is off by default. `http.response_template_expand: true` in the
 configuration file turns it on as well (`mockforge wizard` writes it on), and
 the environment variable decides when it is set, for or against. An answer
-that depends on the request's query, beyond echoing it, is for an
+that depends on the request, beyond echoing it, is for
+[an answer by request](#answers-by-request) or for an
 [override rule](custom-responses.md), not for a template.
+
+### Response headers
+
+A header an operation declares under `responses.<code>.headers` is on its
+answer, with the value the spec gives: the header's `example`, its schema's
+`example` or `default`, or the first of a string's `enum`.
+
+```yaml
+responses:
+  '200':
+    description: The profile
+    headers:
+      Access-Control-Allow-Origin:
+        schema: { type: string }
+        example: '*'
+      X-Rate-Limit-Remaining:
+        schema: { type: integer, example: 42 }
+```
+
+A header the spec declares without a value is given one made up: `0` for a
+number, `true` for a boolean, the nil UUID for `format: uuid`, and
+`mockforge-mock-value` for any other string. A header the server sets itself,
+`Content-Type` or the rate limit's, is kept as it is.
+
+## Answers by request
+
+An operation has one answer, its example. A weakness that is injected has two:
+SQL put in a search term is answered with every row, and any other term with
+the ten the page asked for; a server-side request is answered with the
+cloud's metadata, and any other address with the page. Planted as the
+operation's one answer, the mock would show the weakness to every request, and
+an agent that did nothing wrong would be shown it all the same.
+
+`x-mockforge-answers` gives an operation other answers, each for the requests
+it names:
+
+```yaml
+paths:
+  /orders:
+    get:
+      responses:
+        '200':
+          description: The customer's orders
+          content:
+            application/json:
+              example: [{ id: 5000, status: delivered }]
+      x-mockforge-answers:
+        - when:
+            query_contains: { status: "' OR " }
+          then:
+            status: 200
+            headers: { X-Query-Debug: on }
+            body:
+              - { id: 5000, status: delivered, customer_id: u_1007 }
+              - { id: 6104, status: shipped, customer_id: u_2048 }
+```
+
+The mock gives a request the first answer whose `when` it meets, and the
+operation's example when it meets none. A `when` names what the request holds,
+and a request meets it when it holds all of what is named:
+
+| field | met when |
+| --- | --- |
+| `query` | The request carries each parameter, with that value. Read as it was decoded. |
+| `query_contains` | The value of each parameter holds that text. |
+| `headers` | The request carries each header, with that value. Names are read in any case. |
+| `body_contains` | The body holds that text. |
+
+A `then` is the answer: `status` (`200` when left out), `body` as JSON (`{}`
+when left out) and `headers`. The body may name the request as an example
+may, so that the answer says a field back:
+
+```yaml
+        - when:
+            body_contains: '"role"'
+          then:
+            body: { id: 77, name: Ada, role: "{{request.body.role}}" }
+```
+
+- **An answer is given before anything else is done with the request.** It is
+  how the API answers that request, whatever the request validates like and
+  whatever MockAI would have made of it. The headers the spec declares for the
+  answer's status are on it, and the answer's own headers over them.
+- **A `when` names at least one thing**, since one that named nothing would be
+  given to every request. An answer like that, and one HTTP cannot give, is
+  left out with a line in the log. A [range pack](../range.md) is refused for
+  either.
+
+An answer that depends on more than the request holds, on the time or on a
+counter, is for an [override rule](custom-responses.md).
 
 ## Performance Optimization
 

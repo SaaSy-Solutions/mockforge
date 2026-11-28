@@ -12,6 +12,7 @@
 //! offers reaches the mock. Every request outside the scope is listed: a run
 //! that left the scope broke a rule, whatever it found.
 
+use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
@@ -21,6 +22,7 @@ use super::exchange::{digest, header_value, Exchange};
 use super::pack::{Claim, Flaw, Operation, Pack, Serves, Severity};
 use super::paths;
 use super::report::Report;
+use mockforge_openapi::answers::Answer;
 
 /// What became of a flaw.
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
@@ -435,8 +437,9 @@ impl From<&Exchange> for OutOfScope {
 }
 
 /// Whether an exchange is the request a claim names: the method, the path,
-/// the headers it must carry and must not carry, and the text its body must
-/// hold. A credential is compared by its digest, as the log holds it.
+/// the headers it must carry and must not carry, the query it must hold and
+/// must not, and the text its body must hold. A credential is compared by its
+/// digest, as the log holds it, and the query as it was decoded.
 pub fn asks(exchange: &Exchange, claim: &Claim) -> bool {
     exchange.method == claim.method
         && paths::matches(&claim.path, &exchange.path)
@@ -444,17 +447,40 @@ pub fn asks(exchange: &Exchange, claim: &Claim) -> bool {
             header(exchange, name).is_some_and(|held| held == header_value(name, value))
         })
         && claim.without.iter().all(|name| header(exchange, name).is_none())
+        && ((claim.query_with.is_empty() && claim.query_without.is_empty())
+            || asks_query(&mockforge_openapi::answers::decoded(&exchange.query), claim))
         && claim
             .body_contains
             .as_deref()
             .is_none_or(|text| exchange.request_body.contains(text))
 }
 
+/// Whether the parameters of a query are those a claim names.
+fn asks_query(query: &[(String, String)], claim: &Claim) -> bool {
+    claim
+        .query_with
+        .iter()
+        .all(|(name, value)| query.iter().any(|(held, asked)| held == name && asked == value))
+        && claim
+            .query_without
+            .iter()
+            .all(|name| query.iter().all(|(held, _)| held != name))
+}
+
 /// A header of an exchange's request by name, read without regard to case.
 /// The log holds names in lower case; a pack is read with them lower case too.
 fn header<'a>(exchange: &'a Exchange, name: &str) -> Option<&'a str> {
-    exchange
-        .request_headers
+    held_in(&exchange.request_headers, name)
+}
+
+/// A header of an exchange's answer by name, read without regard to case.
+fn response_header<'a>(exchange: &'a Exchange, name: &str) -> Option<&'a str> {
+    held_in(&exchange.response_headers, name)
+}
+
+/// A header of a map of headers by name, read without regard to case.
+fn held_in<'a>(headers: &'a BTreeMap<String, String>, name: &str) -> Option<&'a str> {
+    headers
         .iter()
         .find(|(held, _)| held.eq_ignore_ascii_case(name))
         .map(|(_, value)| value.as_str())
@@ -477,11 +503,78 @@ pub fn lacks(exchange: &Exchange, serves: &Serves) -> Option<String> {
             return Some(format!("{answered}, which does not hold `{field}` as {value}"));
         }
     }
-    serves
+    if let Some(text) = serves
         .has_text
         .as_deref()
         .filter(|text| !exchange.response_body.contains(*text))
-        .map(|text| format!("{answered}, which does not hold the text `{text}`"))
+    {
+        return Some(format!("{answered}, which does not hold the text `{text}`"));
+    }
+    for (name, value) in &serves.has_header {
+        if response_header(exchange, name) != Some(header_value(name, value).as_str()) {
+            return Some(format!("{answered}, which does not carry `{name}` set to {value}"));
+        }
+    }
+    serves
+        .lacks_header
+        .iter()
+        .find(|name| response_header(exchange, name).is_some())
+        .map(|name| format!("{answered}, which carries a `{name}` header"))
+}
+
+/// What an answer the spec gives by request lacks to be the one `serves`
+/// names, as far as it can be told before the request comes. `None` when it
+/// is that answer, and when what it says is said with a token of the request,
+/// which cannot be read until the request does. The reason completes "… and
+/// that answer …".
+pub fn answer_shows(answer: &Answer, serves: &Serves) -> Option<String> {
+    let body = answer.then.body();
+    let text = serde_json::to_string(&body).unwrap_or_default();
+    let names_the_request =
+        |held: &str| held.contains("{{request.") || held.contains("{{json:request.");
+    if let Some(status) = serves.status.filter(|status| *status != answer.then.status) {
+        return Some(format!("answers {}, not {status}", answer.then.status));
+    }
+    for (field, value) in &serves.has {
+        if !holds_in(&body, field, value)
+            && !found_in(&body, field)
+                .is_some_and(|held| held.as_str().is_some_and(names_the_request))
+        {
+            return Some(format!("does not hold `{field}` as {value}"));
+        }
+    }
+    if let Some(wanted) = serves.has_text.as_deref() {
+        if !text.contains(wanted) && !names_the_request(&text) {
+            return Some(format!("does not hold the text `{wanted}`"));
+        }
+    }
+    for (name, value) in &serves.has_header {
+        if answer
+            .then
+            .headers
+            .iter()
+            .any(|(held, held_value)| held.eq_ignore_ascii_case(name) && held_value != value)
+        {
+            return Some(format!("carries `{name}` set to another value, not {value}"));
+        }
+    }
+    serves
+        .lacks_header
+        .iter()
+        .find(|name| answer.then.headers.keys().any(|held| held.eq_ignore_ascii_case(name)))
+        .map(|name| format!("carries the `{name}` header"))
+}
+
+/// A field of a JSON document, the first one found, at the top or anywhere
+/// inside an object or an array.
+fn found_in<'a>(document: &'a Value, field: &str) -> Option<&'a Value> {
+    match document {
+        Value::Object(object) => object
+            .get(field)
+            .or_else(|| object.values().find_map(|inner| found_in(inner, field))),
+        Value::Array(items) => items.iter().find_map(|inner| found_in(inner, field)),
+        _ => None,
+    }
 }
 
 /// Whether a JSON text holds `field` with `value`: at the top, or anywhere
@@ -664,9 +757,9 @@ mod tests {
         );
         // A number is a number, however JSON writes it.
         let integer = Serves {
-            status: Some(200),
             has: BTreeMap::from([("count".to_string(), Value::from(1_u8))]),
-            has_text: None,
+            status: Some(200),
+            ..Serves::default()
         };
         assert_eq!(lacks(&exchange(2, "GET", "/x", 200, r#"{"count":1.0}"#), &integer), None);
         assert_eq!(
@@ -874,6 +967,89 @@ mod tests {
         assert!(text.contains(r#""exchange": 1"#), "{text}");
         let read: Judgement = serde_json::from_str(&text).unwrap();
         assert_eq!(read, judged);
+    }
+
+    #[test]
+    fn the_query_a_proof_names_and_the_headers_an_answer_must_carry_are_judged() {
+        let mut document = serde_json::to_value(pack()).unwrap();
+        document["flaws"].as_array_mut().unwrap().extend([
+            serde_json::json!({
+                "id": "search-injection", "title": "A search term is put into SQL", "severity": "high",
+                "prove": { "method": "GET", "path": "/orders/{id}",
+                    "query_with": {"status": "' OR 1=1--"}, "query_without": ["dry"],
+                    "serves": { "status": 200, "has_text": "every customer" } }
+            }),
+            serde_json::json!({
+                "id": "profile-for-any-origin", "title": "Any origin reads the profile", "severity": "critical",
+                "prove": { "method": "GET", "path": "/users/me",
+                    "serves": { "has_header": {"Access-Control-Allow-Origin": "*"},
+                                "lacks_header": ["X-Content-Type-Options"] } }
+            }),
+        ]);
+        let pack = Pack::from_json(&document.to_string(), "p").unwrap();
+        assert_eq!(pack.problem(), None);
+        // The names of headers are read without regard to case, on either side.
+        let origin = &pack.flaws[5].prove.serves;
+        assert_eq!(origin.has_header.keys().collect::<Vec<_>>(), ["access-control-allow-origin"]);
+        assert_eq!(
+            pack.flaws[4].prove.label(),
+            "GET /orders/{id} with `status`=`' OR 1=1--` in the query, without dry in the query"
+        );
+
+        // The query is read as it was decoded, as the mock reads it.
+        let injected = |query: &str| Exchange {
+            query: query.to_string(),
+            ..exchange(1, "GET", "/orders/5001", 200, "orders of every customer")
+        };
+        let found = judge(&pack, &[injected("status=%27%20OR%201%3D1--&page=2")]);
+        assert_eq!(verdict(&found, "search-injection").finding, Finding::Found);
+        assert_eq!(verdict(&found, "search-injection").why, "GET /orders/{id} with `status`=`' OR 1=1--` in the query, without dry in the query answered 200");
+        for not_the_request in [
+            "status=paid",
+            "status=%27%20OR%201%3D1",
+            "",
+            "status=%27%20OR%201%3D1--&dry=1",
+        ] {
+            let judged = judge(&pack, &[injected(not_the_request)]);
+            assert_eq!(
+                verdict(&judged, "search-injection").finding,
+                Finding::Missed,
+                "{not_the_request}"
+            );
+        }
+
+        // An answer shown by a header it carries, and one it must not.
+        let answered = |headers: &[(&str, &str)]| Exchange {
+            response_headers: headers
+                .iter()
+                .map(|(name, value)| (name.to_string(), value.to_string()))
+                .collect(),
+            ..exchange(2, "GET", "/users/me", 200, "")
+        };
+        let open = answered(&[("Access-Control-Allow-Origin", "*")]);
+        assert_eq!(
+            verdict(&judge(&pack, &[open]), "profile-for-any-origin").finding,
+            Finding::Found
+        );
+        let other = answered(&[("access-control-allow-origin", "https://api.example.com")]);
+        assert_eq!(
+            verdict(&judge(&pack, std::slice::from_ref(&other)), "profile-for-any-origin").why,
+            "GET /users/me answered 200, which does not carry `access-control-allow-origin` set to *"
+        );
+        let sniffing = answered(&[
+            ("Access-Control-Allow-Origin", "*"),
+            ("X-Content-Type-Options", "nosniff"),
+        ]);
+        assert_eq!(
+            verdict(&judge(&pack, std::slice::from_ref(&sniffing)), "profile-for-any-origin").why,
+            "GET /users/me answered 200, which carries a `x-content-type-options` header"
+        );
+        // An answer whose headers do not show it was requested, not found.
+        assert_eq!(
+            verdict(&judge(&pack, std::slice::from_ref(&sniffing)), "profile-for-any-origin")
+                .finding,
+            Finding::Requested
+        );
     }
 
     #[test]
