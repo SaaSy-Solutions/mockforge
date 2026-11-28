@@ -1,6 +1,7 @@
 //! `mockforge mcp-contract` end to end: pin, check, and the exit codes, run
 //! against the real binary and a small local tool server.
 #![allow(deprecated)]
+mod support;
 use assert_cmd::prelude::*;
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -662,9 +663,7 @@ impl Mockserve {
         // Startup must not discover a host .env.
         fs::write(workspace.path().join(".env"), "").unwrap();
         let mut command = Command::cargo_bin("mockforge").unwrap();
-        command
-            .env_clear()
-            .env("TMPDIR", workspace.path())
+        support::isolated(&mut command, workspace.path())
             .current_dir(workspace.path())
             .args([
                 "serve",

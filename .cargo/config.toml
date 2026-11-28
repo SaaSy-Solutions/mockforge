@@ -18,3 +18,10 @@
 
 # Note: If you need to update sqlx query metadata, run:
 # cd crates/mockforge-collab && cargo sqlx prepare --database-url postgresql://user:pass@localhost/dbname
+
+# The stack of a Windows program's main thread is one megabyte, where Linux
+# gives eight. The command's debug binary needs more than one: it overflowed
+# on startup, even for --version. The reserve is address space, committed
+# only as it is used.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "link-arg=/STACK:8388608"]

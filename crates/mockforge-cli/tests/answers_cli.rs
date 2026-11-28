@@ -7,6 +7,7 @@
 //! planted that way is shown to the request that triggers it, and an agent
 //! that did nothing wrong is shown nothing.
 
+mod support;
 use assert_cmd::prelude::*;
 use std::collections::BTreeMap;
 use std::fs;
@@ -69,9 +70,7 @@ impl Server {
         fs::write(directory.path().join("spec.json"), SPEC).unwrap();
         let spec = directory.path().join("spec.json").display().to_string();
         let mut command = Command::cargo_bin("mockforge").unwrap();
-        command
-            .env_clear()
-            .env("TMPDIR", directory.path())
+        support::isolated(&mut command, directory.path())
             .current_dir(directory.path())
             .args([
                 "serve",

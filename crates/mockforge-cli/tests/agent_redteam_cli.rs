@@ -2,6 +2,7 @@
 //! suite, serve it with the call log open, play an agent over HTTP, and judge
 //! what was recorded.
 #![allow(deprecated)]
+mod support;
 use assert_cmd::prelude::*;
 use serde_json::{json, Value};
 use std::fs;
@@ -50,9 +51,7 @@ impl Mockserve {
         let workspace = tempfile::tempdir().unwrap();
         fs::write(workspace.path().join(".env"), "").unwrap();
         let mut command = Command::cargo_bin("mockforge").unwrap();
-        command
-            .env_clear()
-            .env("TMPDIR", workspace.path())
+        support::isolated(&mut command, workspace.path())
             .current_dir(workspace.path())
             .args([
                 "serve",
