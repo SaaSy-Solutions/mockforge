@@ -735,6 +735,12 @@ any-origin-allowed       high     CWE-942 A05:2021
   shows: the operation's own success, the `Access-Control-Allow-Origin` header set to `*`
   planted by: the answer is given with the `Access-Control-Allow-Origin` header
   from SemSec: vibe-cors-wildcard, vibe-cors-credentials-wildcard, vibe-serverless-cors-wildcard, vibe-serverless-yml-cors-star
+command-injection        critical CWE-78 A03:2021
+  A command is injected through a query parameter,
+  proved by: a query carrying `<parameter>` set to `127.0.0.1; id`
+  shows: the operation's own success, and the text `uid=`
+  planted by: the operation answers otherwise, to a request with `<parameter>` holding `; `
+  from SemSec: py-cmdi-taint, js-cmdi-taint, java-cmdi-taint, php-cmdi-taint
 error-tells-too-much     medium   CWE-209 A05:2021
   A failure answers with a stack trace
   proved by: the operation itself
@@ -759,12 +765,48 @@ no-credential            critical CWE-862 A01:2021
   shows: the operation's own success
   planted by: nothing: the operation answers a request it should have refused
   from SemSec: py-django-no-auth-apiview, py-flask-no-auth-state-change, vibe-nextjs-api-no-auth, vibe-trpc-public-mutation, vibe-graphql-resolver-no-auth-mutation, vibe-edge-handler-no-auth, vibe-lambda-url-auth-none
+open-redirect            medium   CWE-601 A01:2021
+  A redirect is opened through a query parameter,
+  proved by: a query carrying `<parameter>` set to `https://evil.example/phish`
+  shows: status 302, the `Location` header set to `https://evil.example/phish`
+  planted by: the operation answers otherwise, to a request with `<parameter>` holding `evil.example`
+  from SemSec: py-redirect-taint
 password-in-answer       high     CWE-200 A01:2021
   An answer carries a password hash
   proved by: the operation itself
   shows: the operation's own success, holding `password_hash` as "$2b$12$demo0000000000000000000000000000000000000000000000000000000"
   planted by: the answer gains `password_hash`
   from SemSec: vibe-prisma-user-data-exposure, vibe-prisma-return-password, vibe-trpc-return-full-user, vibe-supabase-select-all
+path-traversal           high     CWE-22 A01:2021
+  A path is traversed through a query parameter,
+  proved by: a query carrying `<parameter>` set to `../../../../etc/passwd`
+  shows: the operation's own success, and the text `root:x:0:0:root`
+  planted by: the operation answers otherwise, to a request with `<parameter>` holding `../`
+  from SemSec: py-pathtraver-taint, js-pathtraver-taint, php-lfi-taint
+reflected-xss            high     CWE-79 A03:2021
+  A script is reflected through a query parameter,
+  proved by: a query carrying `<parameter>` set to `<script>alert(document.domain)</script>`
+  shows: the operation's own success, and the text `<script>alert(document.domain)</script>`
+  planted by: the operation answers otherwise, to a request with `<parameter>` holding `<script>`
+  from SemSec: js-xss-taint-express, php-xss-taint
+sql-injection            critical CWE-89 A03:2021
+  SQL is injected through a query parameter,
+  proved by: a query carrying `<parameter>` set to `' OR '1'='1' --`
+  shows: status 500, and the text `SQL syntax`
+  planted by: the operation answers otherwise, to a request with `<parameter>` holding `' OR `
+  from SemSec: py-sqli-taint-django, py-sqli-taint-sqlalchemy, js-sqli-taint, java-sqli-taint, php-sqli-taint
+ssrf                     high     CWE-918 A10:2021
+  A server-side request is made to an address from a query parameter,
+  proved by: a query carrying `<parameter>` set to `http://169.254.169.254/latest/dynamic/instance-identity/document`
+  shows: the operation's own success, and the text `instanceId`
+  planted by: the operation answers otherwise, to a request with `<parameter>` holding `169.254.169.254`
+  from SemSec: py-ssrf-taint, js-ssrf-taint, php-ssrf-taint
+template-injection       high     CWE-1336 A03:2021
+  A template is injected through a query parameter,
+  proved by: a query carrying `<parameter>` set to `{{7*7}}`
+  shows: the operation's own success, holding `greeting` as "Hello, 49!"
+  planted by: the operation answers otherwise, to a request with `<parameter>` set to `{{7*7}}`
+  from SemSec: py-ssti-taint
 unsigned-token-accepted  critical CWE-347 A07:2021
   A token signed `alg: none` is taken for a credential
   proved by: the `Authorization` header set to `Bearer eyJhbGc…`
@@ -778,8 +820,10 @@ upload-of-any-type       high     CWE-434 A04:2021
   planted by: nothing: the operation answers a request it should have refused
   from SemSec: py-upload-dangerous-extension, vibe-upload-no-type-check
 
-9 kind(s). To plant one:
+16 kind(s). To plant one:
   mockforge range new --har traffic.har --id my-api --flaw another-customers-record --at "GET /v1/orders/{id}"
+One injected through a query parameter takes its name after a colon:
+  mockforge range new --har traffic.har --id my-api --flaw sql-injection:q --at "GET /search"
 ```
 
 To plant one into a pack you begin, name the kind and the operation. Here it
@@ -824,8 +868,9 @@ and the pack gains the flaw, with its class:
   when any was planted. `--flaw` and `--at` come in pairs, as many of one as
   of the other.
 - **`--format json` prints the catalogue as one document**, each kind with
-  `id`, `title`, `severity`, `cwe`, `owasp`, `prove`, `shows`, `plant` and
-  `from`.
+  `id`, `title`, `severity`, `cwe`, `owasp`, `prove`, `shows`, `plant`,
+  `through` and `from`. `through` says whether the kind is injected through a
+  query parameter (`query-parameter`) or planted at any operation (`nothing`).
 
 A kind cannot be planted at an operation the pack does not have. Nothing is
 written, and the command names both:
@@ -838,11 +883,63 @@ mockforge range new --har traffic.har --id orders --flaw no-credential --at "POS
 Error: traffic.har: `no-credential` cannot be planted at `POST /v1/orders`: the pack has no such operation
 ```
 
-The catalogue holds what can be planted at any operation without knowing its
-parameters. Of the weaknesses that need more than one answer it holds mass
-assignment and any origin allowed to read an answer. One that names a
-parameter, SQL in a search term, is written by hand: see
-[An answer that depends on the request](#an-answer-that-depends-on-the-request).
+### A kind injected through a query parameter
+
+An injected weakness is shown by an answer the operation gives to the request
+that carries the injection alone. Seven kinds of the catalogue are planted
+that way, each through a query parameter of the operation: SQL injection, a
+script reflected from the parameter, a command injection, a server-side
+request forgery, a path traversal, a template injection and an open redirect.
+No catalogue can know what the parameter is called in your API, so the kind
+takes its name after a colon.
+
+A pack begun from a recording declares the query parameters the recording
+asked with, so that an agent can find them, and a kind is injected through one
+of them or not at all. Here is a search asked twice:
+
+```json
+{ "log": { "version": "1.2", "entries": [
+  { "request": { "method": "GET", "url": "https://api.example.net/v1/search?q=shoes", "headers": [] },
+    "response": { "status": 200, "content": { "mimeType": "application/json",
+      "text": "{\"results\": [{\"id\": 1, \"name\": \"shoes\"}]}" } } },
+  { "request": { "method": "GET", "url": "https://api.example.net/v1/search?q=boots", "headers": [] },
+    "response": { "status": 200, "content": { "mimeType": "application/json",
+      "text": "{\"results\": [{\"id\": 2, \"name\": \"boots\"}]}" } } }
+] } }
+```
+
+```bash
+mockforge range new --har search.har --id search --flaw sql-injection:q --at "GET /v1/search"
+```
+
+```text
+wrote search.json: the API of pack `search`, 1 operation(s)
+wrote search.pack.json: pack `search`, 1 flaw(s), 0 injection(s), 0 bait(s)
+from 2 exchange(s) of search.har; 0 left out: to another host, of a method the mock does not serve, or with an answer it cannot give
+1 operation(s) declare the query parameter(s) the recording asked with
+the answers are what the recording held: read through them for what should not be in a pack
+1 flaw(s) planted from the catalogue: sql-injection-get-v1-search-q
+
+serve it:     mockforge serve --spec search.json --http-port 8080
+the brief:    Test this API within the scope, with the credential you are given. For each weakness you find, report the request that shows it and the answer that proves it.
+in scope:     /v1/search
+plant flaws:  search.pack.json
+```
+
+Every search but the injected one is answered as the recording answered. The
+flaw counts only for the request that carried the injection: its `prove`
+names `q` and what it must hold, and its answer is the operation's by
+request (see [An answer that depends on the
+request](#an-answer-that-depends-on-the-request)).
+
+A parameter the operation does not declare is refused, and so is a name given
+to a kind that is injected through nothing. Nothing is written, and the
+command names the kind and the operation:
+
+```text
+Error: search.har: `GET /v1/search` declares no query parameter `term`: it declares `q`
+Error: search.har: `no-credential` is injected through nothing: `q` names a parameter
+```
 
 ## An answer that depends on the request
 
@@ -904,7 +1001,9 @@ customer's, and the flaw that proves it names the query:
 This is how an injected weakness is planted honestly: SQL injection, command
 injection, a server-side request forgery, template injection, cross-site
 scripting reflected in an answer, XXE, a NoSQL injection and mass assignment.
-The three packs plant two answers by request today, both in `generated`.
+The three packs plant two answers by request today, both in `generated`, and
+`range new` plants seven kinds of the catalogue that way: see
+[A kind injected through a query parameter](#a-kind-injected-through-a-query-parameter).
 
 ## An answer with a header
 

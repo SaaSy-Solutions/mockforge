@@ -54,6 +54,8 @@ pub struct Skeleton {
     pub left_out: usize,
     /// How many operations have a parameter in their path.
     pub templated: usize,
+    /// How many operations declare a query parameter.
+    pub queried: usize,
     /// The headers whose values are to be replaced, as HTTP writes their names.
     pub credentials: Vec<String>,
     /// The keys of a known shape in the recorded answers that were replaced
@@ -232,7 +234,13 @@ fn finish(
                 ),
             ));
         };
-        planted_flaws.push(planted.kind.plant(&method, planted.path, operation, path)?);
+        planted_flaws.push(planted.kind.plant(
+            &method,
+            planted.path,
+            operation,
+            path,
+            planted.parameter,
+        )?);
     }
     // The flaw is proved at the first operation, in the order of the spec,
     // that declares an answer.
@@ -276,14 +284,29 @@ fn finish(
     });
     let text = serde_json::to_string_pretty(&document).unwrap_or_default();
     let pack = Pack::from_json(&text, path)?;
+    // Counted before anything was planted: a kind is injected through a
+    // parameter an operation declares.
+    let queried: usize = paths
+        .values()
+        .filter_map(Value::as_object)
+        .map(|operations| operations.values().filter(|operation| declares_query(operation)).count())
+        .sum();
     Ok(Skeleton {
         credentials: pack.credentials.keys().cloned().collect(),
         pack,
         exchanges,
         left_out,
         templated,
+        queried,
         keys,
     })
+}
+
+/// Whether an operation declares a query parameter.
+fn declares_query(operation: &Value) -> bool {
+    operation["parameters"]
+        .as_array()
+        .is_some_and(|parameters| parameters.iter().any(|parameter| parameter["in"] == "query"))
 }
 
 /// The operation of one method at one shape of path: the path with its
@@ -314,10 +337,26 @@ fn operation(shape: &[Segment], entries: &[&Entry]) -> Option<(String, Vec<Strin
     let mut operation = json!({
         "responses": { status.to_string(): { "description": "As the recording answered", "content": content } },
     });
-    if !names.is_empty() {
+    // The path's parameters, and the query parameters the recording asked
+    // with: an agent finds them in the spec, and a kind is injected through one.
+    let asked: BTreeSet<String> = entries
+        .iter()
+        .filter_map(|entry| entry.request.locate().map(|(_, path)| path))
+        .filter_map(|path| {
+            path.split_once('?')
+                .map(|(_, query)| query.split('#').next().unwrap_or("").to_string())
+        })
+        .flat_map(|query| mockforge_openapi::answers::decoded(&query))
+        .map(|(name, _)| name)
+        .filter(|name| !name.is_empty())
+        .collect();
+    if !names.is_empty() || !asked.is_empty() {
         operation["parameters"] = names
             .iter()
             .map(|name| json!({ "name": name, "in": "path", "required": true, "schema": { "type": "string" } }))
+            .chain(asked.iter().map(|name| {
+                json!({ "name": name, "in": "query", "required": false, "schema": { "type": "string" } })
+            }))
             .collect();
     }
     // What was asked of the operation with a JSON body, as the mock is to
@@ -1195,11 +1234,13 @@ mod tests {
                 kind: no_credential,
                 method: "get",
                 path: "/v1/orders/{orderId}",
+                parameter: None,
             },
             Planted {
                 kind: key,
                 method: "GET",
                 path: "/v1/me",
+                parameter: None,
             },
         ];
         let mut asked = asked("api");
@@ -1234,12 +1275,98 @@ mod tests {
             kind: key,
             method: "POST",
             path: "/v1/nope",
+            parameter: None,
         }];
         asked.flaws = &wrong;
         let error = from_har(&recording, "traffic.har", &asked).unwrap_err().to_string();
         assert_eq!(
             error,
             "traffic.har: `key-on-the-client` cannot be planted at `POST /v1/nope`: the pack has no such operation"
+        );
+    }
+    #[test]
+    fn the_query_parameters_a_recording_asked_with_are_declared() {
+        let recording = archive(&[
+            exchange(
+                "https://api.example.net/v1/orders?q=shoes&limit=10",
+                "GET",
+                200,
+                "application/json",
+                r#"[{"id":5000,"name":"shoes"}]"#,
+                "",
+            ),
+            exchange(
+                "https://api.example.net/v1/orders?q=boots",
+                "GET",
+                200,
+                "application/json",
+                r#"[{"id":5001,"name":"boots"}]"#,
+                "",
+            ),
+            exchange(
+                "https://api.example.net/v1/me",
+                "GET",
+                200,
+                "application/json",
+                r#"{"id":77}"#,
+                "",
+            ),
+        ]);
+        let skeleton = from_har(&recording, "traffic.har", &asked("api")).unwrap();
+        // The two requests of one operation are one, and it declares what they
+        // asked with, each once, by name: nothing is required of a request.
+        let (_, operation) = skeleton.pack.resolve("GET", "/v1/orders").unwrap();
+        assert_eq!(
+            operation["parameters"],
+            json!([
+                { "name": "limit", "in": "query", "required": false, "schema": { "type": "string" } },
+                { "name": "q", "in": "query", "required": false, "schema": { "type": "string" } }
+            ])
+        );
+        assert_eq!((skeleton.exchanges, skeleton.queried), (3, 1));
+    }
+
+    #[test]
+    fn a_kind_is_injected_through_a_query_parameter_the_recording_asked_with() {
+        let recording = archive(&[exchange(
+            "https://api.example.net/v1/orders?q=shoes",
+            "GET",
+            200,
+            "application/json",
+            r#"[{"id":5000,"name":"shoes"}]"#,
+            "",
+        )]);
+        let sql = crate::range::catalogue::FlawKind::by_id("sql-injection").unwrap();
+        let flaws = [Planted {
+            kind: sql,
+            method: "GET",
+            path: "/v1/orders",
+            parameter: Some("q"),
+        }];
+        let mut asked = asked("api");
+        asked.flaws = &flaws;
+        let skeleton = from_har(&recording, "traffic.har", &asked).unwrap();
+        assert_eq!(skeleton.pack.problem(), None);
+        assert_eq!(skeleton.pack.flaws[0].id, "sql-injection-get-v1-orders-q");
+        let (_, operation) = skeleton.pack.resolve("GET", "/v1/orders").unwrap();
+        assert_eq!(
+            operation["x-mockforge-answers"][0]["when"],
+            json!({ "query_contains": { "q": "' OR " } })
+        );
+
+        // A parameter the recording never asked with is refused, and the ones
+        // it did are named.
+        let flaws = [Planted {
+            kind: sql,
+            method: "GET",
+            path: "/v1/orders",
+            parameter: Some("term"),
+        }];
+        asked.flaws = &flaws;
+        let error = from_har(&recording, "traffic.har", &asked).unwrap_err().to_string();
+        assert_eq!(
+            error,
+            "traffic.har: `GET /v1/orders` declares no query parameter `term`: it declares `q`"
         );
     }
 }
