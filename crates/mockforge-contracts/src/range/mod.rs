@@ -16,10 +16,13 @@
 //! only by an exchange that is the request it names.
 //!
 //! [`formats::sarif`] and [`formats::junit`] give a judgement as other tools
-//! read it. [`skeleton::from_har`] begins a pack from a recording, and
+//! read it. [`compare::Comparison`] sets the judgements of several runs of
+//! one pack side by side, and says which run found a flaw no other did.
+//! [`skeleton::from_har`] begins a pack from a recording, and
 //! [`skeleton::from_spec`] from a spec: the API as it is, and nothing planted.
 
 pub mod catalogue;
+pub mod compare;
 pub mod error;
 pub mod exchange;
 pub mod formats;
@@ -29,6 +32,7 @@ mod paths;
 pub mod report;
 pub mod skeleton;
 
+pub use compare::{Comparison, Run, Tally, COMPARISON_KIND, COMPARISON_SCHEMA_VERSION};
 pub use error::RangeError;
 pub use exchange::{read_exchanges, Exchange, BODY_LIMIT, CREDENTIAL_HEADERS};
 pub use formats::{junit, sarif};

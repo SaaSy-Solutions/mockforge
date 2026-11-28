@@ -17,13 +17,15 @@
 //! exchange that is the request it names. `run` does the whole of it in one
 //! command: it serves the pack, runs the agent, and judges the run. Both give
 //! the judgement as text, as one JSON document, as SARIF 2.1.0 or as JUnit
-//! XML (`--format`).
+//! XML (`--format`). `compare` sets the judgements of several runs of one
+//! pack side by side, and says which run found a flaw no other did.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use clap::{Args, Subcommand};
 use mockforge_contracts::class;
+use mockforge_contracts::range::compare::{Comparison, Run};
 use mockforge_contracts::range::{
     self, Bait, Finding, Flaw, Injection, Judgement, Pack, Severity, SteeredVerdict,
 };
@@ -61,6 +63,9 @@ pub(crate) enum RangeCommand {
     Flaws(FlawsArgs),
     /// Judge a run: what its exchange log counts for against a pack
     Judge(JudgeArgs),
+    /// Set several runs of one pack side by side: which found a flaw no
+    /// other did, and which broke a rule
+    Compare(CompareArgs),
     /// Run an agent against a pack and judge its run, in one command
     Run(crate::range_run::RunArgs),
 }
@@ -292,6 +297,169 @@ pub(crate) struct NewArgs {
     pub force: bool,
 }
 
+/// `range compare`.
+#[derive(Clone, Args, Debug)]
+pub(crate) struct CompareArgs {
+    /// The pack every run was against
+    #[arg(long, value_name = "FILE")]
+    pub pack: PathBuf,
+    /// A run to compare, as NAME=FILE: a name of its own for the run, and the
+    /// exchange log `serve --exchange-log` wrote for it. Name at least two
+    #[arg(long = "run", value_name = "NAME=FILE", required = true)]
+    pub runs: Vec<String>,
+    /// Print one JSON document instead of text
+    #[arg(long, value_enum, default_value = "text")]
+    pub format: Format,
+}
+
+fn compare(args: CompareArgs) -> Result<i32, String> {
+    let pack_path = args.pack.display().to_string();
+    let pack =
+        Pack::from_json(&read_file(&args.pack)?, &pack_path).map_err(|error| error.to_string())?;
+    let takes = "--run takes `NAME=FILE`, as `scout=run-scout/exchanges.jsonl`";
+    let mut runs: Vec<Run> = Vec::new();
+    for named in &args.runs {
+        let Some((name, file)) = named.split_once('=') else {
+            return Err(format!("{takes}; `{named}` names no file"));
+        };
+        if name.trim().is_empty() {
+            return Err(format!("{takes}; `{named}` names no name"));
+        }
+        if runs.iter().any(|run| run.name == name) {
+            return Err(format!("two runs are named `{name}`: give each a name of its own"));
+        }
+        let log_path = file.to_string();
+        let log_text = read_file(Path::new(file))?;
+        let exchanges =
+            range::read_exchanges(&log_text, &log_path).map_err(|error| error.to_string())?;
+        if exchanges.is_empty() {
+            return Err(format!("{log_path} holds no exchange: nothing could be judged"));
+        }
+        let mut judgement = range::judge::judge(&pack, &exchanges);
+        judgement.of_log(&log_text);
+        runs.push(Run {
+            name: name.to_string(),
+            judgement,
+        });
+    }
+    if runs.len() < 2 {
+        return Err(format!(
+            "{} run(s) named, and at least two are compared: {}",
+            runs.len(),
+            runs.iter().map(|run| run.name.as_str()).collect::<Vec<_>>().join(", ")
+        ));
+    }
+    let compared = Comparison::of(&pack, runs);
+    match args.format {
+        Format::Json => println!("{}", pretty(&compared)?),
+        Format::Text => print!("{}", compare_text(&compared)),
+    }
+    Ok(EXIT_OK)
+}
+
+/// The comparison as a person reads it: a row per run with what it counts
+/// for, a row per flaw with what each run made of it, then who found what
+/// alone and where a rule was broken.
+pub(crate) fn compare_text(compared: &Comparison) -> String {
+    let joined = |names: &[String]| {
+        if names.is_empty() {
+            "none".to_string()
+        } else {
+            names.join(", ")
+        }
+    };
+    let runs = &compared.runs;
+    // The name column is as wide as its longest name, and no narrower than
+    // the word over it.
+    let width = runs.iter().map(|run| run.name.len()).max().unwrap_or(0).max(3);
+    let mut text = format!(
+        "pack `{}`, {} run(s) of the same pack, {}\n",
+        compared.pack,
+        runs.len(),
+        compared.digest
+    );
+    text.push_str(&format!(
+        "\n{:<width$}  {:>9}  {:>5}  {:>9}  {:>6}  {:>9}  {:>12}  {}\n",
+        "run", "exchanges", "found", "requested", "missed", "taken", "out of scope", "reached"
+    ));
+    for run in runs {
+        let tally = run.tally();
+        let taken = format!("{}/{} taken", tally.taken, tally.steered);
+        let reached = format!("{} of {}", tally.reached, tally.operations);
+        text.push_str(&format!(
+            "{:<width$}  {:>9}  {:>5}  {:>9}  {:>6}  {:>9}  {:>12}  {}\n",
+            run.name,
+            run.judgement.exchanges,
+            tally.found,
+            tally.requested,
+            tally.missed,
+            taken,
+            tally.out_of_scope,
+            reached
+        ));
+    }
+
+    // A finding is as wide as `requested`, and a run's column as its name.
+    text.push_str("\nflaws\n");
+    let flaw_width = compared.flaws().iter().map(|(id, _)| id.len()).max().unwrap_or(0).max(4);
+    let columns: Vec<usize> = runs.iter().map(|run| run.name.len().max(9)).collect();
+    let mut head = format!("{:<flaw_width$}", "flaw");
+    for run in runs {
+        head.push_str(&format!("  {}", run.name));
+    }
+    text.push_str(&head);
+    text.push('\n');
+    for (id, findings) in compared.flaws() {
+        let mut row = format!("{id:<flaw_width$}");
+        for (finding, column) in findings.iter().zip(&columns) {
+            row.push_str(&format!("  {:<column$}", finding.label()));
+        }
+        text.push_str(row.trim_end());
+        text.push('\n');
+    }
+
+    text.push('\n');
+    text.push_str(&format!("found by every run: {}\n", joined(&compared.found_by_every_run())));
+    for (run, ids) in compared.found_by_one_run() {
+        text.push_str(&format!("found by {} alone: {}\n", run.name, joined(&ids)));
+    }
+    text.push_str(&format!("found by no run: {}\n", joined(&compared.found_by_no_run())));
+
+    // Who found the most is said with how many, and not called the best: a
+    // run that broke a rule is named for that too.
+    let most = runs.iter().map(|run| run.tally().found).max().unwrap_or(0);
+    let leaders: Vec<&str> = runs
+        .iter()
+        .filter(|run| run.tally().found == most)
+        .map(|run| run.name.as_str())
+        .collect();
+    text.push_str(&format!(
+        "\nmost found: {}, {} of {}\n",
+        if most == 0 {
+            "no run".to_string()
+        } else {
+            leaders.join(", ")
+        },
+        most,
+        compared.flaws().len()
+    ));
+    let (kept, broken): (Vec<&Run>, Vec<&Run>) =
+        runs.iter().partition(|run| run.broken().is_empty());
+    text.push_str(&format!(
+        "rules kept: {}\n",
+        joined(&kept.iter().map(|run| run.name.clone()).collect::<Vec<_>>())
+    ));
+    if broken.is_empty() {
+        text.push_str("rules broken: none\n");
+    } else {
+        text.push_str("rules broken:\n");
+        for run in broken {
+            text.push_str(&format!("  {}: {}\n", run.name, run.broken().join(", ")));
+        }
+    }
+    text
+}
+
 /// `range judge`.
 #[derive(Args, Debug)]
 pub(crate) struct JudgeArgs {
@@ -328,6 +496,7 @@ pub(crate) fn handle_range_command(args: RangeArgs) -> mockforge_core::Result<()
         RangeCommand::New(args) => new(args),
         RangeCommand::Flaws(args) => flaws(args),
         RangeCommand::Judge(args) => judge(args),
+        RangeCommand::Compare(args) => compare(args),
         RangeCommand::Run(args) => crate::range_run::run(args),
     };
     match code {

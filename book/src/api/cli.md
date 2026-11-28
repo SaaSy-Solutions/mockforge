@@ -830,6 +830,7 @@ mockforge range flaws
 mockforge range new --har traffic.har --id orders --flaw no-credential --at "POST /v1/orders"
 mockforge serve --spec shop.json --http-port 8080 --exchange-log exchanges.jsonl
 mockforge range judge --pack shop.pack.json --exchanges exchanges.jsonl
+mockforge range compare --pack shop.pack.json --run scout=scout.jsonl --run reader=reader.jsonl
 mockforge range run --pack shop.pack.json --agent "my-agent --target {url} --report {report}"
 ```
 
@@ -883,6 +884,15 @@ mockforge range run --pack shop.pack.json --agent "my-agent --target {url} --rep
   whatever `--format` says.
 - `--findings <FILE>`: the agent's report, a JSON array of findings, each
   with the request it says shows it, to check against the log.
+
+`compare`:
+
+- `--pack <FILE>`: the pack every run was against.
+- `--run <NAME=FILE>`: a run to compare, as many as there are runs and at
+  least two: a name of its own for the run, and the exchange log
+  `serve --exchange-log` wrote for it.
+- `--format text|json`: `json` prints the comparison as one document, with
+  every judgement whole.
 
 `run`:
 
@@ -992,6 +1002,19 @@ served and judged before any is planted: a pack that plants nothing is
 refused. The exit code is `2` when the recording or the spec cannot be read,
 holds nothing the mock can answer, or a file is there and `--force` was not
 given.
+
+`range compare` sets several runs of one pack side by side. Each run is
+judged as `range judge` judges it. A row per run says how many flaws it found,
+asked for and was not shown, or never asked for, how many of the pack's
+injections and bait it took, how many requests left the scope, and how much of
+the scope it reached. A row per flaw says what each run made of it. Then come
+the flaws every run found, those one run alone found and those no run found.
+The run that found the most is said with how many, and is not called the
+best: the rules each run broke are named apart, so that a run that found
+more by taking an injection or leaving the scope is read as that. The exit
+code is `0` when the runs were compared, and `2` when the pack or a log
+cannot be read, a log holds no exchange, a name is given to two runs, or
+fewer than two runs are named.
 
 `range run` does the whole of it in one command: it serves the pack with the
 exchange log on, runs the agent, and judges the run when the agent is done,

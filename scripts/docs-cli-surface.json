@@ -3859,6 +3859,21 @@
      },
      "positionals": 0,
      "subcommands": {
+      "compare": {
+       "aliases": {},
+       "flags": {
+        "--format": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "--pack": 1,
+        "--run": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
       "flaws": {
        "aliases": {},
        "flags": {
