@@ -670,6 +670,13 @@ impl OpenApiRouteRegistry {
                             &headers,
                             &body,
                         );
+                        let own = route_clone.answer_headers(
+                            answer,
+                            &path_params,
+                            crate::request_template::Query::Text(raw_query.as_deref()),
+                            &headers,
+                            &body,
+                        );
                         if let Some(ref overrides) = ctx.overrides {
                             let asked = OverrideRequest {
                                 method: &method,
@@ -682,7 +689,7 @@ impl OpenApiRouteRegistry {
                             };
                             overrides.apply(&asked, &mut answered);
                         }
-                        return route_clone.answer_response(answer, answered);
+                        return route_clone.answer_response(answer, answered, own);
                     }
                 }
 
@@ -1957,7 +1964,14 @@ impl OpenApiRouteRegistry {
                                 &headers,
                                 &body_bytes,
                             );
-                            return route.answer_response(answer, answered);
+                            let own = route.answer_headers(
+                                answer,
+                                &path_params,
+                                crate::request_template::Query::Pairs(&pairs),
+                                &headers,
+                                &body_bytes,
+                            );
+                            return route.answer_response(answer, answered, own);
                         }
                     }
 
@@ -2174,7 +2188,14 @@ impl OpenApiRouteRegistry {
                                 &body_bytes,
                                 &mut answered,
                             );
-                            return route.answer_response(answer, answered);
+                            let own = route.answer_headers(
+                                answer,
+                                &path_params,
+                                crate::request_template::Query::Pairs(&pairs),
+                                &headers,
+                                &body_bytes,
+                            );
+                            return route.answer_response(answer, answered, own);
                         }
                     }
 

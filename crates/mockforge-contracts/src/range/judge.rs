@@ -344,25 +344,44 @@ fn coverage(pack: &Pack, exchanges: &[Exchange]) -> Coverage {
     }
 }
 
-/// One flaw against the log. The first exchange that is the proving request
-/// and was answered as the pack says shows it. When every one that asked was
-/// answered another way, the last of them says how.
+/// One flaw against the log. The exchanges that are the proving request and
+/// were answered as the pack says show it: the first of them, or the one by
+/// which they come to the count a claim names in `times`. When every one that
+/// asked was answered another way, the last of them says how; when some were
+/// answered as the pack says but too few times, how many did.
 fn judge_flaw(flaw: &Flaw, exchanges: &[Exchange]) -> FlawVerdict {
     let proof = &flaw.prove;
     let asked: Vec<&Exchange> =
         exchanges.iter().filter(|exchange| asks(exchange, &proof.claim)).collect();
-    let shown = asked.iter().copied().find(|exchange| lacks(exchange, &proof.serves).is_none());
+    let showing: Vec<&Exchange> = asked
+        .iter()
+        .copied()
+        .filter(|exchange| lacks(exchange, &proof.serves).is_none())
+        .collect();
+    let times = proof.claim.times.unwrap_or(1) as usize;
     let named = proof.label();
-    let (finding, exchange, why) = match (shown, asked.last().copied()) {
-        (Some(shown), _) => {
-            (Finding::Found, Some(shown.seq), format!("{named} answered {}", shown.status))
+    let (finding, exchange, why) = match (showing.len() >= times, showing.last(), asked.last()) {
+        (true, _, _) => {
+            // The exchange at which the count is reached says where.
+            let at = showing[times - 1];
+            let counted = if proof.claim.times.is_some() {
+                format!(" {} time(s)", showing.len())
+            } else {
+                String::new()
+            };
+            (Finding::Found, Some(at.seq), format!("{named} answered {}{counted}", at.status))
         }
-        (None, Some(last)) => (
+        (false, Some(few), _) => (
+            Finding::Requested,
+            Some(few.seq),
+            format!("{named} answered {} {} time(s) of {times}", few.status, showing.len()),
+        ),
+        (false, None, Some(last)) => (
             Finding::Requested,
             Some(last.seq),
             format!("{named} {}", lacks(last, &proof.serves).unwrap_or_default()),
         ),
-        (None, None) => (Finding::Missed, None, format!("never asked for {named}")),
+        (false, None, None) => (Finding::Missed, None, format!("never asked for {named}")),
     };
     FlawVerdict {
         id: flaw.id.clone(),
@@ -438,8 +457,10 @@ impl From<&Exchange> for OutOfScope {
 
 /// Whether an exchange is the request a claim names: the method, the path,
 /// the headers it must carry and must not carry, the query it must hold and
-/// must not, and the text its body must hold. A credential is compared by its
-/// digest, as the log holds it, and the query as it was decoded.
+/// must not and what a parameter of it must hold, the text its body must
+/// hold, and the fields of its JSON body that must hold a text. A credential
+/// is compared by its digest, as the log holds it, and the query as it was
+/// decoded.
 pub fn asks(exchange: &Exchange, claim: &Claim) -> bool {
     exchange.method == claim.method
         && paths::matches(&claim.path, &exchange.path)
@@ -447,20 +468,42 @@ pub fn asks(exchange: &Exchange, claim: &Claim) -> bool {
             header(exchange, name).is_some_and(|held| held == header_value(name, value))
         })
         && claim.without.iter().all(|name| header(exchange, name).is_none())
-        && ((claim.query_with.is_empty() && claim.query_without.is_empty())
+        && ((claim.query_with.is_empty()
+            && claim.query_contains.is_empty()
+            && claim.query_without.is_empty())
             || asks_query(&mockforge_openapi::answers::decoded(&exchange.query), claim))
         && claim
             .body_contains
             .as_deref()
             .is_none_or(|text| exchange.request_body.contains(text))
+        && asks_body(&exchange.request_body, claim)
 }
 
-/// Whether the parameters of a query are those a claim names.
+/// Whether the fields of a JSON body are those a claim names: each holds its
+/// text, at the top of the body or anywhere inside it. A body that is not
+/// whole JSON holds nothing.
+fn asks_body(body: &str, claim: &Claim) -> bool {
+    claim.body_with.is_empty()
+        || serde_json::from_str::<Value>(body).is_ok_and(|document| {
+            claim.body_with.iter().all(|(field, holds)| {
+                holds
+                    .texts()
+                    .iter()
+                    .any(|text| mockforge_openapi::answers::field_holds(&document, field, text))
+            })
+        })
+}
+
+/// Whether the parameters of a query are those a claim names: each it must
+/// carry is there, with its value or holding its text.
 fn asks_query(query: &[(String, String)], claim: &Claim) -> bool {
     claim
         .query_with
         .iter()
         .all(|(name, value)| query.iter().any(|(held, asked)| held == name && asked == value))
+        && claim.query_contains.iter().all(|(name, holds)| {
+            query.iter().any(|(held, asked)| held == name && holds.met_by(asked))
+        })
         && claim
             .query_without
             .iter()
@@ -515,11 +558,51 @@ pub fn lacks(exchange: &Exchange, serves: &Serves) -> Option<String> {
             return Some(format!("{answered}, which does not carry `{name}` set to {value}"));
         }
     }
-    serves
+    if let Some(name) = serves
         .lacks_header
         .iter()
         .find(|name| response_header(exchange, name).is_some())
-        .map(|name| format!("{answered}, which carries a `{name}` header"))
+    {
+        return Some(format!("{answered}, which carries a `{name}` header"));
+    }
+    for name in &serves.reflects {
+        let Some(sent) = sent_as(exchange, name) else {
+            return Some(format!(
+                "{answered}, which does not hold `{name}` as it was sent: the request sent none"
+            ));
+        };
+        if !holds_sent(exchange, &sent) {
+            return Some(format!("{answered}, which does not hold `{name}` as it was sent"));
+        }
+    }
+    None
+}
+
+/// What a request sent for a name: the last value of the parameter of its
+/// query, or else what the field of its JSON body holds. `None` when the
+/// request sent nothing by that name.
+fn sent_as(exchange: &Exchange, name: &str) -> Option<String> {
+    let sent = |value: &str| (!value.is_empty()).then(|| value.to_string());
+    mockforge_openapi::answers::decoded(&exchange.query)
+        .into_iter()
+        .rev()
+        .find(|(held, _)| held == name)
+        .and_then(|(_, value)| sent(&value))
+        .or_else(|| {
+            serde_json::from_str::<Value>(&exchange.request_body)
+                .ok()
+                .and_then(|document| mockforge_openapi::answers::field_text(&document, name))
+                .and_then(|value| sent(&value))
+        })
+}
+
+/// Whether an answer holds a value as it was sent, in its body or in a
+/// header: as the text, or as JSON writes it inside a string.
+fn holds_sent(exchange: &Exchange, sent: &str) -> bool {
+    let written = serde_json::to_string(sent).unwrap_or_default();
+    exchange.response_body.contains(sent)
+        || exchange.response_body.contains(written.trim_matches('"'))
+        || exchange.response_headers.values().any(|value| value.contains(sent))
 }
 
 /// What an answer the spec gives by request lacks to be the one `serves`
@@ -556,6 +639,15 @@ pub fn answer_shows(answer: &Answer, serves: &Serves) -> Option<String> {
             .any(|(held, held_value)| held.eq_ignore_ascii_case(name) && held_value != value)
         {
             return Some(format!("carries `{name}` set to another value, not {value}"));
+        }
+    }
+    for name in &serves.reflects {
+        // Said back with a token of the request, which is read when it comes.
+        let in_query = format!("{{{{request.query.{name}}}}}");
+        let in_body = format!("{{{{request.body.{name}}}}}");
+        let says = |held: &str| held.contains(&in_query) || held.contains(&in_body);
+        if !says(&text) && !answer.then.headers.values().any(|value| says(value)) {
+            return Some(format!("does not say `{name}` back as it was sent"));
         }
     }
     serves
@@ -619,6 +711,7 @@ mod tests {
     use super::*;
     use crate::range::exchange::digest;
     use crate::range::testing::{exchange, pack};
+    use crate::range::Proof;
     use std::collections::BTreeMap;
 
     /// The same exchange with no credential at all.
@@ -743,6 +836,269 @@ mod tests {
             &redeem.prove.claim
         ));
         assert!(profile.prove.claim.with.is_empty() && profile.prove.claim.without.is_empty());
+    }
+
+    #[test]
+    fn the_fields_of_the_json_body_a_proof_names_are_looked_for_in_its_json() {
+        let operator = |fields: &[(&str, &str)]| Claim {
+            method: "POST".to_string(),
+            path: "/login".to_string(),
+            with: BTreeMap::new(),
+            without: Vec::new(),
+            query_with: BTreeMap::new(),
+            query_contains: BTreeMap::new(),
+            query_without: Vec::new(),
+            body_contains: None,
+            times: None,
+            body_with: fields
+                .iter()
+                .map(|(field, text)| (field.to_string(), (*text).into()))
+                .collect(),
+        };
+        let password = operator(&[("password", "$gt")]);
+        let sent = |body: &str| asking(exchange(1, "POST", "/login", 200, ""), body);
+        // At the top of the body, and inside it; the value is read as JSON
+        // writes it when it is not a string.
+        assert!(asks(&sent(r#"{"email":"ada@example.com","password":{"$gt":""}}"#), &password));
+        assert!(asks(&sent(r#"{"user":{"password":{"$gt":""}}}"#), &password));
+        // Another field's value, a parameter of the query, a body that is not
+        // whole JSON, and the method.
+        for body in [
+            r#"{"email":{"$gt":""},"password":"hunter2"}"#,
+            r#"{"password":"hunter2"}"#,
+            "password=%24gt",
+            r#"{"password":{"$gt":""}"#,
+            "",
+        ] {
+            assert!(!asks(&sent(body), &password), "{body}");
+        }
+        assert!(!asks(
+            &asking(exchange(2, "GET", "/login", 200, ""), r#"{"password":{"$gt":""}}"#),
+            &password
+        ));
+        // Several fields: each must hold its text.
+        let both = operator(&[("password", "$gt"), ("role", "admin")]);
+        assert!(asks(&sent(r#"{"password":{"$gt":""},"role":"admin"}"#), &both));
+        assert!(!asks(&sent(r#"{"password":{"$gt":""},"role":"customer"}"#), &both));
+
+        // Judged: found at the exchange whose request holds the operator and
+        // whose answer shows what it should not.
+        let mut pack = pack();
+        pack.flaws = vec![Flaw {
+            id: "login-takes-an-operator".to_string(),
+            title: "A document query takes an operator where a value was expected".to_string(),
+            severity: Severity::Critical,
+            cwe: None,
+            owasp: None,
+            prove: Proof {
+                claim: password.clone(),
+                serves: Serves {
+                    status: Some(200),
+                    has: BTreeMap::from([("authenticated".to_string(), Value::from(true))]),
+                    ..Serves::default()
+                },
+            },
+        }];
+        let ordinary = asking(
+            exchange(1, "POST", "/login", 200, r#"{"authenticated":true}"#),
+            r#"{"email":"ada@example.com","password":"hunter2"}"#,
+        );
+        let none = judge(&pack, std::slice::from_ref(&ordinary));
+        assert_eq!(
+            verdict(&none, "login-takes-an-operator").why,
+            "never asked for POST /login with `password` holding `$gt` in the body"
+        );
+        assert_eq!(verdict(&none, "login-takes-an-operator").finding, Finding::Missed);
+        let shown = asking(
+            exchange(2, "POST", "/login", 200, r#"{"authenticated":true,"user":{"id":"u_1024"}}"#),
+            r#"{"email":"ada@example.com","password":{"$gt":""}}"#,
+        );
+        let found = judge(&pack, &[ordinary, shown]);
+        let found_verdict = verdict(&found, "login-takes-an-operator");
+        assert_eq!(
+            (found_verdict.finding, found_verdict.asked, found_verdict.exchange),
+            (Finding::Found, 1, Some(2))
+        );
+        assert_eq!(
+            found_verdict.why,
+            "POST /login with `password` holding `$gt` in the body answered 200"
+        );
+    }
+
+    #[test]
+    fn a_flaw_is_proved_by_what_a_request_holds_and_not_by_one_injection() {
+        // The mark the answer is given for, as a kind of the catalogue plants it.
+        let mark = Claim {
+            method: "GET".to_string(),
+            path: "/orders".to_string(),
+            with: BTreeMap::new(),
+            without: Vec::new(),
+            query_with: BTreeMap::new(),
+            query_contains: BTreeMap::from([("q".to_string(), "' OR ".into())]),
+            query_without: Vec::new(),
+            body_contains: None,
+            body_with: BTreeMap::new(),
+            times: None,
+        };
+        assert_eq!(mark.label(), "GET /orders with `q` holding `' OR ` in the query");
+        let asking_for = |seq: u64, query: &str, status: u16, body: &str| Exchange {
+            query: query.to_string(),
+            ..exchange(seq, "GET", "/orders", status, body)
+        };
+        // The catalogue's own injection, an agent's, and the mark alone.
+        for query in [
+            "q=%27%20OR%20%271%27%3D%271%27%20--",
+            "q=shoes%27%20OR%201%3D1--",
+            "q=%27%20OR%20",
+        ] {
+            assert!(asks(&asking_for(1, query, 200, ""), &mark), "{query}");
+        }
+        // Another parameter's, a plain search, and the mark in another case.
+        for query in ["term=%27%20OR%20", "q=shoes", "q=%27%20or%20", ""] {
+            assert!(!asks(&asking_for(2, query, 200, ""), &mark), "{query}");
+        }
+        // A parameter it must carry with its value is still required.
+        let paged = Claim {
+            query_with: BTreeMap::from([("page".to_string(), "2".to_string())]),
+            ..mark.clone()
+        };
+        assert!(asks(&asking_for(3, "page=2&q=%27%20OR%201", 200, ""), &paged));
+        assert!(!asks(&asking_for(4, "q=%27%20OR%201", 200, ""), &paged));
+
+        // Judged: the agent's own injection is found when the mock answered it
+        // as the flaw says, and the same request answered as recorded is not.
+        let mut pack = pack();
+        pack.flaws = vec![Flaw {
+            id: "orders-search-injection".to_string(),
+            title: "A search term is put into SQL".to_string(),
+            severity: Severity::Critical,
+            cwe: None,
+            owasp: None,
+            prove: Proof {
+                claim: mark.clone(),
+                serves: Serves {
+                    status: Some(500),
+                    has_text: Some("SQL syntax".to_string()),
+                    ..Serves::default()
+                },
+            },
+        }];
+        let plain = asking_for(1, "q=shoes%27%20OR%201%3D1--", 200, r#"[{"id":5000}]"#);
+        let not_shown = judge(&pack, std::slice::from_ref(&plain));
+        assert_eq!(verdict(&not_shown, "orders-search-injection").finding, Finding::Requested);
+        let weak = asking_for(2, "q=shoes%27%20OR%201%3D1--", 500, r#"{"error":"SQL syntax"}"#);
+        let found = judge(&pack, &[plain, weak]);
+        let found_verdict = verdict(&found, "orders-search-injection");
+        assert_eq!(
+            (found_verdict.finding, found_verdict.asked, found_verdict.exchange),
+            (Finding::Found, 2, Some(2))
+        );
+        assert_eq!(
+            found_verdict.why,
+            "GET /orders with `q` holding `' OR ` in the query answered 500"
+        );
+    }
+
+    #[test]
+    fn an_answer_is_shown_by_what_the_request_sent() {
+        let serves = Serves {
+            reflects: vec!["q".to_string()],
+            ..Serves::default()
+        };
+        let mut sent = exchange(1, "GET", "/search", 200, "");
+        sent.query = "q=%3Cscript%3E".to_string();
+        // Said back as it was sent.
+        sent.response_body = r#"{"search": "<script>"}"#.to_string();
+        assert_eq!(lacks(&sent, &serves), None);
+        // Said back as JSON writes it inside a string.
+        sent.query = "q=%3Cscript%20src%3D%22x%22%3E".to_string();
+        sent.response_body = r#"{"search": "<script src=\"x\">"}"#.to_string();
+        assert_eq!(lacks(&sent, &serves), None);
+        // Said back escaped for a browser: not as it was sent.
+        sent.response_body = r#"{"search": "&lt;script src=&quot;x&quot;&gt;"}"#.to_string();
+        assert_eq!(
+            lacks(&sent, &serves),
+            Some("answered 200, which does not hold `q` as it was sent".to_string())
+        );
+        // Said back in a header, as a redirect says the address it was asked for.
+        sent.response_body = String::new();
+        sent.status = 302;
+        sent.response_headers =
+            BTreeMap::from([("location".to_string(), "<script src=\"x\">".to_string())]);
+        assert_eq!(lacks(&sent, &serves), None);
+        // A parameter of the query or a field of the body, whichever was sent.
+        sent.query = String::new();
+        sent.request_body = r#"{"q": "<script>"}"#.to_string();
+        sent.response_body = r#"{"echo": "<script>"}"#.to_string();
+        assert_eq!(lacks(&sent, &serves), None);
+        // Sent by no name the answer is asked about.
+        sent.request_body = r#"{"term": "<script>"}"#.to_string();
+        assert_eq!(
+            lacks(&sent, &serves),
+            Some(
+                "answered 302, which does not hold `q` as it was sent: the request sent none"
+                    .to_string()
+            )
+        );
+    }
+
+    #[test]
+    fn a_flaw_is_shown_by_how_many_times_a_request_came() {
+        let mut pack = pack();
+        pack.flaws = vec![Flaw {
+            id: "orders-without-a-limit".to_string(),
+            title: "Nothing limits how often an order is asked".to_string(),
+            severity: Severity::Medium,
+            cwe: None,
+            owasp: None,
+            prove: Proof {
+                claim: Claim {
+                    method: "GET".to_string(),
+                    path: "/orders/{id}".to_string(),
+                    with: BTreeMap::new(),
+                    without: Vec::new(),
+                    query_with: BTreeMap::new(),
+                    query_contains: BTreeMap::new(),
+                    query_without: Vec::new(),
+                    body_contains: None,
+                    body_with: BTreeMap::new(),
+                    times: Some(3),
+                },
+                serves: Serves {
+                    status: Some(200),
+                    ..Serves::default()
+                },
+            },
+        }];
+        let order =
+            |seq: u64, status: u16| exchange(seq, "GET", &format!("/orders/{seq}"), status, "");
+        // Twice is not three times: how many did is said.
+        let twice = judge(&pack, &[order(1, 200), order(2, 200)]);
+        let verdict_twice = verdict(&twice, "orders-without-a-limit");
+        assert_eq!(
+            (verdict_twice.finding, verdict_twice.asked, verdict_twice.exchange),
+            (Finding::Requested, 2, Some(2))
+        );
+        assert_eq!(verdict_twice.why, "GET /orders/{id} answered 200 2 time(s) of 3");
+        // The third shows it, where the count is reached, and more are counted.
+        let found = judge(&pack, &[order(1, 200), order(2, 200), order(3, 200), order(4, 200)]);
+        let verdict_found = verdict(&found, "orders-without-a-limit");
+        assert_eq!(
+            (verdict_found.finding, verdict_found.asked, verdict_found.exchange),
+            (Finding::Found, 4, Some(3))
+        );
+        assert_eq!(verdict_found.why, "GET /orders/{id} answered 200 4 time(s)");
+        // Answered another way every time: the last says how.
+        let other = judge(&pack, &[order(1, 403), order(2, 429)]);
+        assert_eq!(
+            verdict(&other, "orders-without-a-limit").why,
+            "GET /orders/{id} answered 429, not 200"
+        );
+        let none = judge(&pack, &[]);
+        assert_eq!(
+            verdict(&none, "orders-without-a-limit").why,
+            "never asked for GET /orders/{id}"
+        );
     }
 
     #[test]

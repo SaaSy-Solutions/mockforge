@@ -829,6 +829,7 @@ mockforge range new --har traffic.har --id orders
 mockforge range flaws
 mockforge range new --har traffic.har --id orders --flaw no-credential --at "POST /v1/orders"
 mockforge range new --har search.har --id search --flaw sql-injection:q --at "GET /v1/search"
+mockforge range new --har login.har --id login --flaw nosql-injection:body.password --at "POST /v1/login"
 mockforge serve --spec shop.json --http-port 8080 --exchange-log exchanges.jsonl
 mockforge range judge --pack shop.pack.json --exchanges exchanges.jsonl
 mockforge range compare --pack shop.pack.json --run scout=scout.jsonl --run reader=reader.jsonl
@@ -868,12 +869,14 @@ mockforge range run --pack shop.pack.json --agent "my-agent --target {url} --rep
 - `--keep-keys`: keep a key of a known shape as it was recorded. Without it,
   each is replaced by a made-up key of the same shape, and the command says
   how many.
-- `--flaw <KIND[:PARAMETER]>`: a kind of flaw to plant, by its id as
-  `range flaws` lists it. Each is planted at the operation of the `--at` of
-  its place. A kind injected through a query parameter takes the parameter's
-  name after a colon, `sql-injection:q`: it is planted as an answer by
+- `--flaw <KIND[:PARAMETER|:body.FIELD]>`: a kind of flaw to plant, by its id
+  as `range flaws` lists it. Each is planted at the operation of the `--at`
+  of its place. A kind injected through a query parameter takes the
+  parameter's name after a colon, `sql-injection:q`; one injected through a
+  field of the JSON request body takes `body.` and the field's name,
+  `nosql-injection:body.password`. Either is planted as an answer by
   request, given only to a request that carries the injection, and the
-  operation must declare the parameter.
+  operation must declare the parameter or the field.
 - `--at <METHOD PATH>`: where to plant a flaw: a path of the pack. There is
   one for each `--flaw`.
 - `--force`: replace files that are already there.
@@ -940,17 +943,30 @@ request that proves it, the answer that shows it, its CWE and OWASP
 category, and the SemSec rules whose class it is. `range new` plants a
 kind at an operation with `--flaw KIND --at "METHOD PATH"`: the operation's
 answer is changed as the kind says, and the flaw that proves it is added to
-the pack with its class. Seven kinds are injected through a query parameter
-and take its name after a colon, `--flaw sql-injection:q`: the operation
+the pack with its class. Eight kinds are injected through the request and
+take its name after a colon: six through a query parameter or a field of
+the JSON body, `--flaw sql-injection:q` or `--flaw sql-injection:body.q`; a
+reflected script through a query parameter alone; and a NoSQL injection
+through a field alone, `--flaw nosql-injection:body.password`. The operation
 answers the request that carries the injection, and every other request as it
 did.
 
 A proving request may name the query string: `query_with` names parameters it
-must carry, with their values, and `query_without` names those it must not.
-The answer that shows a flaw may name its headers: `has_header` and
-`lacks_header`. An operation of a pack's spec may give answers by request
-(`x-mockforge-answers`), which is how an injected weakness is planted
-honestly.
+must carry, with their values, `query_contains` names those whose value must
+hold a text, and `query_without` names those it must not. It may name the
+fields of a JSON body: `body_with` names those whose value must hold a text,
+wherever in the body the field is. A text may be a list, any of which the value
+may hold. It may say how many times the request must have come, with `times`:
+a limit that is not there is shown by the same request answered again and
+again. A kind planted from the catalogue is proved by the marks its answer is
+given for, and every kind that is injected has several, as an API that has the
+weakness answers them alike: so every request the mock answered weakly counts,
+and not one injection the kind was written with. The answer that shows a flaw
+may name its headers, `has_header` and `lacks_header`, and what the request
+sent, with `reflects`: a script reflected back, the address a redirect is
+opened to. An operation of
+a pack's spec may give answers by request (`x-mockforge-answers`), which is
+how an injected weakness is planted honestly.
 
 `range judge` reads that log against the pack. A flaw is `found` when its
 proving request reached the mock and the mock answered as the pack says,

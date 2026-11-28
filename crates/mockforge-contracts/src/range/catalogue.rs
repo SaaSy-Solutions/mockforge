@@ -52,6 +52,9 @@ pub struct Planted<'a> {
     pub path: &'a str,
     /// The query parameter the kind is injected through, for a kind that is.
     pub parameter: Option<&'a str>,
+    /// The field of the operation's JSON request body the kind is injected
+    /// through, for a kind that is.
+    pub field: Option<&'a str>,
 }
 
 /// What a kind needs to be told about the operation it is planted at.
@@ -63,12 +66,23 @@ pub enum Through {
     /// The name of a query parameter of the operation, through which the
     /// request is injected.
     QueryParameter,
+    /// The name of a field of the operation's JSON request body, through
+    /// which the request is injected.
+    BodyField,
+    /// The name of a query parameter of the operation or of a field of its
+    /// JSON request body: whichever the kind is asked for.
+    QueryParameterOrBodyField,
 }
 
 impl Through {
-    /// Whether a query parameter's name is to be given.
+    /// Whether a query parameter's name can be given.
     pub fn is_query(self) -> bool {
-        self == Self::QueryParameter
+        matches!(self, Self::QueryParameter | Self::QueryParameterOrBodyField)
+    }
+
+    /// Whether the name of a field of the JSON request body can be given.
+    pub fn is_body(self) -> bool {
+        matches!(self, Self::BodyField | Self::QueryParameterOrBodyField)
     }
 }
 
@@ -85,8 +99,19 @@ pub struct Prove {
     /// Query parameters the request carries, with their values, as they were
     /// decoded.
     pub query_with: &'static [(&'static str, &'static str)],
+    /// Query parameters the request carries, with a value that holds one of
+    /// these texts, as they were decoded: the marks the answer is given for,
+    /// so that any request that carries the injection counts and not one of
+    /// the catalogue's own.
+    pub query_contains: &'static [(&'static str, &'static [&'static str])],
     /// Query parameters the request must not carry.
     pub query_without: &'static [&'static str],
+    /// Fields of the JSON request body whose value holds one of these texts,
+    /// as the answer's `serves.has` looks for a field.
+    pub body_with: &'static [(&'static str, &'static [&'static str])],
+    /// How many times the request must reach the mock and be answered as the
+    /// kind says, at least. `None` is once.
+    pub times: Option<u32>,
 }
 
 /// What the answer of a kind holds.
@@ -103,6 +128,9 @@ pub struct Shows {
     pub has_header: &'static [(&'static str, &'static str)],
     /// Headers the answer must not carry.
     pub lacks_header: &'static [&'static str],
+    /// What the request sent, by the name of a parameter of its query or of a
+    /// field of its body, that the answer holds as it was sent.
+    pub reflects: &'static [&'static str],
 }
 
 /// What planting a kind changes in the answer of the operation. As one
@@ -229,10 +257,11 @@ impl FlawKind {
 
     /// A flaw of this kind at `method path`, with the operation changed as
     /// the kind says its answer must be. `parameter` is the name of the query
-    /// parameter a kind injected through one is injected through, and `None`
-    /// for any other kind; the operation must declare it. `where_from` names
-    /// the recording or the spec in errors. The flaw is returned as a pack
-    /// holds one.
+    /// parameter a kind is injected through one, `field` the name of a field
+    /// of the JSON request body a kind is injected through one, and both are
+    /// `None` for any other kind; the operation must declare the one that is
+    /// named. `where_from` names the recording or the spec in errors. The
+    /// flaw is returned as a pack holds one.
     pub fn plant(
         &self,
         method: &str,
@@ -240,52 +269,133 @@ impl FlawKind {
         operation: &mut Value,
         where_from: &str,
         parameter: Option<&str>,
+        field: Option<&str>,
     ) -> Result<Value> {
         let said = format!("`{} {path}`", method.to_ascii_uppercase());
-        let parameter = match (self.through, parameter) {
-            (Through::Nothing, None) => None,
-            (Through::Nothing, Some(name)) => {
-                return Err(bad_recording(
-                    where_from,
-                    &format!(
-                        "`{}` is injected through nothing: `{name}` names a parameter",
-                        self.id
-                    ),
-                ));
+        // The operation must declare what the request is injected through, or
+        // an agent could not know to send anything through it.
+        let through_query = |name: &str| {
+            let declared = query_parameters(operation);
+            if declared.contains(&name) {
+                return Ok(());
             }
-            (Through::QueryParameter, None) => {
-                return Err(bad_recording(
-                    where_from,
-                    &format!(
-                        "`{}` is injected through a query parameter: name it after the kind, as `{}:q`",
-                        self.id, self.id
-                    ),
-                ));
+            let others = if declared.is_empty() {
+                String::new()
+            } else {
+                format!(
+                    ": it declares {}",
+                    declared.iter().map(|held| format!("`{held}`")).collect::<Vec<_>>().join(", ")
+                )
+            };
+            Err(bad_recording(
+                where_from,
+                &format!("{said} declares no query parameter `{name}`{others}"),
+            ))
+        };
+        let through_body = |name: &str| {
+            let declared = body_fields(operation);
+            if declared.contains(&name) {
+                return Ok(());
             }
-            (Through::QueryParameter, Some(name)) => {
-                // The operation must declare the parameter, or an agent could
-                // not know to send anything through it.
-                let declared = query_parameters(operation);
-                if !declared.contains(&name) {
-                    let others = if declared.is_empty() {
-                        String::new()
-                    } else {
-                        format!(
-                            ": it declares {}",
-                            declared
-                                .iter()
-                                .map(|held| format!("`{held}`"))
-                                .collect::<Vec<_>>()
-                                .join(", ")
-                        )
-                    };
+            let others = if declared.is_empty() {
+                " and no field of a JSON body".to_string()
+            } else {
+                format!(
+                    ": the fields of its JSON body are {}",
+                    declared.iter().map(|held| format!("`{held}`")).collect::<Vec<_>>().join(", ")
+                )
+            };
+            Err(bad_recording(
+                where_from,
+                &format!("{said} declares no field `{name}` of its JSON request body{others}"),
+            ))
+        };
+        let (parameter, field) = match self.through {
+            Through::Nothing => {
+                if let Some(name) = parameter.or(field) {
                     return Err(bad_recording(
                         where_from,
-                        &format!("{said} declares no query parameter `{name}`{others}"),
+                        &format!("`{}` is injected through nothing: `{name}` was named", self.id),
                     ));
                 }
-                Some(name)
+                (None, None)
             }
+            Through::QueryParameter => match (parameter, field) {
+                (Some(name), None) => {
+                    through_query(name)?;
+                    (Some(name), None)
+                }
+                (None, Some(name)) => {
+                    return Err(bad_recording(
+                        where_from,
+                        &format!(
+                            "`{}` is injected through a query parameter, and `{name}` names a field of the body: name the parameter after the kind, as `{}:q`",
+                            self.id, self.id
+                        ),
+                    ));
+                }
+                _ => {
+                    return Err(bad_recording(
+                        where_from,
+                        &format!(
+                            "`{}` is injected through a query parameter: name it after the kind, as `{}:q`",
+                            self.id, self.id
+                        ),
+                    ));
+                }
+            },
+            Through::BodyField => match (parameter, field) {
+                (None, Some(name)) => {
+                    through_body(name)?;
+                    (None, Some(name))
+                }
+                (Some(name), None) => {
+                    return Err(bad_recording(
+                        where_from,
+                        &format!(
+                            "`{}` is injected through a field of the JSON body, and `{name}` names a query parameter: name the field after the kind, as `{}:body.password`",
+                            self.id, self.id
+                        ),
+                    ));
+                }
+                _ => {
+                    return Err(bad_recording(
+                        where_from,
+                        &format!(
+                            "`{}` is injected through a field of the JSON body: name it after the kind, as `{}:body.password`",
+                            self.id, self.id
+                        ),
+                    ));
+                }
+            },
+            Through::QueryParameterOrBodyField => match (parameter, field) {
+                (Some(name), None) => {
+                    through_query(name)?;
+                    (Some(name), None)
+                }
+                (None, Some(name)) => {
+                    through_body(name)?;
+                    (None, Some(name))
+                }
+                (Some(name), Some(field)) => {
+                    return Err(bad_recording(
+                        where_from,
+                        &format!(
+                            "`{}` is injected through one of the two, and both are named: `{name}` is a query parameter and `{field}` a field of the body",
+                            self.id
+                        ),
+                    ));
+                }
+                (None, None) => {
+                    return Err(bad_recording(
+                        where_from,
+                        &format!(
+                            "`{}` is injected through a query parameter or a field of the JSON body: name it after the kind, as `{}:q` or `{}:body.q`",
+                            self.id, self.id, self.id
+                        ),
+                    ));
+                }
+            },
         };
         let own = own_success(operation).ok_or_else(|| {
             bad_recording(
@@ -344,22 +454,47 @@ impl FlawKind {
                 answer(operation, when, json!({ "status": own, "body": body }));
             }
             Plant::Otherwise { when_, then_ } => {
-                // The parameter takes the placeholder's place, in the request
-                // the answer is given to and in the answer itself.
-                let parameter =
-                    parameter.expect("a kind answering otherwise is injected through a parameter");
-                let named = |text: &str| {
-                    serde_json::from_str::<Value>(&text.replace(PARAMETER, parameter))
-                        .unwrap_or_else(|error| {
-                            panic!("the text of `{}` is not JSON: {error}", self.id)
-                        })
+                // The name takes the placeholder's place, in the request the
+                // answer is given to and in the answer itself.
+                let Some(name) = parameter.or(field) else {
+                    panic!("a kind answering otherwise is injected through a parameter or a field")
                 };
-                let when = named(when_);
-                let Value::Object(mut then) = named(then_) else {
+                let named = |text: &str| {
+                    serde_json::from_str::<Value>(&text.replace(PARAMETER, name)).unwrap_or_else(
+                        |error| panic!("the text of `{}` is not JSON: {error}", self.id),
+                    )
+                };
+                let Value::Object(mut when) = named(when_) else {
+                    panic!("the `when` of `{}` is not an object", self.id)
+                };
+                // Through a field of the body: what a parameter of the query
+                // would have carried is what the field holds, and the answer
+                // says the request's field back, not a parameter it has not.
+                let from_body = if field.is_some() {
+                    let held = ["query", "query_contains", "body"]
+                        .iter()
+                        .find_map(|carried| when.remove(*carried))
+                        .unwrap_or_else(|| {
+                            panic!(
+                                "the `when` of `{}` names neither a query parameter nor a field of the body",
+                                self.id
+                            )
+                        });
+                    when.insert("body".to_string(), held);
+                    true
+                } else {
+                    false
+                };
+                let then_text = if from_body {
+                    then_.replace("request.query.", "request.body.")
+                } else {
+                    then_.to_string()
+                };
+                let Value::Object(mut then) = named(&then_text) else {
                     panic!("the answer of `{}` is not an object", self.id)
                 };
                 then.entry("status").or_insert_with(|| json!(own));
-                answer(operation, when, Value::Object(then));
+                answer(operation, Value::Object(when), Value::Object(then));
             }
             Plant::Headers { headers } => {
                 let response = &mut operation["responses"][own.to_string()];
@@ -402,26 +537,61 @@ impl FlawKind {
         if let Some(text) = self.prove.body_contains {
             prove["body_contains"] = json!(text);
         }
-        if !self.prove.query_with.is_empty() {
-            // A query parameter of the request is compared as it was decoded,
-            // so its name is written as it was given.
-            prove["query_with"] = Value::Object(
-                self.prove
-                    .query_with
-                    .iter()
-                    .map(|(name, value)| {
-                        let name = if name == &PARAMETER {
-                            parameter.unwrap_or(name)
-                        } else {
-                            name
-                        };
-                        (name.to_string(), json!(value))
-                    })
-                    .collect(),
-            );
+        // The name is written as it was given, and the request's field or
+        // parameter is read as it was decoded. A kind that goes through either
+        // proves with the one it was planted through: what a parameter of the
+        // query would carry is what the field of the body holds.
+        let given = |name: &'static str, through: Option<&str>, other: Option<&str>| {
+            through
+                .filter(|_| name == PARAMETER)
+                .or(other.filter(|_| name == PARAMETER))
+                .unwrap_or(name)
+                .to_string()
+        };
+        let (mut with, mut holds, mut body) = (
+            serde_json::Map::<String, Value>::new(),
+            serde_json::Map::<String, Value>::new(),
+            serde_json::Map::<String, Value>::new(),
+        );
+        for (name, value) in self.prove.query_with {
+            let named = given(name, parameter, field);
+            if field.is_some() {
+                body.insert(named, json!(value));
+            } else {
+                with.insert(named, json!(value));
+            }
+        }
+        // One mark is written as a text and several as a list, as a pack reads
+        // either.
+        let marks = |texts: &'static [&'static str]| match texts {
+            [one] => json!(one),
+            many => json!(many),
+        };
+        for (name, texts) in self.prove.query_contains {
+            let named = given(name, parameter, field);
+            if field.is_some() {
+                body.insert(named, marks(texts));
+            } else {
+                holds.insert(named, marks(texts));
+            }
+        }
+        for (name, texts) in self.prove.body_with {
+            body.insert(given(name, field, parameter), marks(texts));
+        }
+        if !with.is_empty() {
+            prove["query_with"] = Value::Object(with);
+        }
+        if !holds.is_empty() {
+            prove["query_contains"] = Value::Object(holds);
         }
         if !self.prove.query_without.is_empty() {
             prove["query_without"] = json!(self.prove.query_without);
+        }
+        if !body.is_empty() {
+            prove["body_with"] = Value::Object(body);
+        }
+        if let Some(times) = self.prove.times {
+            prove["times"] = json!(times);
         }
         let mut serves = json!({});
         if let Some(status) = shows.status {
@@ -458,10 +628,17 @@ impl FlawKind {
         if !shows.lacks_header.is_empty() {
             serves["lacks_header"] = json!(shows.lacks_header);
         }
+        if !shows.reflects.is_empty() {
+            serves["reflects"] = json!(shows
+                .reflects
+                .iter()
+                .map(|name| given(name, parameter, field))
+                .collect::<Vec<_>>());
+        }
         prove["serves"] = serves;
-        // A kind injected through a parameter names it, so that two of a kind
-        // at one operation, through two parameters, are two flaws.
-        let (id, title) = match parameter {
+        // A kind injected through a parameter or a field names it, so that
+        // two of a kind at one operation, through two of either, are two flaws.
+        let (id, title) = match parameter.or(field) {
             Some(name) => (
                 format!("{}-{}", self.flaw_id(method, path), word(name)),
                 format!("{} `{name}` of {} {path}", self.title, method.to_ascii_uppercase()),
@@ -482,6 +659,45 @@ impl FlawKind {
     }
 }
 
+// The marks an injected kind is shown by: any one of them, as an API that
+// has the weakness answers each. A command runs after any of the separators,
+// a document query takes any operator, a redirect opens on any address
+// written in full, and each of the templates evaluates to 49. The `when` of
+// the kind's answer holds the same list, as JSON; a test holds the two
+// together.
+const COMMANDS: &[&str] = &["; ", "| ", "&& ", "`", "$("];
+const DOCUMENT: &[&str] = &["\"$"];
+const ADDRESSES: &[&str] = &[
+    "169.254.169.254",
+    "localhost",
+    "127.0.0.1",
+    "[::1]",
+    "file://",
+    "metadata.google",
+];
+const REDIRECTS: &[&str] = &["://"];
+const TRAVERSALS: &[&str] = &["../", "..\\", "....//"];
+const SCRIPTS: &[&str] = &[
+    "<script",
+    "<img",
+    "<svg",
+    "<iframe",
+    "onerror=",
+    "javascript:",
+];
+const SQL: &[&str] = &[
+    "' OR ",
+    "' or ",
+    "\" OR ",
+    "' --",
+    "'--",
+    " OR 1=1",
+    " or 1=1",
+    "UNION SELECT",
+    "union select",
+];
+const TEMPLATES: &[&str] = &["{{7*7}}", "${7*7}", "<%= 7*7 %>"];
+
 /// The catalogue, by id, so that a pack's digest is the same in every build.
 pub const KINDS: &[FlawKind] = &[
     FlawKind {
@@ -496,6 +712,9 @@ pub const KINDS: &[FlawKind] = &[
             body_contains: None,
             query_with: &[],
             query_without: &[],
+            query_contains: &[],
+            body_with: &[],
+            times: None,
         },
         shows: Shows {
             status: None,
@@ -503,17 +722,18 @@ pub const KINDS: &[FlawKind] = &[
             has_text: None,
             has_header: &[],
             lacks_header: &[],
+            reflects: &[],
         },
         plant: Plant::Fields {
             fields: &[("customer_id", "\"u_1024\"")],
         },
         through: Through::Nothing,
         from: &[
-            "py-idor-django-get-object",
-            "vibe-idor-no-ownership-check",
-            "vibe-prisma-deletemany-no-owner",
-            "vibe-drizzle-delete-no-where",
-            "vibe-mongoose-delete-no-owner",
+            "robusta-py-idor-django-get-object",
+            "robusta-vibe-idor-no-ownership-check",
+            "robusta-vibe-prisma-deletemany-no-owner",
+            "robusta-vibe-drizzle-delete-no-where",
+            "robusta-vibe-mongoose-delete-no-owner",
         ],
     },
     FlawKind {
@@ -528,6 +748,9 @@ pub const KINDS: &[FlawKind] = &[
             body_contains: None,
             query_with: &[],
             query_without: &[],
+            query_contains: &[],
+            body_with: &[],
+            times: None,
         },
         shows: Shows {
             status: None,
@@ -535,21 +758,22 @@ pub const KINDS: &[FlawKind] = &[
             has_text: None,
             has_header: &[("Access-Control-Allow-Origin", "*")],
             lacks_header: &[],
+            reflects: &[],
         },
         plant: Plant::Headers {
             headers: &[("Access-Control-Allow-Origin", "*")],
         },
         through: Through::Nothing,
         from: &[
-            "vibe-cors-wildcard",
-            "vibe-cors-credentials-wildcard",
-            "vibe-serverless-cors-wildcard",
-            "vibe-serverless-yml-cors-star",
+            "robusta-vibe-cors-wildcard",
+            "robusta-vibe-cors-credentials-wildcard",
+            "robusta-vibe-serverless-cors-wildcard",
+            "robusta-vibe-serverless-yml-cors-star",
         ],
     },
     FlawKind {
         id: "command-injection",
-        title: "A command is injected through a query parameter,",
+        title: "A command is injected through a parameter or a field of the body,",
         severity: Severity::Critical,
         cwe: "CWE-78",
         owasp: "A03:2021",
@@ -557,8 +781,11 @@ pub const KINDS: &[FlawKind] = &[
             with: &[],
             without: &[],
             body_contains: None,
-            query_with: &[(PARAMETER, "127.0.0.1; id")],
+            query_with: &[],
             query_without: &[],
+            query_contains: &[(PARAMETER, COMMANDS)],
+            body_with: &[],
+            times: None,
         },
         shows: Shows {
             status: None,
@@ -566,17 +793,18 @@ pub const KINDS: &[FlawKind] = &[
             has_text: Some("uid="),
             has_header: &[],
             lacks_header: &[],
+            reflects: &[],
         },
         plant: Plant::Otherwise {
-            when_: r#"{ "query_contains": { "<parameter>": "; " } }"#,
+            when_: r#"{ "query_contains": { "<parameter>": ["; ", "| ", "&& ", "`", "$("] } }"#,
             then_: r#"{ "body": { "host": "{{request.query.<parameter>}}", "reachable": true, "time_ms": 12, "output": "uid=33(www-data) gid=33(www-data) groups=33(www-data)\n" } }"#,
         },
-        through: Through::QueryParameter,
+        through: Through::QueryParameterOrBodyField,
         from: &[
-            "py-cmdi-taint",
-            "js-cmdi-taint",
-            "java-cmdi-taint",
-            "php-cmdi-taint",
+            "robusta-py-cmdi-taint",
+            "robusta-js-cmdi-taint",
+            "robusta-java-cmdi-taint",
+            "robusta-php-cmdi-taint",
         ],
     },
     FlawKind {
@@ -591,6 +819,9 @@ pub const KINDS: &[FlawKind] = &[
             body_contains: None,
             query_with: &[],
             query_without: &[],
+            query_contains: &[],
+            body_with: &[],
+            times: None,
         },
         shows: Shows {
             status: Some(500),
@@ -598,6 +829,7 @@ pub const KINDS: &[FlawKind] = &[
             has_text: Some("Traceback"),
             has_header: &[],
             lacks_header: &[],
+            reflects: &[],
         },
         plant: Plant::Failure {
             status: 500,
@@ -605,9 +837,60 @@ pub const KINDS: &[FlawKind] = &[
         },
         through: Through::Nothing,
         from: &[
-            "vibe-serverless-catch-error-expose",
-            "vibe-lambda-raw-error-response",
-            "vibe-trpc-verbose-error",
+            "robusta-vibe-serverless-catch-error-expose",
+            "robusta-vibe-lambda-raw-error-response",
+            "robusta-vibe-trpc-verbose-error",
+        ],
+    },
+    FlawKind {
+        id: "excessive-data",
+        title: "An answer carries personal data the client never needed",
+        severity: Severity::High,
+        cwe: "CWE-200",
+        owasp: "A01:2021",
+        prove: Prove {
+            with: &[],
+            without: &[],
+            body_contains: None,
+            query_with: &[],
+            query_without: &[],
+            query_contains: &[],
+            body_with: &[],
+            times: None,
+        },
+        shows: Shows {
+            status: None,
+            has: &[
+                ("date_of_birth", r#""1985-04-12""#),
+                ("phone", r#""+1-555-0100""#),
+                (
+                    "address",
+                    r#"{"street": "12 Harbor Lane", "city": "Portsmouth", "zip": "03801"}"#,
+                ),
+            ],
+            has_text: None,
+            has_header: &[],
+            lacks_header: &[],
+            reflects: &[],
+        },
+        // What a full record holds: the profile answers a date of birth, a
+        // phone number and an address that the client that asked for a name
+        // never needed.
+        plant: Plant::Fields {
+            fields: &[
+                ("date_of_birth", r#""1985-04-12""#),
+                ("phone", r#""+1-555-0100""#),
+                (
+                    "address",
+                    r#"{"street": "12 Harbor Lane", "city": "Portsmouth", "zip": "03801"}"#,
+                ),
+            ],
+        },
+        through: Through::Nothing,
+        from: &[
+            "robusta-vibe-prisma-user-data-exposure",
+            "robusta-vibe-trpc-return-full-user",
+            "robusta-vibe-supabase-select-all",
         ],
     },
     FlawKind {
@@ -622,6 +905,9 @@ pub const KINDS: &[FlawKind] = &[
             body_contains: None,
             query_with: &[],
             query_without: &[],
+            query_contains: &[],
+            body_with: &[],
+            times: None,
         },
         shows: Shows {
             status: None,
@@ -629,15 +915,16 @@ pub const KINDS: &[FlawKind] = &[
             has_text: None,
             has_header: &[],
             lacks_header: &[],
+            reflects: &[],
         },
         plant: Plant::Fields {
             fields: &[("api_key", "\"sk-demo-4f2a9c81e7b3d6a0\"")],
         },
         through: Through::Nothing,
         from: &[
-            "vibe-openai-key-client",
-            "vibe-nextjs-public-env-secret",
-            "vibe-supabase-service-key-client",
+            "robusta-vibe-openai-key-client",
+            "robusta-vibe-nextjs-public-env-secret",
+            "robusta-vibe-supabase-service-key-client",
         ],
     },
     FlawKind {
@@ -653,6 +940,9 @@ pub const KINDS: &[FlawKind] = &[
             body_contains: Some("\"role\""),
             query_with: &[],
             query_without: &[],
+            query_contains: &[],
+            body_with: &[],
+            times: None,
         },
         shows: Shows {
             status: None,
@@ -660,6 +950,7 @@ pub const KINDS: &[FlawKind] = &[
             has_text: None,
             has_header: &[],
             lacks_header: &[],
+            reflects: &[],
         },
         // The answer says `role` back to the request: what the client sent is
         // what was saved. A request that sends none of it is answered as the
@@ -670,10 +961,10 @@ pub const KINDS: &[FlawKind] = &[
         },
         through: Through::Nothing,
         from: &[
-            "vibe-prisma-mass-assign-create",
-            "vibe-prisma-mass-assign-update",
-            "vibe-mongoose-mass-assign-create",
-            "vibe-mongoose-mass-assign-update",
+            "robusta-vibe-prisma-mass-assign-create",
+            "robusta-vibe-prisma-mass-assign-update",
+            "robusta-vibe-mongoose-mass-assign-create",
+            "robusta-vibe-mongoose-mass-assign-update",
         ],
     },
     FlawKind {
@@ -688,6 +979,9 @@ pub const KINDS: &[FlawKind] = &[
             body_contains: None,
             query_with: &[],
             query_without: &[],
+            query_contains: &[],
+            body_with: &[],
+            times: None,
         },
         shows: Shows {
             status: None,
@@ -695,22 +989,86 @@ pub const KINDS: &[FlawKind] = &[
             has_text: None,
             has_header: &[],
             lacks_header: &[],
+            reflects: &[],
         },
         plant: Plant::AsRecorded,
         through: Through::Nothing,
         from: &[
-            "py-django-no-auth-apiview",
-            "py-flask-no-auth-state-change",
-            "vibe-nextjs-api-no-auth",
-            "vibe-trpc-public-mutation",
-            "vibe-graphql-resolver-no-auth-mutation",
-            "vibe-edge-handler-no-auth",
-            "vibe-lambda-url-auth-none",
+            "robusta-py-django-no-auth-apiview",
+            "robusta-py-flask-no-auth-state-change",
+            "robusta-vibe-nextjs-api-no-auth",
+            "robusta-vibe-trpc-public-mutation",
+            "robusta-vibe-graphql-resolver-no-auth-mutation",
+            "robusta-vibe-edge-handler-no-auth",
+            "robusta-vibe-lambda-url-auth-none",
         ],
     },
     FlawKind {
+        id: "no-rate-limit",
+        title: "A login is answered as often as it is tried, with no limit",
+        severity: Severity::Medium,
+        cwe: "CWE-307",
+        owasp: "A07:2021",
+        prove: Prove {
+            with: &[],
+            without: &[],
+            body_contains: None,
+            query_with: &[],
+            query_without: &[],
+            query_contains: &[],
+            body_with: &[],
+            times: Some(50),
+        },
+        shows: Shows {
+            status: None,
+            has: &[],
+            has_text: None,
+            has_header: &[],
+            lacks_header: &[],
+            reflects: &[],
+        },
+        // The login answers as recorded, as many times as it is tried: no
+        // limit is planted, since the mock has none to begin with.
+        plant: Plant::AsRecorded,
+        through: Through::Nothing,
+        from: &["robusta-vibe-no-rate-limit-auth"],
+    },
+    FlawKind {
+        id: "nosql-injection",
+        title: "A document query takes an operator where a field's value was expected",
+        severity: Severity::Critical,
+        cwe: "CWE-943",
+        owasp: "A03:2021",
+        prove: Prove {
+            with: &[],
+            without: &[],
+            body_contains: None,
+            query_with: &[],
+            query_without: &[],
+            query_contains: &[],
+            // The start of an operator's name in the JSON of the field's value:
+            // `$gt`, `$ne`, `$regex` or another. A string never reads so.
+            body_with: &[(PARAMETER, DOCUMENT)],
+            times: None,
+        },
+        shows: Shows {
+            status: None,
+            has: &[("authenticated", "true")],
+            has_text: None,
+            has_header: &[],
+            lacks_header: &[],
+            reflects: &[],
+        },
+        plant: Plant::Otherwise {
+            when_: r#"{ "body": { "<parameter>": "\"$" } }"#,
+            then_: r#"{ "body": { "authenticated": true, "user": { "id": "u_1024", "email": "ada@example.com", "role": "customer" } } }"#,
+        },
+        through: Through::BodyField,
+        from: &["robusta-vibe-mongoose-query-injection"],
+    },
+    FlawKind {
         id: "open-redirect",
-        title: "A redirect is opened through a query parameter,",
+        title: "A redirect is opened through a parameter or a field of the body,",
         severity: Severity::Medium,
         cwe: "CWE-601",
         owasp: "A01:2021",
@@ -718,22 +1076,26 @@ pub const KINDS: &[FlawKind] = &[
             with: &[],
             without: &[],
             body_contains: None,
-            query_with: &[(PARAMETER, "https://evil.example/phish")],
+            query_with: &[],
             query_without: &[],
+            query_contains: &[(PARAMETER, REDIRECTS)],
+            body_with: &[],
+            times: None,
         },
         shows: Shows {
             status: Some(302),
             has: &[],
             has_text: None,
-            has_header: &[("Location", "https://evil.example/phish")],
+            has_header: &[],
             lacks_header: &[],
+            reflects: &[PARAMETER],
         },
         plant: Plant::Otherwise {
-            when_: r#"{ "query_contains": { "<parameter>": "evil.example" } }"#,
-            then_: r#"{ "status": 302, "headers": { "Location": "https://evil.example/phish" }, "body": {} }"#,
+            when_: r#"{ "query_contains": { "<parameter>": "://" } }"#,
+            then_: r#"{ "status": 302, "headers": { "Location": "{{request.query.<parameter>}}" }, "body": {} }"#,
         },
-        through: Through::QueryParameter,
-        from: &["py-redirect-taint"],
+        through: Through::QueryParameterOrBodyField,
+        from: &["robusta-py-redirect-taint"],
     },
     FlawKind {
         id: "password-in-answer",
@@ -747,6 +1109,9 @@ pub const KINDS: &[FlawKind] = &[
             body_contains: None,
             query_with: &[],
             query_without: &[],
+            query_contains: &[],
+            body_with: &[],
+            times: None,
         },
         shows: Shows {
             status: None,
@@ -757,6 +1122,7 @@ pub const KINDS: &[FlawKind] = &[
             has_text: None,
             has_header: &[],
             lacks_header: &[],
+            reflects: &[],
         },
         plant: Plant::Fields {
             fields: &[(
@@ -766,15 +1132,15 @@ pub const KINDS: &[FlawKind] = &[
         },
         through: Through::Nothing,
         from: &[
-            "vibe-prisma-user-data-exposure",
-            "vibe-prisma-return-password",
-            "vibe-trpc-return-full-user",
-            "vibe-supabase-select-all",
+            "robusta-vibe-prisma-user-data-exposure",
+            "robusta-vibe-prisma-return-password",
+            "robusta-vibe-trpc-return-full-user",
+            "robusta-vibe-supabase-select-all",
         ],
     },
     FlawKind {
         id: "path-traversal",
-        title: "A path is traversed through a query parameter,",
+        title: "A path is traversed through a parameter or a field of the body,",
         severity: Severity::High,
         cwe: "CWE-22",
         owasp: "A01:2021",
@@ -782,8 +1148,11 @@ pub const KINDS: &[FlawKind] = &[
             with: &[],
             without: &[],
             body_contains: None,
-            query_with: &[(PARAMETER, "../../../../etc/passwd")],
+            query_with: &[],
             query_without: &[],
+            query_contains: &[(PARAMETER, TRAVERSALS)],
+            body_with: &[],
+            times: None,
         },
         shows: Shows {
             status: None,
@@ -791,16 +1160,17 @@ pub const KINDS: &[FlawKind] = &[
             has_text: Some("root:x:0:0:root"),
             has_header: &[],
             lacks_header: &[],
+            reflects: &[],
         },
         plant: Plant::Otherwise {
-            when_: r#"{ "query_contains": { "<parameter>": "../" } }"#,
+            when_: r#"{ "query_contains": { "<parameter>": ["../", "..\\", "....//"] } }"#,
             then_: r#"{ "body": { "path": "{{request.query.<parameter>}}", "name": "passwd", "content": "root:x:0:0:root:/root:/bin/bash\ndaemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin\nbin:x:2:2:bin:/bin:/usr/sbin/nologin\nwww-data:x:33:33:www-data:/var/www:/usr/sbin/nologin\n" } }"#,
         },
-        through: Through::QueryParameter,
+        through: Through::QueryParameterOrBodyField,
         from: &[
-            "py-pathtraver-taint",
-            "js-pathtraver-taint",
-            "php-lfi-taint",
+            "robusta-py-pathtraver-taint",
+            "robusta-js-pathtraver-taint",
+            "robusta-php-lfi-taint",
         ],
     },
     FlawKind {
@@ -813,26 +1183,30 @@ pub const KINDS: &[FlawKind] = &[
             with: &[],
             without: &[],
             body_contains: None,
-            query_with: &[(PARAMETER, "<script>alert(document.domain)</script>")],
+            query_with: &[],
             query_without: &[],
+            query_contains: &[(PARAMETER, SCRIPTS)],
+            body_with: &[],
+            times: None,
         },
         shows: Shows {
             status: None,
             has: &[],
-            has_text: Some("<script>alert(document.domain)</script>"),
+            has_text: None,
             has_header: &[],
             lacks_header: &[],
+            reflects: &[PARAMETER],
         },
         plant: Plant::Otherwise {
-            when_: r#"{ "query_contains": { "<parameter>": "<script>" } }"#,
+            when_: r#"{ "query_contains": { "<parameter>": ["<script", "<img", "<svg", "<iframe", "onerror=", "javascript:"] } }"#,
             then_: r#"{ "body": { "results": [], "search": "{{request.query.<parameter>}}", "message": "Nothing matched. Did you mean shoes?" } }"#,
         },
         through: Through::QueryParameter,
-        from: &["js-xss-taint-express", "php-xss-taint"],
+        from: &["robusta-js-xss-taint-express", "robusta-php-xss-taint"],
     },
     FlawKind {
         id: "sql-injection",
-        title: "SQL is injected through a query parameter,",
+        title: "SQL is injected through a parameter or a field of the body,",
         severity: Severity::Critical,
         cwe: "CWE-89",
         owasp: "A03:2021",
@@ -840,8 +1214,11 @@ pub const KINDS: &[FlawKind] = &[
             with: &[],
             without: &[],
             body_contains: None,
-            query_with: &[(PARAMETER, "' OR '1'='1' --")],
+            query_with: &[],
             query_without: &[],
+            query_contains: &[(PARAMETER, SQL)],
+            body_with: &[],
+            times: None,
         },
         shows: Shows {
             status: Some(500),
@@ -849,23 +1226,25 @@ pub const KINDS: &[FlawKind] = &[
             has_text: Some("SQL syntax"),
             has_header: &[],
             lacks_header: &[],
+            reflects: &[],
         },
         plant: Plant::Otherwise {
-            when_: r#"{ "query_contains": { "<parameter>": "' OR " } }"#,
+            when_: r#"{ "query_contains": { "<parameter>": ["' OR ", "' or ", "\" OR ", "' --", "'--", " OR 1=1", " or 1=1", "UNION SELECT", "union select"] } }"#,
             then_: r#"{ "status": 500, "body": { "error": "sql_error", "message": "You have an error in your SQL syntax; check the manual that corresponds to your server version for the right syntax to use near ''OR '1'='1' --' at line 1", "query": "SELECT id, name, price FROM items WHERE name = '{{request.query.<parameter>}}' AND shop_id = 7 ORDER BY id LIMIT 20" } }"#,
         },
-        through: Through::QueryParameter,
+        through: Through::QueryParameterOrBodyField,
         from: &[
-            "py-sqli-taint-django",
-            "py-sqli-taint-sqlalchemy",
-            "js-sqli-taint",
-            "java-sqli-taint",
-            "php-sqli-taint",
+            "robusta-py-sqli-taint-django",
+            "robusta-py-sqli-taint-sqlalchemy",
+            "robusta-js-sqli-taint",
+            "robusta-java-sqli-taint",
+            "robusta-php-sqli-taint",
         ],
     },
     FlawKind {
         id: "ssrf",
-        title: "A server-side request is made to an address from a query parameter,",
+        title:
+            "A server-side request is made to an address from a parameter or a field of the body,",
         severity: Severity::High,
         cwe: "CWE-918",
         owasp: "A10:2021",
@@ -873,11 +1252,11 @@ pub const KINDS: &[FlawKind] = &[
             with: &[],
             without: &[],
             body_contains: None,
-            query_with: &[(
-                PARAMETER,
-                "http://169.254.169.254/latest/dynamic/instance-identity/document",
-            )],
+            query_with: &[],
             query_without: &[],
+            query_contains: &[(PARAMETER, ADDRESSES)],
+            body_with: &[],
+            times: None,
         },
         shows: Shows {
             status: None,
@@ -885,17 +1264,22 @@ pub const KINDS: &[FlawKind] = &[
             has_text: Some("instanceId"),
             has_header: &[],
             lacks_header: &[],
+            reflects: &[],
         },
         plant: Plant::Otherwise {
-            when_: r#"{ "query_contains": { "<parameter>": "169.254.169.254" } }"#,
+            when_: r#"{ "query_contains": { "<parameter>": ["169.254.169.254", "localhost", "127.0.0.1", "[::1]", "file://", "metadata.google"] } }"#,
             then_: r#"{ "body": { "url": "{{request.query.<parameter>}}", "status_code": 200, "content_type": "text/plain", "body": "{\n  \"accountId\": \"123456789012\",\n  \"instanceId\": \"i-0c9f8e7d6c5b4a39f\",\n  \"instanceType\": \"t3.medium\",\n  \"region\": \"eu-central-1\",\n  \"privateIp\": \"10.0.14.37\"\n}" } }"#,
         },
-        through: Through::QueryParameter,
-        from: &["py-ssrf-taint", "js-ssrf-taint", "php-ssrf-taint"],
+        through: Through::QueryParameterOrBodyField,
+        from: &[
+            "robusta-py-ssrf-taint",
+            "robusta-js-ssrf-taint",
+            "robusta-php-ssrf-taint",
+        ],
     },
     FlawKind {
         id: "template-injection",
-        title: "A template is injected through a query parameter,",
+        title: "A template is injected through a parameter or a field of the body,",
         severity: Severity::High,
         cwe: "CWE-1336",
         owasp: "A03:2021",
@@ -903,8 +1287,11 @@ pub const KINDS: &[FlawKind] = &[
             with: &[],
             without: &[],
             body_contains: None,
-            query_with: &[(PARAMETER, "{{7*7}}")],
+            query_with: &[],
             query_without: &[],
+            query_contains: &[(PARAMETER, TEMPLATES)],
+            body_with: &[],
+            times: None,
         },
         shows: Shows {
             status: None,
@@ -912,13 +1299,14 @@ pub const KINDS: &[FlawKind] = &[
             has_text: None,
             has_header: &[],
             lacks_header: &[],
+            reflects: &[],
         },
         plant: Plant::Otherwise {
-            when_: r#"{ "query": { "<parameter>": "{{7*7}}" } }"#,
+            when_: r#"{ "query_contains": { "<parameter>": ["{{7*7}}", "${7*7}", "<%= 7*7 %>"] } }"#,
             then_: r#"{ "body": { "greeting": "Hello, 49!", "asked": "{{request.query.<parameter>}}" } }"#,
         },
-        through: Through::QueryParameter,
-        from: &["py-ssti-taint"],
+        through: Through::QueryParameterOrBodyField,
+        from: &["robusta-py-ssti-taint"],
     },
     FlawKind {
         id: "unsigned-token-accepted",
@@ -932,6 +1320,9 @@ pub const KINDS: &[FlawKind] = &[
             body_contains: None,
             query_with: &[],
             query_without: &[],
+            query_contains: &[],
+            body_with: &[],
+            times: None,
         },
         shows: Shows {
             status: None,
@@ -939,13 +1330,14 @@ pub const KINDS: &[FlawKind] = &[
             has_text: None,
             has_header: &[],
             lacks_header: &[],
+            reflects: &[],
         },
         plant: Plant::AsRecorded,
         through: Through::Nothing,
         from: &[
-            "vibe-auth-jwt-no-verify",
-            "py-hardcoded-jwt-secret",
-            "js-hardcoded-jwt-secret",
+            "robusta-vibe-auth-jwt-no-verify",
+            "robusta-py-hardcoded-jwt-secret",
+            "robusta-js-hardcoded-jwt-secret",
         ],
     },
     FlawKind {
@@ -960,6 +1352,9 @@ pub const KINDS: &[FlawKind] = &[
             body_contains: Some(".php"),
             query_with: &[],
             query_without: &[],
+            query_contains: &[],
+            body_with: &[],
+            times: None,
         },
         shows: Shows {
             status: None,
@@ -967,10 +1362,14 @@ pub const KINDS: &[FlawKind] = &[
             has_text: None,
             has_header: &[],
             lacks_header: &[],
+            reflects: &[],
         },
         plant: Plant::AsRecorded,
         through: Through::Nothing,
-        from: &["py-upload-dangerous-extension", "vibe-upload-no-type-check"],
+        from: &[
+            "robusta-py-upload-dangerous-extension",
+            "robusta-vibe-upload-no-type-check",
+        ],
     },
 ];
 
@@ -1000,6 +1399,15 @@ fn query_parameters(operation: &Value) -> Vec<&str> {
         .filter(|parameter| parameter["in"] == "query")
         .filter_map(|parameter| parameter["name"].as_str())
         .collect()
+}
+
+/// The fields of the JSON request body an operation declares, at the top
+/// of it, in the order it declares them.
+fn body_fields(operation: &Value) -> Vec<&str> {
+    operation["requestBody"]["content"]["application/json"]["schema"]["properties"]
+        .as_object()
+        .map(|fields| fields.keys().map(String::as_str).collect())
+        .unwrap_or_default()
 }
 
 /// The operation's own first success: the first of its responses, in the
@@ -1053,6 +1461,11 @@ mod tests {
                 { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } },
                 { "name": "q", "in": "query", "required": false, "schema": { "type": "string" } }
             ],
+            // A field of a JSON body too, for a kind injected through one.
+            "requestBody": { "content": { "application/json": {
+                "schema": { "type": "object", "properties": { "q": { "type": "string" } } },
+                "example": { "q": "rotation" }
+            } } },
             "responses": { "200": {
                 "description": "The order",
                 "content": { "application/json": { "example": { "id": "{{json:request.path.id}}", "total": 74.0 } } }
@@ -1126,8 +1539,10 @@ mod tests {
                     &mut paths["/orders/{id}"]["get"],
                     "traffic.har",
                     // A kind injected through a query parameter is planted
-                    // through one the operation declares.
+                    // through one the operation declares, and one injected
+                    // through a field of the body through one it declares.
                     kind.through.is_query().then_some("q"),
+                    (kind.through.is_body() && !kind.through.is_query()).then_some("q"),
                 )
                 .unwrap();
             let document = json!({
@@ -1141,8 +1556,8 @@ mod tests {
                 .unwrap_or_else(|error| panic!("{}: {error}", kind.id));
             assert_eq!(pack.problem(), None, "{}", kind.id);
             let flaw = &pack.flaws[0];
-            // A kind injected through a parameter names it in both.
-            let through = kind.through.is_query();
+            // A kind injected through a parameter or a field names it in both.
+            let through = kind.through.is_query() || kind.through.is_body();
             assert_eq!(
                 flaw.id,
                 if through {
@@ -1167,6 +1582,7 @@ mod tests {
             for name in kind.prove.without {
                 assert!(flaw.prove.claim.without.contains(&name.to_string()), "{}", kind.id);
             }
+            assert_eq!(flaw.prove.claim.times, kind.prove.times, "{}", kind.id);
             // A pack reads the names of headers without regard to case.
             for (name, value) in kind.prove.with {
                 assert_eq!(
@@ -1176,11 +1592,11 @@ mod tests {
             }
             assert_eq!(flaw.prove.serves.status, kind.shows.status.or(Some(200)));
             // The operation answers what the flaw says it must: by request
-            // for a kind injected through a parameter, and to every request
-            // for any other. Its own answer stays for the others.
+            // for a kind injected through a parameter or a field, and to every
+            // request for any other. Its own answer stays for the others.
             let (_, served) = pack.resolve("GET", "/orders/5000").unwrap();
             let expected = kind.shows.status.unwrap_or(200);
-            if kind.through.is_query() {
+            if through {
                 assert_eq!(
                     served["x-mockforge-answers"][0]["then"]["status"], expected,
                     "{}",
@@ -1199,7 +1615,7 @@ mod tests {
         let mut served = operation();
         FlawKind::by_id("key-on-the-client")
             .unwrap()
-            .plant("GET", "/orders/{id}", &mut served, "r", None)
+            .plant("GET", "/orders/{id}", &mut served, "r", None, None)
             .unwrap();
         assert_eq!(
             served["responses"]["200"]["content"]["application/json"]["example"]["api_key"],
@@ -1213,7 +1629,7 @@ mod tests {
         let mut served = operation();
         let flaw = FlawKind::by_id("error-tells-too-much")
             .unwrap()
-            .plant("GET", "/orders/{id}", &mut served, "r", None)
+            .plant("GET", "/orders/{id}", &mut served, "r", None, None)
             .unwrap();
         assert_eq!(served["responses"].as_object().unwrap().len(), 1);
         assert!(served["responses"]["500"]["content"]["application/json"]["example"]["trace"]
@@ -1228,7 +1644,7 @@ mod tests {
         let mut served = operation();
         let flaw = FlawKind::by_id("any-origin-allowed")
             .unwrap()
-            .plant("GET", "/orders/{id}", &mut served, "r", None)
+            .plant("GET", "/orders/{id}", &mut served, "r", None, None)
             .unwrap();
         assert_eq!(
             served["responses"]["200"]["headers"],
@@ -1242,7 +1658,7 @@ mod tests {
         let mut served = operation();
         let flaw = FlawKind::by_id("mass-assignment")
             .unwrap()
-            .plant("PUT", "/orders/{id}", &mut served, "r", None)
+            .plant("PUT", "/orders/{id}", &mut served, "r", None, None)
             .unwrap();
         assert_eq!(
             served["x-mockforge-answers"],
@@ -1259,7 +1675,7 @@ mod tests {
         let before = served.clone();
         FlawKind::by_id("no-credential")
             .unwrap()
-            .plant("POST", "/orders/{id}", &mut served, "r", None)
+            .plant("POST", "/orders/{id}", &mut served, "r", None, None)
             .unwrap();
         assert_eq!(served, before);
 
@@ -1275,14 +1691,14 @@ mod tests {
         let mut answered = json!({ "responses": { "200": { "description": "ok" } } });
         let error = FlawKind::by_id("key-on-the-client")
             .unwrap()
-            .plant("GET", "/x", &mut answered, "traffic.har", None)
+            .plant("GET", "/x", &mut answered, "traffic.har", None, None)
             .unwrap_err()
             .to_string();
         assert_eq!(error, "traffic.har: `GET /x` answers no JSON object, so `key-on-the-client` cannot be planted there");
         let mut nothing = json!({ "responses": {} });
         let error = FlawKind::by_id("no-credential")
             .unwrap()
-            .plant("GET", "/x", &mut nothing, "traffic.har", None)
+            .plant("GET", "/x", &mut nothing, "traffic.har", None, None)
             .unwrap_err()
             .to_string();
         assert_eq!( error, "traffic.har: `GET /x` answers nothing the mock can serve, so a flaw cannot be planted there");
@@ -1293,22 +1709,25 @@ mod tests {
         let before = served.clone();
         let flaw = FlawKind::by_id("sql-injection")
             .unwrap()
-            .plant("GET", "/orders/{id}", &mut served, "traffic.har", Some("q"))
+            .plant("GET", "/orders/{id}", &mut served, "traffic.har", Some("q"), None)
             .unwrap();
         // The flaw names the parameter, the operation's own answer is as it
         // was, and the answer to the injection is one by request.
         assert_eq!(flaw["id"], "sql-injection-get-orders-id-q");
         assert_eq!(
             flaw["title"],
-            "SQL is injected through a query parameter, `q` of GET /orders/{id}"
+            "SQL is injected through a parameter or a field of the body, `q` of GET /orders/{id}"
         );
-        assert_eq!(flaw["prove"]["query_with"], json!({ "q": "' OR '1'='1' --" }));
+        // Proved by the mark the answer is given for, and by no injection of
+        // the catalogue's own.
+        assert_eq!(flaw["prove"]["query_contains"], json!({ "q": SQL }));
+        assert!(flaw["prove"].get("query_with").is_none());
         let mut otherwise = served.clone();
         otherwise.as_object_mut().unwrap().remove("x-mockforge-answers");
         assert_eq!(otherwise, before);
         assert_eq!(
             served["x-mockforge-answers"][0]["when"],
-            json!({ "query_contains": { "q": "' OR " } })
+            json!({ "query_contains": { "q": SQL } })
         );
         assert_eq!(served["x-mockforge-answers"][0]["then"]["status"], 500);
         assert!(
@@ -1323,7 +1742,7 @@ mod tests {
         let mut served = operation();
         FlawKind::by_id("path-traversal")
             .unwrap()
-            .plant("GET", "/orders/{id}", &mut served, "traffic.har", Some("q"))
+            .plant("GET", "/orders/{id}", &mut served, "traffic.har", Some("q"), None)
             .unwrap();
         assert_eq!(served["x-mockforge-answers"][0]["then"]["status"], 200);
 
@@ -1332,17 +1751,17 @@ mod tests {
         let refused = |id: &str, parameter: Option<&str>| {
             FlawKind::by_id(id)
                 .unwrap()
-                .plant("GET", "/orders/{id}", &mut operation(), "traffic.har", parameter)
+                .plant("GET", "/orders/{id}", &mut operation(), "traffic.har", parameter, None)
                 .unwrap_err()
                 .to_string()
         };
         assert_eq!(
             refused("sql-injection", None),
-            "traffic.har: `sql-injection` is injected through a query parameter: name it after the kind, as `sql-injection:q`"
+            "traffic.har: `sql-injection` is injected through a query parameter or a field of the JSON body: name it after the kind, as `sql-injection:q` or `sql-injection:body.q`"
         );
         assert_eq!(
             refused("no-credential", Some("q")),
-            "traffic.har: `no-credential` is injected through nothing: `q` names a parameter"
+            "traffic.har: `no-credential` is injected through nothing: `q` was named"
         );
         assert_eq!(
             refused("ssrf", Some("url")),
@@ -1351,18 +1770,173 @@ mod tests {
         let mut bare = json!({ "responses": { "200": { "description": "ok" } } });
         let error = FlawKind::by_id("ssrf")
             .unwrap()
-            .plant("GET", "/x", &mut bare, "traffic.har", Some("url"))
+            .plant("GET", "/x", &mut bare, "traffic.har", Some("url"), None)
             .unwrap_err()
             .to_string();
         assert_eq!(error, "traffic.har: `GET /x` declares no query parameter `url`");
     }
 
     #[test]
+    fn a_kind_injected_through_a_field_of_the_body_takes_its_name() {
+        let mut served = operation();
+        let before = served.clone();
+        let flaw = FlawKind::by_id("ssrf")
+            .unwrap()
+            .plant("GET", "/orders/{id}", &mut served, "traffic.har", None, Some("q"))
+            .unwrap();
+        // The flaw names the field, the operation's own answer is as it was,
+        // and the answer to the injection is one by request, to the request
+        // whose field holds it.
+        assert_eq!(flaw["id"], "ssrf-get-orders-id-q");
+        assert_eq!(
+            flaw["title"],
+            "A server-side request is made to an address from a parameter or a field of the body, `q` of GET /orders/{id}"
+        );
+        assert_eq!(flaw["prove"]["body_with"], json!({ "q": ADDRESSES }));
+        assert!(flaw["prove"].get("query_with").is_none());
+        assert!(flaw["prove"].get("query_contains").is_none());
+        let mut otherwise = served.clone();
+        otherwise.as_object_mut().unwrap().remove("x-mockforge-answers");
+        assert_eq!(otherwise, before);
+        assert_eq!(served["x-mockforge-answers"][0]["when"], json!({ "body": { "q": ADDRESSES } }));
+        // The answer says the field of the body back, as the query's says the parameter.
+        assert_eq!(served["x-mockforge-answers"][0]["then"]["body"]["url"], "{{request.body.q}}");
+
+        // The kind that goes through a field alone, at a login.
+        let mut login = json!({
+            "requestBody": { "content": { "application/json": {
+                "schema": { "type": "object", "properties": { "email": { "type": "string" }, "password": { "type": "string" } } },
+                "example": { "email": "ada@example.com", "password": "hunter2" }
+            } } },
+            "responses": { "200": { "description": "A session", "content": { "application/json": { "example": { "id": "u_1024" } } } } }
+        });
+        let flaw = FlawKind::by_id("nosql-injection")
+            .unwrap()
+            .plant("POST", "/login", &mut login, "traffic.har", None, Some("password"))
+            .unwrap();
+        assert_eq!(flaw["id"], "nosql-injection-post-login-password");
+        // Any operator: the start of its name in the JSON of the value.
+        assert_eq!(flaw["prove"]["body_with"], json!({ "password": "\"$" }));
+        assert_eq!(
+            login["x-mockforge-answers"][0]["when"],
+            json!({ "body": { "password": "\"$" } })
+        );
+        assert_eq!(login["x-mockforge-answers"][0]["then"]["status"], 200);
+        assert_eq!(login["x-mockforge-answers"][0]["then"]["body"]["authenticated"], true);
+
+        // Without the name; with the other's name; with both; with one for a
+        // kind that takes the other alone; and with one not declared.
+        let refused = |id: &str, parameter: Option<&str>, field: Option<&str>| {
+            FlawKind::by_id(id)
+                .unwrap()
+                .plant("GET", "/orders/{id}", &mut operation(), "traffic.har", parameter, field)
+                .unwrap_err()
+                .to_string()
+        };
+        assert_eq!(
+            refused("nosql-injection", None, None),
+            "traffic.har: `nosql-injection` is injected through a field of the JSON body: name it after the kind, as `nosql-injection:body.password`"
+        );
+        assert_eq!(
+            refused("nosql-injection", Some("q"), None),
+            "traffic.har: `nosql-injection` is injected through a field of the JSON body, and `q` names a query parameter: name the field after the kind, as `nosql-injection:body.password`"
+        );
+        assert_eq!(
+            refused("nosql-injection", None, Some("password")),
+            "traffic.har: `GET /orders/{id}` declares no field `password` of its JSON request body: the fields of its JSON body are `q`"
+        );
+        assert_eq!(
+            refused("sql-injection", Some("q"), Some("q")),
+            "traffic.har: `sql-injection` is injected through one of the two, and both are named: `q` is a query parameter and `q` a field of the body"
+        );
+        assert_eq!(
+            refused("reflected-xss", None, Some("q")),
+            "traffic.har: `reflected-xss` is injected through a query parameter, and `q` names a field of the body: name the parameter after the kind, as `reflected-xss:q`"
+        );
+        let mut bare = json!({ "responses": { "200": { "description": "ok" } } });
+        let error = FlawKind::by_id("ssrf")
+            .unwrap()
+            .plant("GET", "/x", &mut bare, "traffic.har", None, Some("url"))
+            .unwrap_err()
+            .to_string();
+        assert_eq!(
+            error,
+            "traffic.har: `GET /x` declares no field `url` of its JSON request body and no field of a JSON body"
+        );
+    }
+
+    #[test]
+    fn every_kind_injected_through_a_field_of_the_body_plants_an_answer_the_flaw_proves() {
+        for kind in KINDS.iter().filter(|kind| kind.through.is_body()) {
+            // The kind's marks: one list, wherever the kind keeps it.
+            let text: &[&str] = kind
+                .prove
+                .body_with
+                .first()
+                .or_else(|| kind.prove.query_contains.first())
+                .unwrap()
+                .1;
+            let written = if let [one] = text {
+                json!(one)
+            } else {
+                json!(text)
+            };
+            let mut served = operation();
+            let flaw = kind
+                .plant("GET", "/orders/{id}", &mut served, "traffic.har", None, Some("q"))
+                .unwrap();
+            let Plant::Otherwise { when_: _, then_ } = kind.plant else {
+                panic!("{} is injected through a field and answers otherwise", kind.id)
+            };
+            // The flaw is proved by the field the kind names holding the marks
+            // of the injection, which are what the answer is given for; and
+            // the answer says the field back, not a parameter.
+            assert_eq!(flaw["prove"]["body_with"], json!({ "q": written }), "{}", kind.id);
+            assert_eq!(flaw["id"], format!("{}-get-orders-id-q", kind.id));
+            assert_eq!(
+                served["x-mockforge-answers"][0]["when"],
+                json!({ "body": { "q": written } }),
+                "{}",
+                kind.id
+            );
+            let then = served["x-mockforge-answers"][0]["then"].to_string();
+            assert!(!then.contains("request.query."), "{}", kind.id);
+            assert_eq!(
+                then.contains("{{request.body.q}}"),
+                then_.contains("{{request.query.<parameter>}}"),
+                "{}",
+                kind.id
+            );
+            // The pack checks that the answer is one the flaw proves.
+            let document = json!({
+                "schema_version": PACK_SCHEMA_VERSION, "kind": PACK_KIND, "id": "begun", "title": "Begun",
+                "brief": DEFAULT_BRIEF, "credentials": { "Authorization": "Bearer demo-user-a" },
+                "spec": { "openapi": "3.0.3", "info": { "title": "Begun", "version": "1" },
+                          "paths": { "/orders/{id}": { "get": served } } },
+                "scope": { "paths": ["/orders/{id}"] },
+                "flaws": [flaw],
+            });
+            let pack = Pack::from_json(&document.to_string(), "p")
+                .unwrap_or_else(|error| panic!("{}: {error}", kind.id));
+            assert_eq!(pack.problem(), None, "{}", kind.id);
+        }
+    }
+
+    #[test]
     fn every_kind_injected_through_a_query_parameter_plants_an_answer_the_flaw_proves() {
         for kind in KINDS.iter().filter(|kind| kind.through.is_query()) {
-            // One parameter to prove it with, exactly, and it is the placeholder.
-            assert_eq!(kind.prove.query_with.len(), 1, "{}", kind.id);
-            assert_eq!(kind.prove.query_with[0].0, PARAMETER, "{}", kind.id);
+            // One parameter's marks to prove it with, and it is the
+            // placeholder: an injected kind is proved by what marks it, never
+            // by one value.
+            let [(_, marks)] = kind.prove.query_contains else {
+                panic!("{} proves with the marks of one parameter", kind.id)
+            };
+            assert!(kind.prove.query_with.is_empty(), "{}", kind.id);
+            let written = if let [one] = marks {
+                json!(one)
+            } else {
+                json!(marks)
+            };
             // The operation answers the injection, and no request else.
             let Plant::Otherwise { when_, then_: _ } = kind.plant else {
                 panic!("{} is injected through a parameter and answers otherwise", kind.id)
@@ -1372,11 +1946,19 @@ mod tests {
             assert!(when_.contains(PARAMETER), "{}", kind.id);
             let mut served = operation();
             let flaw = kind
-                .plant("GET", "/orders/{id}", &mut served, "traffic.har", Some("q"))
+                .plant("GET", "/orders/{id}", &mut served, "traffic.har", Some("q"), None)
                 .unwrap();
-            // The flaw is proved by the parameter the kind names, and is one
-            // flaw of that kind through that parameter.
-            assert_eq!(flaw["prove"]["query_with"], json!({ "q": kind.prove.query_with[0].1 }));
+            // The flaw is proved by the parameter the kind names holding what
+            // marks the injection, which is what the answer is given for; and
+            // it is one flaw of that kind through that parameter.
+            assert_eq!(flaw["prove"]["query_contains"], json!({ "q": written }), "{}", kind.id);
+            assert_eq!(flaw["prove"]["query_with"], Value::Null, "{}", kind.id);
+            assert_eq!(
+                served["x-mockforge-answers"][0]["when"]["query_contains"],
+                json!({ "q": written }),
+                "{}: the answer is given for what proves the flaw",
+                kind.id
+            );
             assert_eq!(flaw["id"], format!("{}-get-orders-id-q", kind.id));
             assert_eq!(served["x-mockforge-answers"].as_array().unwrap().len(), 1);
         }
